@@ -1,0 +1,696 @@
+{
+  "id": "1:112",
+  "name": "Battery charging",
+  "type": "COMPONENT",
+  "description": "",
+  "propertyDefinitions": {},
+  "componentSetId": null,
+  "isDefaultVariant": false,
+  "node": {
+    "id": "1:112",
+    "name": "Battery charging",
+    "type": "COMPONENT",
+    "visible": true,
+    "locked": false,
+    "width": 16,
+    "height": 16,
+    "x": 868,
+    "y": 292,
+    "rotation": 0,
+    "minWidth": null,
+    "maxWidth": null,
+    "minHeight": null,
+    "maxHeight": null,
+    "layoutSizingHorizontal": "FIXED",
+    "layoutSizingVertical": "FIXED",
+    "relativeTransform": [
+      [
+        1,
+        0,
+        868
+      ],
+      [
+        0,
+        1,
+        292
+      ]
+    ],
+    "absoluteTransform": [
+      [
+        1,
+        0,
+        868
+      ],
+      [
+        0,
+        1,
+        292
+      ]
+    ],
+    "absoluteBoundingBox": {
+      "x": 868,
+      "y": 292,
+      "width": 16,
+      "height": 16
+    },
+    "absoluteRenderBounds": {
+      "x": 868,
+      "y": 292,
+      "width": 16,
+      "height": 16
+    },
+    "targetAspectRatio": null,
+    "constraints": {
+      "horizontal": "MIN",
+      "vertical": "MIN"
+    },
+    "fills": [],
+    "strokes": [],
+    "strokeWeight": 1,
+    "strokeAlign": "INSIDE",
+    "strokeJoin": "MITER",
+    "strokeCap": "NONE",
+    "strokeMiterLimit": 4,
+    "dashPattern": [],
+    "fillGeometry": [
+      {
+        "windingRule": "NONZERO",
+        "data": "M0 0 L16 0 L16 16 L0 16 L0 0 Z"
+      }
+    ],
+    "cornerRadius": 0,
+    "cornerSmoothing": 0,
+    "layoutMode": "NONE",
+    "paddingLeft": 0,
+    "paddingRight": 0,
+    "paddingTop": 0,
+    "paddingBottom": 0,
+    "primaryAxisAlignItems": "MIN",
+    "counterAxisAlignItems": "MIN",
+    "counterAxisAlignContent": "AUTO",
+    "itemSpacing": 0,
+    "counterAxisSpacing": 0,
+    "layoutWrap": "NO_WRAP",
+    "primaryAxisSizingMode": "AUTO",
+    "counterAxisSizingMode": "FIXED",
+    "itemReverseZIndex": false,
+    "strokesIncludedInLayout": false,
+    "clipsContent": true,
+    "inferredAutoLayout": {
+      "layoutMode": "HORIZONTAL",
+      "paddingLeft": 0.6666668653488159,
+      "paddingRight": 0.666667103767395,
+      "paddingTop": 4,
+      "paddingBottom": 4,
+      "primaryAxisAlignItems": "CENTER",
+      "counterAxisAlignItems": "CENTER",
+      "primaryAxisSizingMode": "FIXED",
+      "counterAxisSizingMode": "FIXED",
+      "itemSpacing": 0
+    },
+    "layoutGrow": 0,
+    "layoutAlign": "INHERIT",
+    "layoutPositioning": "AUTO",
+    "opacity": 1,
+    "blendMode": "PASS_THROUGH",
+    "isMask": false,
+    "maskType": "ALPHA",
+    "effects": [],
+    "variantProperties": null,
+    "devStatus": null,
+    "children": [
+      {
+        "id": "1:113",
+        "name": "Icon",
+        "type": "VECTOR",
+        "visible": true,
+        "locked": false,
+        "width": 15,
+        "height": 8,
+        "x": 1,
+        "y": 4,
+        "rotation": 0,
+        "minWidth": null,
+        "maxWidth": null,
+        "minHeight": null,
+        "maxHeight": null,
+        "layoutSizingHorizontal": "FIXED",
+        "layoutSizingVertical": "FIXED",
+        "relativeTransform": [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            4
+          ]
+        ],
+        "absoluteTransform": [
+          [
+            1,
+            0,
+            868.6666870117188
+          ],
+          [
+            0,
+            1,
+            296
+          ]
+        ],
+        "absoluteBoundingBox": {
+          "x": 868.6666870117188,
+          "y": 296,
+          "width": 14.666666030883789,
+          "height": 8
+        },
+        "absoluteRenderBounds": {
+          "x": 868,
+          "y": 295.1999206542969,
+          "width": 16,
+          "height": 9.60015869140625
+        },
+        "targetAspectRatio": null,
+        "constraints": {
+          "horizontal": "SCALE",
+          "vertical": "SCALE"
+        },
+        "fills": [],
+        "strokes": [
+          {
+            "type": "SOLID",
+            "r": 0.11764705926179886,
+            "g": 0.11764705926179886,
+            "b": 0.11764705926179886,
+            "a": 1,
+            "opacity": 1,
+            "blendMode": "NORMAL",
+            "boundVariables": {
+              "color": {
+                "type": "VARIABLE_ALIAS",
+                "id": "VariableID:d2e9e262e437336d54e8e740f8af30755a666af2/5613:412"
+              }
+            }
+          }
+        ],
+        "strokeWeight": 1.600000023841858,
+        "strokeAlign": "CENTER",
+        "strokeJoin": "ROUND",
+        "strokeCap": "ROUND",
+        "strokeMiterLimit": 4,
+        "dashPattern": [],
+        "fillGeometry": [
+          {
+            "windingRule": "NONZERO",
+            "data": "M2.66667 8 L1.33333 8 C0.979711 8 0.640573 7.85952 0.390524 7.60948 C0.140476 7.35943 1.4803e-16 7.02029 0 6.66667 L0 1.33333 C0 0.979711 0.140476 0.640573 0.390524 0.390524 C0.640573 0.140476 0.979711 5.92119e-16 1.33333 0 L3.46 0 M9.33333 0 L10.6667 0 C11.0203 5.92119e-16 11.3594 0.140476 11.6095 0.390524 C11.8595 0.640573 12 0.979711 12 1.33333 L12 6.66667 C12 7.02029 11.8595 7.35943 11.6095 7.60948 C11.3594 7.85952 11.0203 8 10.6667 8 L8.54 8"
+          },
+          {
+            "windingRule": "NONZERO",
+            "data": "M6.66667 0 L4 4 L8 4 L5.33333 8"
+          }
+        ],
+        "strokeGeometry": [
+          {
+            "windingRule": "NONZERO",
+            "data": "M2.66667 8.8 C3.10849 8.8 3.46667 8.44183 3.46667 8 C3.46667 7.55817 3.10849 7.2 2.66667 7.2 L2.66667 8 L2.66667 8.8 Z M0 6.66667 L-0.8 6.66667 L0 6.66667 Z M1.33333 0 L1.33333 -0.8 L1.33333 0 Z M3.46 0.8 C3.90183 0.8 4.26 0.441828 4.26 0 C4.26 -0.441828 3.90183 -0.8 3.46 -0.8 L3.46 0 L3.46 0.8 Z M9.33333 -0.8 C8.89151 -0.8 8.53333 -0.441828 8.53333 0 C8.53333 0.441828 8.89151 0.8 9.33333 0.8 L9.33333 0 L9.33333 -0.8 Z M10.6667 0 L10.6667 -0.8 L10.6667 0 Z M8.54 7.2 C8.09817 7.2 7.74 7.55817 7.74 8 C7.74 8.44183 8.09817 8.8 8.54 8.8 L8.54 8 L8.54 7.2 Z M13.8667 4.66667 C13.8667 5.10849 14.2248 5.46667 14.6667 5.46667 C15.1085 5.46667 15.4667 5.10849 15.4667 4.66667 L14.6667 4.66667 L13.8667 4.66667 Z M15.4667 3.33333 C15.4667 2.89151 15.1085 2.53333 14.6667 2.53333 C14.2248 2.53333 13.8667 2.89151 13.8667 3.33333 L14.6667 3.33333 L15.4667 3.33333 Z M7.33231 0.44376 C7.57739 0.0761372 7.47805 -0.420558 7.11043 -0.66564 C6.7428 -0.910722 6.24611 -0.811383 6.00103 -0.44376 L6.66667 0 L7.33231 0.44376 Z M4 4 L3.33436 3.55624 C3.1707 3.80172 3.15545 4.11736 3.29466 4.37749 C3.43388 4.63761 3.70496 4.8 4 4.8 L4 4 Z M8 4 L8.66564 4.44376 C8.8293 4.19828 8.84455 3.88264 8.70534 3.62251 C8.56612 3.36239 8.29504 3.2 8 3.2 L8 4 Z M4.66769 7.55624 C4.42261 7.92386 4.52195 8.42056 4.88957 8.66564 C5.2572 8.91072 5.75389 8.81138 5.99897 8.44376 L5.33333 8 L4.66769 7.55624 Z M2.66667 8 L2.66667 7.2 L1.33333 7.2 L1.33333 8 L1.33333 8.8 L2.66667 8.8 L2.66667 8 Z M1.33333 8 L1.33333 7.2 C1.19189 7.2 1.05623 7.14381 0.95621 7.04379 L0.390524 7.60948 L-0.175161 8.17516 C0.224916 8.57524 0.767537 8.8 1.33333 8.8 L1.33333 8 Z M0.390524 7.60948 L0.95621 7.04379 C0.85619 6.94377 0.8 6.80812 0.8 6.66667 L0 6.66667 L-0.8 6.66667 C-0.8 7.23246 -0.575239 7.77508 -0.175161 8.17516 L0.390524 7.60948 Z M0 6.66667 L0.8 6.66667 L0.8 1.33333 L0 1.33333 L-0.8 1.33333 L-0.8 6.66667 L0 6.66667 Z M0 1.33333 L0.8 1.33333 C0.8 1.19188 0.85619 1.05623 0.95621 0.95621 L0.390524 0.390524 L-0.175161 -0.175161 C-0.575239 0.224916 -0.8 0.767538 -0.8 1.33333 L0 1.33333 Z M0.390524 0.390524 L0.95621 0.95621 C1.05623 0.85619 1.19188 0.8 1.33333 0.8 L1.33333 0 L1.33333 -0.8 C0.767538 -0.8 0.224917 -0.575239 -0.175161 -0.175161 L0.390524 0.390524 Z M1.33333 0 L1.33333 0.8 L3.46 0.8 L3.46 0 L3.46 -0.8 L1.33333 -0.8 L1.33333 0 Z M9.33333 0 L9.33333 0.8 L10.6667 0.8 L10.6667 0 L10.6667 -0.8 L9.33333 -0.8 L9.33333 0 Z M10.6667 0 L10.6667 0.8 C10.8081 0.8 10.9438 0.85619 11.0438 0.95621 L11.6095 0.390524 L12.1752 -0.175161 C11.7751 -0.575239 11.2325 -0.8 10.6667 -0.8 L10.6667 0 Z M11.6095 0.390524 L11.0438 0.95621 C11.1438 1.05623 11.2 1.19189 11.2 1.33333 L12 1.33333 L12.8 1.33333 C12.8 0.767537 12.5752 0.224916 12.1752 -0.175161 L11.6095 0.390524 Z M12 1.33333 L11.2 1.33333 L11.2 6.66667 L12 6.66667 L12.8 6.66667 L12.8 1.33333 L12 1.33333 Z M12 6.66667 L11.2 6.66667 C11.2 6.80811 11.1438 6.94377 11.0438 7.04379 L11.6095 7.60948 L12.1752 8.17516 C12.5752 7.77508 12.8 7.23246 12.8 6.66667 L12 6.66667 Z M11.6095 7.60948 L11.0438 7.04379 C10.9438 7.14381 10.8081 7.2 10.6667 7.2 L10.6667 8 L10.6667 8.8 C11.2325 8.8 11.7751 8.57524 12.1752 8.17516 L11.6095 7.60948 Z M10.6667 8 L10.6667 7.2 L8.54 7.2 L8.54 8 L8.54 8.8 L10.6667 8.8 L10.6667 8 Z M14.6667 4.66667 L15.4667 4.66667 L15.4667 3.33333 L14.6667 3.33333 L13.8667 3.33333 L13.8667 4.66667 L14.6667 4.66667 Z M6.66667 0 L6.00103 -0.44376 L3.33436 3.55624 L4 4 L4.66564 4.44376 L7.33231 0.44376 L6.66667 0 Z M4 4 L4 4.8 L8 4.8 L8 4 L8 3.2 L4 3.2 L4 4 Z M8 4 L7.33436 3.55624 L4.66769 7.55624 L5.33333 8 L5.99897 8.44376 L8.66564 4.44376 L8 4 Z"
+          }
+        ],
+        "cornerRadius": 0,
+        "cornerSmoothing": 0,
+        "layoutGrow": 0,
+        "layoutAlign": "INHERIT",
+        "layoutPositioning": "AUTO",
+        "opacity": 1,
+        "blendMode": "PASS_THROUGH",
+        "isMask": false,
+        "maskType": "ALPHA",
+        "effects": [],
+        "vectorPaths": [
+          {
+            "windingRule": "NONZERO",
+            "data": "M 2.6666666724465142 8 L 1.3333333362232571 8 C 0.9797113434976592 8 0.6405728029920275 7.859523439407349 0.3905243021494515 7.60947494506836 C 0.1404758013068756 7.359426450729371 1.4802973693753353e-16 7.0202883958816535 0 6.666666412353516 L 0 1.3333333015441895 C 0 0.9797113180160523 0.1404758013068756 0.6405727148056031 0.3905243021494515 0.3905242204666138 C 0.6405728029920275 0.1404757261276245 0.9797113434976592 5.921189323495344e-16 1.3333333362232571 0 L 3.459999937404288 0 M 9.333333067460497 0 L 10.666666689786057 0 C 11.020288682511655 5.921189323495344e-16 11.359426746180116 0.1404757261276245 11.609475247022692 0.3905242204666138 C 11.859523747865268 0.6405727148056031 12.000000312111615 0.9797113180160523 12.000000312111615 1.3333333015441895 L 12.000000312111615 6.666666412353516 C 12.000000312111615 7.0202883958816535 11.859523747865268 7.359426450729371 11.609475247022692 7.60947494506836 C 11.359426746180116 7.859523439407349 11.020288682511655 8 10.666666689786057 8 L 8.540000374707327 8"
+          },
+          {
+            "windingRule": "NONZERO",
+            "data": "M 6.666666585748851 0 L 4.0000001040372055 4 L 8.000000208074411 4 L 5.3333333448930285 8"
+          },
+          {
+            "windingRule": "NONE",
+            "data": "M 14.666666030883789 4.666666793823242 L 14.666666030883789 3.3333335876464845"
+          }
+        ],
+        "vectorNetwork": {
+          "vertices": [
+            {
+              "x": 2.6666666724465142,
+              "y": 8,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 1.3333333362232571,
+              "y": 8,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 0.3905243021494515,
+              "y": 7.60947494506836,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 0,
+              "y": 6.666666412353516,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 0,
+              "y": 1.3333333015441895,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 0.3905243021494515,
+              "y": 0.3905242204666138,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 1.3333333362232571,
+              "y": 0,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 3.459999937404288,
+              "y": 0,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 9.333333067460497,
+              "y": 0,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 10.666666689786057,
+              "y": 0,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 11.609475247022692,
+              "y": 0.3905242204666138,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 12.000000312111615,
+              "y": 1.3333333015441895,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 12.000000312111615,
+              "y": 6.666666412353516,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 11.609475247022692,
+              "y": 7.60947494506836,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 10.666666689786057,
+              "y": 8,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 8.540000374707327,
+              "y": 8,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 14.666666030883789,
+              "y": 4.666666793823242,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 14.666666030883789,
+              "y": 3.3333335876464845,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 6.666666585748851,
+              "y": 0,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 4.0000001040372055,
+              "y": 4,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 8.000000208074411,
+              "y": 4,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            },
+            {
+              "x": 5.3333333448930285,
+              "y": 8,
+              "strokeCap": "ROUND",
+              "strokeJoin": "ROUND",
+              "cornerRadius": 0,
+              "handleMirroring": "NONE"
+            }
+          ],
+          "segments": [
+            {
+              "start": 0,
+              "end": 1,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 1,
+              "end": 2,
+              "tangentStart": {
+                "x": -0.3536219927255979,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0.2500485008425759,
+                "y": 0.2500484943389893
+              }
+            },
+            {
+              "start": 2,
+              "end": 3,
+              "tangentStart": {
+                "x": -0.2500485008425759,
+                "y": -0.2500484943389893
+              },
+              "tangentEnd": {
+                "x": 1.4802973693753353e-16,
+                "y": 0.35362198352813723
+              }
+            },
+            {
+              "start": 3,
+              "end": 4,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 4,
+              "end": 5,
+              "tangentStart": {
+                "x": 0,
+                "y": -0.35362198352813723
+              },
+              "tangentEnd": {
+                "x": -0.2500485008425759,
+                "y": 0.2500484943389893
+              }
+            },
+            {
+              "start": 5,
+              "end": 6,
+              "tangentStart": {
+                "x": 0.2500485008425759,
+                "y": -0.2500484943389893
+              },
+              "tangentEnd": {
+                "x": -0.3536219927255979,
+                "y": 5.921189323495344e-16
+              }
+            },
+            {
+              "start": 6,
+              "end": 7,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 8,
+              "end": 9,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 9,
+              "end": 10,
+              "tangentStart": {
+                "x": 0.3536219927255979,
+                "y": 5.921189323495344e-16
+              },
+              "tangentEnd": {
+                "x": -0.2500485008425759,
+                "y": -0.2500484943389893
+              }
+            },
+            {
+              "start": 10,
+              "end": 11,
+              "tangentStart": {
+                "x": 0.2500485008425759,
+                "y": 0.2500484943389893
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": -0.35362198352813723
+              }
+            },
+            {
+              "start": 11,
+              "end": 12,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 12,
+              "end": 13,
+              "tangentStart": {
+                "x": 0,
+                "y": 0.35362198352813723
+              },
+              "tangentEnd": {
+                "x": 0.2500485008425759,
+                "y": -0.2500484943389893
+              }
+            },
+            {
+              "start": 13,
+              "end": 14,
+              "tangentStart": {
+                "x": -0.2500485008425759,
+                "y": 0.2500484943389893
+              },
+              "tangentEnd": {
+                "x": 0.3536219927255979,
+                "y": 0
+              }
+            },
+            {
+              "start": 14,
+              "end": 15,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 16,
+              "end": 17,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 18,
+              "end": 19,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 19,
+              "end": 20,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "start": 20,
+              "end": 21,
+              "tangentStart": {
+                "x": 0,
+                "y": 0
+              },
+              "tangentEnd": {
+                "x": 0,
+                "y": 0
+              }
+            }
+          ],
+          "regions": [
+            {
+              "windingRule": "NONZERO",
+              "loops": [
+                [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6
+                ],
+                [
+                  7,
+                  8,
+                  9,
+                  10,
+                  11,
+                  12,
+                  13
+                ]
+              ],
+              "fillStyleId": "",
+              "fills": []
+            },
+            {
+              "windingRule": "NONZERO",
+              "loops": [
+                [
+                  15,
+                  16,
+                  17
+                ]
+              ],
+              "fillStyleId": "",
+              "fills": []
+            }
+          ]
+        },
+        "handleMirroring": "NONE",
+        "boundVariables": {
+          "strokes": [
+            {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:d2e9e262e437336d54e8e740f8af30755a666af2/5613:412"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "remote": true,
+  "key": "aca7c008e56f823c54a12d4e254279ddd3df3ab2",
+  "publishStatus": "UNPUBLISHED"
+}

@@ -1,0 +1,21 @@
+list(
+  APPEND
+  LV_EDITOR_PROJECT_SOURCES
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/card/card_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/container/container_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/image/image_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/panel/panel_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/battery_charging/battery_charging_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/battery/battery_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/bluetooth/bluetooth_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/cpu/cpu_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/headphones/headphones_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_battery_1105_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_battery_charging_1113_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_bluetooth_1115_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_cpu_1111_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_headphones_1109_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_linkedin_image_7_1_data.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/app_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/testeFinal_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/testeFinal.c)
