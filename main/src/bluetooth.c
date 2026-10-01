@@ -52,8 +52,8 @@ static void stack_up_hdl(uint16_t event, void *p)
     esp_bt_dev_register_callback(dev_cb);
     esp_bt_gap_register_callback(gap_cb);
 
-    ESP_ERROR_CHECK(bt_a2dp_start());       /* passo 1: musica */
-    ESP_ERROR_CHECK(bt_avrcp_start());      /* passo 2: volume */
+    ESP_ERROR_CHECK(bt_avrcp_start());      /* passo 1: controle de volume */
+    ESP_ERROR_CHECK(bt_a2dp_start());       /* passo 2: streaming de musica */
     ESP_ERROR_CHECK(bt_hfp_start());        /* passos 4-5: chamadas (no-op se HFP desligado) */
 
     esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
