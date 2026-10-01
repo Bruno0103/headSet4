@@ -1,7 +1,7 @@
 # O audio agora e proprio (src/audio): nao usamos mais a2dp_sink_int/ext_codec_utils.
 idf_component_register(
     SRCS "main.c"
-         "src/display.c"
+         #"src/display/display.c"
          "src/bluetooth.c"
          "src/bt/bt_a2dp.c"
          "src/bt/bt_avrcp.c"
@@ -24,10 +24,10 @@ idf_component_register(
         esp_ringbuf
     REQUIRES
         bt
-        testeFinal
-        esp_lcd_st7735
-        esp_lvgl_port
-        driver
-        esp_timer
+        #testeFinal
+        #esp_lcd_st7735
+        #esp_lvgl_port
+        #driver
+        #esp_timer
 )
  

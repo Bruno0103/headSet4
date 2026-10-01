@@ -1,7 +1,7 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "display.h"
+//#include "display.h"
 #include "audio.h"
 #include "bluetooth.h"
 
@@ -11,8 +11,8 @@
 void app_main(void)
 {
   // --- Display / LVGL ---
-  display_init();
-  xTaskCreate(display_task, "display_task", 8192, NULL, 5, NULL);
+  // display_init();
+  // xTaskCreate(display_task, "display_task", 8192, NULL, 5, NULL);
 
   // --- Audio (WM8960 + I2S) - deve vir ANTES do Bluetooth ---
   ESP_ERROR_CHECK(audio_init());
