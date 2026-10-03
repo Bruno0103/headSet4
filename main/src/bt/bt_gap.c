@@ -547,10 +547,12 @@ esp_err_t bt_gap_start(const bt_gap_config_t *cfg)
     if (cfg->device_name) esp_bt_gap_set_device_name(cfg->device_name);
     ESP_RETURN_ON_ERROR(esp_bt_gap_register_callback(gap_cb), TAG, "gap cb");
 
+#if (CONFIG_EXAMPLE_SSP_ENABLED == true)
     /* SSP com DisplayYesNo: toda tentativa de pareamento gera CFM_REQ, que e onde
      * aplicamos a janela de pareamento (e a comparacao numerica, se houver confirm_cb). */
     esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_IO;
     ESP_RETURN_ON_ERROR(esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &iocap, sizeof iocap), TAG, "iocap");
+#endif
 
     LOCK();
     mru_sync_with_bonds();
