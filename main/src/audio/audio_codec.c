@@ -111,13 +111,15 @@ esp_err_t audio_codec_set_sample_rate(uint32_t hz)
     ESP_RETURN_ON_FALSE(r, ESP_ERR_NOT_SUPPORTED, TAG, "taxa %lu Hz nao suportada", (unsigned long)hz);
 
     if (r->pll_n != s_pll_n || r->pll_k != s_pll_k) {
+        /* Mover CLKSEL para MCLK temporariamente */
+        ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_CLOCK1, CLK1_CLKSEL_PLL, 0), TAG, "CLKSEL = MCLK");
         ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_PWR2, PWR2_PLL_EN, 0), TAG, "PLL off");
         W(WM8960_R_PLL1, PLL1_SDM_FRAC | PLL1_PRESCALE_DIV2 | r->pll_n);
         W(WM8960_R_PLL2, (r->pll_k >> 16) & 0xFF);
         W(WM8960_R_PLL3, (r->pll_k >> 8) & 0xFF);
         W(WM8960_R_PLL4, r->pll_k & 0xFF);
         ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_PWR2, PWR2_PLL_EN, PWR2_PLL_EN), TAG, "PLL on");
-        vTaskDelay(pdMS_TO_TICKS(20));        /* tempo de lock do PLL */
+        vTaskDelay(pdMS_TO_TICKS(10));        /* tempo de lock do PLL (F-10 req) */
         s_pll_n = r->pll_n;
         s_pll_k = r->pll_k;
     }
@@ -169,6 +171,13 @@ esp_err_t audio_codec_apply_filters(const audio_filters_t *f)
     return ESP_OK;
 }
 
+esp_err_t audio_codec_set_sidetone(bool enable)
+{
+    ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_BYPASS1, BYPASS_B2O, enable ? BYPASS_B2O : 0), TAG, "BYPASS1");
+    ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_BYPASS2, BYPASS_B2O, enable ? BYPASS_B2O : 0), TAG, "BYPASS2");
+    return ESP_OK;
+}
+
 /* ------------------------------------------------------------------ */
 
 esp_err_t audio_codec_init(void)
@@ -184,6 +193,9 @@ esp_err_t audio_codec_init(void)
     ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &bus), TAG, "i2c bus");
     ESP_RETURN_ON_ERROR(wm8960_attach(bus), TAG, "attach");
     ESP_RETURN_ON_ERROR(wm8960_reset(), TAG, "reset");
+
+    /* Registradores que sofrem update() isolado precisam de uma escrita inteira primeiro */
+    W(WM8960_R_CLOCK1, 0x000);
 
     /* Referencias (enableVREF / enableVMID) e rampa do VMID, para evitar "pop" */
     W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF);
