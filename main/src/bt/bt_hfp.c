@@ -21,7 +21,7 @@ static const char *TAG = "bt_hfp";
 static void hf_incoming_cb(const uint8_t *buf, uint32_t len)
 {
     audio_io_call_downlink_push(buf, len);
-    esp_hf_client_outgoing_data_ready();           /* o envio do microfone acompanha o recebimento */
+    esp_hf_client_outgoing_data_ready(); /* o envio do microfone acompanha o recebimento */
 }
 
 /* seu microfone: preenche 'sz' bytes */
@@ -36,18 +36,20 @@ static void hf_evt_hdl(uint16_t event, void *p)
 {
     esp_hf_client_cb_param_t *hf = p;
 
-    if (event != ESP_HF_CLIENT_AUDIO_STATE_EVT) return;
+    if (event != ESP_HF_CLIENT_AUDIO_STATE_EVT)
+        return;
 
-    switch (hf->audio_stat.state) {
-    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED:         /* CVSD: banda estreita */
+    switch (hf->audio_stat.state)
+    {
+    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED: /* CVSD: banda estreita */
         audio_io_start(AUDIO_IO_CALL, 8000);
         break;
-    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC:    /* mSBC: banda larga */
+    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC: /* mSBC: banda larga */
         audio_io_start(AUDIO_IO_CALL, 16000);
         break;
     case ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED:
         audio_io_stop_mode(AUDIO_IO_CALL);
-        bt_a2dp_resume_audio();                       /* volta a musica, se estava tocando */
+        bt_a2dp_resume_audio(); /* volta a musica, se estava tocando */
         break;
     default:
         break;
@@ -64,6 +66,8 @@ void bt_hfp_connect(esp_bd_addr_t remote)
     esp_hf_client_connect(remote);
 }
 
+void bt_hfp_disconnect(esp_bd_addr_t remote) { esp_hf_client_disconnect(remote); }
+
 esp_err_t bt_hfp_start(void)
 {
     ESP_RETURN_ON_ERROR(esp_hf_client_register_callback(hf_cb), TAG, "register cb");
@@ -72,9 +76,10 @@ esp_err_t bt_hfp_start(void)
     return ESP_OK;
 }
 
-#else  /* HFP desligado no menuconfig */
+#else /* HFP desligado no menuconfig */
 
-esp_err_t bt_hfp_start(void)                { return ESP_OK; }
-void      bt_hfp_connect(esp_bd_addr_t r)   { (void)r; }
+esp_err_t bt_hfp_start(void) { return ESP_OK; }
+void bt_hfp_connect(esp_bd_addr_t r) { (void)r; }
+void bt_hfp_disconnect(esp_bd_addr_t r) { (void)r; }
 
 #endif

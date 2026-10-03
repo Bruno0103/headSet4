@@ -5,6 +5,7 @@ idf_component_register(
          "src/bluetooth.c"
          "src/bt/bt_a2dp.c"
          "src/bt/bt_avrcp.c"
+         "src/bt/bt_gap.c"
          "src/bt/bt_hfp.c"
          "src/audio/audio.c"
          "src/audio/audio_codec.c"
@@ -19,6 +20,7 @@ idf_component_register(
         bt_app_core_utils
         bredr_app_common_utils
         a2dp_sink_common_utils
+        nvs_flash
         esp_driver_i2c
         esp_driver_i2s
         esp_ringbuf
@@ -28,6 +30,6 @@ idf_component_register(
         #esp_lcd_st7735
         #esp_lvgl_port
         #driver
-        #esp_timer
+        esp_timer
 )
  

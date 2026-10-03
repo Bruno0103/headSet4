@@ -6,5 +6,5 @@
 
 esp_err_t bt_hfp_start(void);
 
-/** Pede conexao HFP ao aparelho (ignora erro se ele ja conectou por conta propria). */
 void bt_hfp_connect(esp_bd_addr_t remote);
+void bt_hfp_disconnect(esp_bd_addr_t remote);
