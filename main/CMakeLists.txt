@@ -1,29 +1,33 @@
-# O audio agora e proprio (src/audio): nao usamos mais a2dp_sink_int/ext_codec_utils.
 idf_component_register(
     SRCS "main.c"
          #"src/display/display.c"
          "src/bluetooth.c"
+         "src/bt_multipoint.c"
          "src/bt/bt_a2dp.c"
          "src/bt/bt_avrcp.c"
          "src/bt/bt_gap.c"
          "src/bt/bt_hfp.c"
+         "src/bt/bt_ble.c"
+         "src/bt/bt_app_core.c"
          "src/audio/audio.c"
          "src/audio/audio_codec.c"
          "src/audio/audio_io.c"
          "src/audio/voice_nr.c"
          "src/audio/wm8960.c"
+         "src/battery/battery.c"
+         "src/sensor/apds9930.c"
     INCLUDE_DIRS "."
                  "src"
                  "src/bt"
                  "src/audio"
+                 "src/battery"
+                 "src/sensor"
     PRIV_REQUIRES
-        bt_app_core_utils
-        bredr_app_common_utils
-        a2dp_sink_common_utils
         nvs_flash
         esp_driver_i2c
         esp_driver_i2s
         esp_ringbuf
+        esp_adc
     REQUIRES
         bt
         #testeFinal

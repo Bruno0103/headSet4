@@ -26,8 +26,9 @@
 #include "freertos/semphr.h"
 #include "nvs.h"
 
-#include "bt_app_core_utils.h"
-#include "bredr_app_common_utils.h"
+#include "bt_app_core.h"
+#include "bt_a2dp.h"
+#include "bt_avrcp.h"
 
 /* ------------------------------------------------------------------ */
 /* 1) estado e constantes                                              */
@@ -47,7 +48,7 @@
 
 static const uint8_t BACKOFF_S[] = { 2, 5, 10, 20, 30 };   /* espera entre rodadas */
 
-enum { CMD_RETRY_TICK, CMD_FORGET, CMD_FORGET_ALL, CMD_PAIR_NEW, CMD_CONFIRM, CMD_SWITCH_TICK };
+enum { CMD_RETRY_TICK, CMD_FORGET, CMD_FORGET_ALL, CMD_PAIR_NEW, CMD_CONFIRM, CMD_SWITCH_TICK, CMD_ACL_TIMEOUT_TICK, CMD_DISCONNECT_ACTIVE };
 
 static const char *TAG = "bt_gap";
 
@@ -70,6 +71,10 @@ static struct { bool on; esp_bd_addr_t old, nu; } s_sw;
 static esp_timer_handle_t s_sw_timer;
 #define SWITCH_TIMEOUT_MS   2500   /* espera maxima pelo antigo cair */
 #define SWITCH_SETTLE_MS    300    /* folga depois que o antigo caiu */
+
+static struct { bool pending; esp_bd_addr_t bda; } s_acl_drop;
+static esp_timer_handle_t s_acl_timer;
+#define ACL_DISCONNECT_TIMEOUT_MS 3000
 
 static bool         s_confirm_pending;
 static esp_bd_addr_t s_confirm_bda;
@@ -271,6 +276,11 @@ static void sw_begin(uint8_t *old, uint8_t *nu)
     memcpy(s_sw.nu, nu, ESP_BD_ADDR_LEN);
     esp_timer_stop(s_sw_timer);
     esp_timer_start_once(s_sw_timer, SWITCH_TIMEOUT_MS * 1000ULL);
+    
+    s_acl_drop.pending = true;
+    memcpy(s_acl_drop.bda, old, ESP_BD_ADDR_LEN);
+    esp_timer_stop(s_acl_timer);
+    esp_timer_start_once(s_acl_timer, ACL_DISCONNECT_TIMEOUT_MS * 1000ULL);
     s_cfg.disconnect(old);
 }
 
@@ -320,6 +330,11 @@ static void on_acl_connected(uint8_t *bda)
         esp_bd_addr_t old;
         memcpy(old, s_active, sizeof old);
         ESP_LOGI(TAG, "troca: " ESP_BD_ADDR_STR " assume", ESP_BD_ADDR_HEX(bda));
+        
+        if (bt_a2dp_is_streaming()) {
+            bt_avrcp_send_pause();
+        }
+        
         take_active(bda);
         sw_begin(old, bda);
     } else {
@@ -329,6 +344,11 @@ static void on_acl_connected(uint8_t *bda)
 
 static void on_acl_disconnected(uint8_t *bda, uint8_t reason)
 {
+    if (s_acl_drop.pending && same(bda, s_acl_drop.bda)) {
+        esp_timer_stop(s_acl_timer);
+        s_acl_drop.pending = false;
+    }
+
     if (!s_has_active || !same(bda, s_active)) {          /* aparelho trocado ou recusado */
         ESP_LOGI(TAG, ESP_BD_ADDR_STR " desconectou (inativo)", ESP_BD_ADDR_HEX(bda));
         if (s_sw.on && same(bda, s_sw.old)) {             /* antigo caiu: o novo pode assumir */
@@ -343,7 +363,11 @@ static void on_acl_disconnected(uint8_t *bda, uint8_t reason)
     if (s_confirm_pending && same(bda, s_confirm_bda)) s_confirm_pending = false;
     ESP_LOGI(TAG, ESP_BD_ADDR_STR " desconectou (motivo 0x%02X)", ESP_BD_ADDR_HEX(bda), reason);
 
-    if (!was_connected) return;                          /* pareamento que nao concluiu */
+    if (!was_connected) {                                /* pareamento que nao concluiu */
+        if (s_mru_n > 0) rc_begin(LINKLOSS_ROUNDS);
+        else             set_state(BT_GAP_PAIRABLE);
+        return;
+    }
 
     if (should_reconnect(reason)) rc_begin(LINKLOSS_ROUNDS);
     else                          set_state(BT_GAP_PAIRABLE);
@@ -415,11 +439,16 @@ static void gap_evt_hdl(uint16_t ev, void *p)
     case ESP_BT_GAP_AUTH_CMPL_EVT:
         on_auth_cmpl(prm);
         break;
-    case ESP_BT_GAP_KEY_REQ_EVT:                          /* passkey digitado aqui: nao suportado */
+    case ESP_BT_GAP_KEY_REQ_EVT:
+        /* Modo de emparelhamento por senha/chave numérica.
+         * Sendo um fone de ouvido, não possuímos teclado. Logo, não suportamos. */
         esp_bt_gap_ssp_passkey_reply(prm->key_req.bda, false, 0);
         break;
-    case ESP_BT_GAP_PIN_REQ_EVT:                          /* pareamento legado (PIN) = inseguro: recusa */
-        ESP_LOGW(TAG, "PIN legado recusado");
+    case ESP_BT_GAP_PIN_REQ_EVT:
+        /* Requisição de pareamento legado por código PIN (versões Bluetooth < 2.1).
+         * Este modo está ultrapassado, sendo mais lento e menos seguro.
+         * Rejeitamos o PIN legado para forçar conexões ágeis pelo método SSP (Secure Simple Pairing). */
+        ESP_LOGW(TAG, "Requisicao de PIN legado recebida. Rejeitando conexao ultrapassada.");
         esp_bt_gap_pin_reply(prm->pin_req.bda, false, 0, NULL);
         break;
     default:
@@ -440,9 +469,18 @@ static void gap_cb(esp_bt_gap_cb_event_t ev, esp_bt_gap_cb_param_t *param)
         bt_app_work_dispatch(gap_evt_hdl, ev, param, sizeof(esp_bt_gap_cb_param_t), NULL, NULL);
         break;
     default:
-        bredr_app_gap_evt_def_hdl(ev, param);             /* o resto segue o padrao do exemplo */
+        ESP_LOGD(TAG, "Evento GAP não tratado explicitamente pela aplicação: %d", ev);
         break;
     }
+}
+
+static void initiate_disconnect(uint8_t *bda)
+{
+    s_acl_drop.pending = true;
+    memcpy(s_acl_drop.bda, bda, ESP_BD_ADDR_LEN);
+    esp_timer_stop(s_acl_timer);
+    esp_timer_start_once(s_acl_timer, ACL_DISCONNECT_TIMEOUT_MS * 1000ULL);
+    s_cfg.disconnect(bda);
 }
 
 static void do_forget(uint8_t *bda)
@@ -450,7 +488,7 @@ static void do_forget(uint8_t *bda)
     int i = mru_find(bda);
     if (i >= 0) { mru_remove_at(i); mru_save(); }
     esp_bt_gap_remove_bond_device(bda);
-    if (s_has_active && same(bda, s_active)) s_cfg.disconnect(s_active);   /* motivo local: nao reconecta */
+    if (s_has_active && same(bda, s_active)) initiate_disconnect(s_active);   /* motivo local: nao reconecta */
     ESP_LOGI(TAG, "esquecido: " ESP_BD_ADDR_STR, ESP_BD_ADDR_HEX(bda));
 }
 
@@ -463,7 +501,7 @@ static void do_forget_all(void)
     free(bonds);
     s_mru_n = 0;
     mru_save();
-    if (s_has_active) s_cfg.disconnect(s_active);
+    if (s_has_active) initiate_disconnect(s_active);
     else              set_state(BT_GAP_PAIRABLE);
     ESP_LOGI(TAG, "todos os pareamentos apagados");
 }
@@ -471,7 +509,7 @@ static void do_forget_all(void)
 static void do_pair_new(void)
 {
     rc_stop();
-    if (s_state == BT_GAP_CONNECTED && s_has_active) s_cfg.disconnect(s_active);   /* ACL cai -> PAIRABLE */
+    if (s_state == BT_GAP_CONNECTED && s_has_active) initiate_disconnect(s_active);   /* ACL cai -> PAIRABLE */
     else set_state(BT_GAP_PAIRABLE);
 }
 
@@ -492,6 +530,19 @@ static void on_command(uint16_t cmd, void *p)
     case CMD_FORGET_ALL: do_forget_all();                 break;
     case CMD_PAIR_NEW:   do_pair_new();                   break;
     case CMD_CONFIRM:    do_confirm(*(bool *)p);          break;
+    case CMD_ACL_TIMEOUT_TICK:
+        if (s_acl_drop.pending) {
+            ESP_LOGW(TAG, "timeout na queda do ACL, simulando desconexao de " ESP_BD_ADDR_STR, ESP_BD_ADDR_HEX(s_acl_drop.bda));
+            s_acl_drop.pending = false;
+            on_acl_disconnected(s_acl_drop.bda, HCI_LOCAL_HOST_TERM);
+        }
+        break;
+    case CMD_DISCONNECT_ACTIVE:
+        if (s_has_active) {
+            ESP_LOGI(TAG, "desconectando ativo (repouso)");
+            initiate_disconnect(s_active);
+        }
+        break;
     }
     UNLOCK();
 }
@@ -507,10 +558,16 @@ static void sw_timer_cb(void *arg)
     bt_app_work_dispatch(on_command, CMD_SWITCH_TICK, NULL, 0, NULL, NULL);
 }
 
+static void acl_timer_cb(void *arg)
+{
+    bt_app_work_dispatch(on_command, CMD_ACL_TIMEOUT_TICK, NULL, 0, NULL, NULL);
+}
+
 void bt_gap_forget(esp_bd_addr_t bda)    { bt_app_work_dispatch(on_command, CMD_FORGET, bda, ESP_BD_ADDR_LEN, NULL, NULL); }
 void bt_gap_forget_all(void)             { bt_app_work_dispatch(on_command, CMD_FORGET_ALL, NULL, 0, NULL, NULL); }
 void bt_gap_pair_new(void)               { bt_app_work_dispatch(on_command, CMD_PAIR_NEW, NULL, 0, NULL, NULL); }
 void bt_gap_confirm_pairing(bool accept) { bt_app_work_dispatch(on_command, CMD_CONFIRM, &accept, sizeof accept, NULL, NULL); }
+void bt_gap_disconnect_active(void)      { bt_app_work_dispatch(on_command, CMD_DISCONNECT_ACTIVE, NULL, 0, NULL, NULL); }
 
 bt_gap_state_t bt_gap_get_state(void) { return s_state; }
 
@@ -543,13 +600,23 @@ esp_err_t bt_gap_start(const bt_gap_config_t *cfg)
     ESP_RETURN_ON_ERROR(esp_timer_create(&targs, &s_timer), TAG, "timer");
     const esp_timer_create_args_t sw_args = { .callback = sw_timer_cb, .name = "bt_gap_sw" };
     ESP_RETURN_ON_ERROR(esp_timer_create(&sw_args, &s_sw_timer), TAG, "sw timer");
+    const esp_timer_create_args_t acl_args = { .callback = acl_timer_cb, .name = "bt_gap_acl" };
+    ESP_RETURN_ON_ERROR(esp_timer_create(&acl_args, &s_acl_timer), TAG, "acl timer");
 
     if (cfg->device_name) esp_bt_gap_set_device_name(cfg->device_name);
     ESP_RETURN_ON_ERROR(esp_bt_gap_register_callback(gap_cb), TAG, "gap cb");
 
-    /* SSP com DisplayYesNo: toda tentativa de pareamento gera CFM_REQ, que e onde
-     * aplicamos a janela de pareamento (e a comparacao numerica, se houver confirm_cb). */
-    esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_IO;
+    esp_bt_cod_t cod = {
+        .major = ESP_BT_COD_MAJOR_DEV_AV,
+        .minor = 6, /* Headphones */
+        .service = ESP_BT_COD_SRVC_AUDIO | ESP_BT_COD_SRVC_RENDERING,
+    };
+    ESP_RETURN_ON_ERROR(esp_bt_gap_set_cod(cod, ESP_BT_INIT_COD), TAG, "cod");
+
+    /* SSP (Secure Simple Pairing): modelo "Just Works"
+     * Como um headset não possui tela ou teclado, definimos a capacidade de IO como NONE.
+     * Isso proporciona uma conexão ágil e sofisticada, sem pedir PIN. */
+    esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_NONE;
     ESP_RETURN_ON_ERROR(esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &iocap, sizeof iocap), TAG, "iocap");
 
     LOCK();

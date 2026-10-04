@@ -13,7 +13,6 @@ CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y
 CONFIG_DAC_DMA_AUTO_16BIT_ALIGN=n
 # CONFIG_LV_MEM_SIZE_KILOBYTES=64
 # --- Bluetooth Classic: A2DP + AVRCP + HFP client ---
-# Confira os nomes no menuconfig (Component config -> Bluetooth) do seu IDF.
 CONFIG_BT_ENABLED=y
 CONFIG_BT_BLUEDROID_ENABLED=y
 CONFIG_BT_CLASSIC_ENABLED=y
@@ -21,11 +20,11 @@ CONFIG_BT_A2DP_ENABLE=y
 CONFIG_BT_AVRCP_ENABLED=y
 CONFIG_BT_SSP_ENABLED=y
 
-# Chamadas (passos 4 e 5): audio SCO pelo HCI, para chegar nos callbacks de dados
+# Audio SCO pelo HCI, para chegar nos callbacks de dados
 CONFIG_BT_HFP_ENABLE=y
 CONFIG_BT_HFP_CLIENT_ENABLE=y
 CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI=y
-CONFIG_BT_HFP_WBS_ENABLE=y          # mSBC (16 kHz); sem isso so CVSD (8 kHz)
+# mSBC (16 kHz)
+CONFIG_BT_HFP_WBS_ENABLE=y          
 
-# Economiza RAM: so Classic (menuconfig -> Bluetooth -> Controller -> Bluetooth controller mode = BR/EDR only)
 

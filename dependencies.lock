@@ -1,31 +1,10 @@
 dependencies:
-  a2dp_sink_common_utils:
-    dependencies: []
-    source:
-      path: ../../../../../Program/esp/.espressif/v6.0.2/esp-idf/examples/bluetooth/bluedroid/classic_bt/common/a2dp_utils/a2dp_sink_common_utils
-      type: local
-    version: '*'
-  bredr_app_common_utils:
-    dependencies: []
-    source:
-      path: ../../../../../Program/esp/.espressif/v6.0.2/esp-idf/examples/bluetooth/bluedroid/classic_bt/common/bredr_app_common_utils
-      type: local
-    version: '*'
-  bt_app_core_utils:
-    dependencies: []
-    source:
-      path: ../../../../../Program/esp/.espressif/v6.0.2/esp-idf/examples/bluetooth/bluedroid/classic_bt/common/bt_app_core_utils
-      type: local
-    version: '*'
   idf:
     source:
       type: idf
     version: 6.0.2
 direct_dependencies:
-- a2dp_sink_common_utils
-- bredr_app_common_utils
-- bt_app_core_utils
 - idf
-manifest_hash: 86a3f6eeb9290cd27c90843cef4525f40ba0fb2b9291b7c2b9e634e41880c222
+manifest_hash: e44bf68eca6b7b264ddae08cd014cd3294c0473230381b6d6f88ed18ec879038
 target: esp32
 version: 3.0.0

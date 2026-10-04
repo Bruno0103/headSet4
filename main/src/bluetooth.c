@@ -15,13 +15,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "bt_app_core_utils.h"
-#include "bredr_app_common_utils.h"
+#include "bt_app_core.h"
 
 #include "bt_a2dp.h"
 #include "bt_avrcp.h"
 #include "bt_gap.h"
 #include "bt_hfp.h"
+#include "bt_ble.h"
+
+#include "esp_bt.h"
+#include "esp_bt_main.h"
 
 #ifdef CONFIG_EXAMPLE_LOCAL_DEVICE_NAME
 #define DEVICE_NAME CONFIG_EXAMPLE_LOCAL_DEVICE_NAME
@@ -35,7 +38,13 @@ enum { BT_EVT_STACK_UP = 0 };
 
 static void dev_cb(esp_bt_dev_cb_event_t event, esp_bt_dev_cb_param_t *param)
 {
-    bredr_app_dev_evt_def_hdl(event, param);
+    ESP_LOGD(TAG, "Evento de dispositivo Bluetooth recebido: %d", event);
+}
+
+static esp_err_t link_connect(esp_bd_addr_t bda)
+{
+    bt_hfp_connect(bda);
+    return bt_a2dp_connect(bda);
 }
 
 /* Fecha os dois perfis; o enlace cai quando o ultimo fechar. */
@@ -59,29 +68,94 @@ static void stack_up_hdl(uint16_t event, void *p)
 
     esp_bt_dev_register_callback(dev_cb);
 
-    ESP_ERROR_CHECK(bt_avrcp_start());      /* passo 1: controle de volume */
-    ESP_ERROR_CHECK(bt_a2dp_start());       /* passo 2: streaming de musica */
-    ESP_ERROR_CHECK(bt_hfp_start());        /* passos 4-5: chamadas (no-op se HFP desligado) */
+    esp_err_t err;
+
+    /* passo 1: controle de volume */
+    err = bt_avrcp_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao inicializar AVRCP: %s", esp_err_to_name(err));
+    }
+
+    /* passo 2: streaming de musica */
+    err = bt_a2dp_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao inicializar A2DP: %s", esp_err_to_name(err));
+    }
+
+    /* passos 4-5: chamadas (no-op se HFP desligado) */
+    err = bt_hfp_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao inicializar HFP: %s", esp_err_to_name(err));
+    }
+    
+    /* passo extra: GATT Server e Advertising BLE */
+    err = bt_ble_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Falha ao inicializar BLE: %s", esp_err_to_name(err));
+    }
 
     /* GAP por ultimo: ele ja pode reconectar, entao os perfis precisam estar prontos */
     const bt_gap_config_t gap = {
         .device_name = DEVICE_NAME,
-        .connect     = bt_a2dp_connect,
+        .connect     = link_connect,
         .disconnect  = link_disconnect,
         .state_cb    = on_gap_state,
         .confirm_cb  = NULL,                /* NULL = aceita pareamento automaticamente */
     };
-    ESP_ERROR_CHECK(bt_gap_start(&gap));
+    err = bt_gap_start(&gap);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao iniciar GAP: %s", esp_err_to_name(err));
+    }
 }
 
-void bluetooth_init(void)
+esp_err_t bluetooth_init(void)
 {
-    ESP_ERROR_CHECK(bredr_app_common_init());
+    esp_err_t err;
+
+    /* Identidade Dual Mode: Não liberamos a memória do BLE. Manteremos Classic e BLE (BTDM) compartilhando a BD_ADDR. */
+    // ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE)); // Removido para suportar BLE
+
+    /* Inicializa o controlador Bluetooth com as configurações padrão */
+    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    err = esp_bt_controller_init(&bt_cfg);
+    if (err) {
+        ESP_LOGE(TAG, "Falha na inicialização do controlador Bluetooth: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    /* Habilita o controlador no modo Dual Mode (BR/EDR + BLE) */
+    err = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
+    if (err) {
+        ESP_LOGW(TAG, "Falha ao habilitar BTDM: %s. Tentando apenas CLASSIC_BT.", esp_err_to_name(err));
+        err = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
+        if (err) {
+            ESP_LOGE(TAG, "Falha ao habilitar o controlador Bluetooth (CLASSIC): %s", esp_err_to_name(err));
+            return err;
+        }
+    }
+
+    /* Inicializa a pilha Bluedroid com as configurações padrão */
+    esp_bluedroid_config_t bluedroid_cfg = BT_BLUEDROID_INIT_CONFIG_DEFAULT();
+    err = esp_bluedroid_init_with_cfg(&bluedroid_cfg);
+    if (err) {
+        ESP_LOGE(TAG, "Falha na inicialização do Bluedroid: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    /* Habilita a pilha Bluedroid */
+    err = esp_bluedroid_enable();
+    if (err) {
+        ESP_LOGE(TAG, "Falha ao habilitar o Bluedroid: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "Pilha Bluetooth inicializada com sucesso");
+
+    /* Inicia a task principal da aplicação Bluetooth */
     bt_app_task_start_up();
-}
 
-void bluetooth_task(void *arg)
-{
+    /* Despacha o evento de inicialização dos perfis */
     bt_app_work_dispatch(stack_up_hdl, BT_EVT_STACK_UP, NULL, 0, NULL, NULL);
-    vTaskDelete(NULL);
+
+    return ESP_OK;
 }

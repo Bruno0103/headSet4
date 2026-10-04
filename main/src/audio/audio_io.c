@@ -28,6 +28,7 @@ static RingbufHandle_t     s_music_rb, s_dl_rb, s_ul_rb;
 static volatile audio_io_mode_t s_mode = AUDIO_IO_IDLE;
 static volatile bool       s_reconfig_req;
 static bool                s_prebuffering;
+static uint32_t            s_call_limit_bytes;
 
 /* APLL so em 44.1/48 kHz (precisao); taxas de voz usam o clock padrao */
 static i2s_std_clk_config_t clk_for(uint32_t rate)
@@ -44,6 +45,21 @@ static void drain(RingbufHandle_t rb)
     while ((p = xRingbufferReceiveUpTo(rb, &n, 0, 4096)) != NULL) vRingbufferReturnItem(rb, p);
 }
 
+static void trim_rb_reader_side(RingbufHandle_t rb)
+{
+    if (!s_call_limit_bytes) return;
+    while (true) {
+        size_t free = xRingbufferGetCurFreeSize(rb);
+        size_t used = (CALL_RB_SIZE > free) ? (CALL_RB_SIZE - free) : 0;
+        if (used <= s_call_limit_bytes) break;
+        size_t to_discard = used - s_call_limit_bytes;
+        size_t n;
+        void *p = xRingbufferReceiveUpTo(rb, &n, 0, to_discard);
+        if (!p) break;
+        vRingbufferReturnItem(rb, p);
+    }
+}
+
 /* ---------------- bombeamento (rodam dentro da task, com s_lock) ---------------- */
 
 static void pump_music(void)
@@ -57,7 +73,22 @@ static void pump_music(void)
     size_t n = 0, w = 0;
     void *p = xRingbufferReceiveUpTo(s_music_rb, &n, pdMS_TO_TICKS(10), MUSIC_CHUNK);
     if (p) {
-        i2s_channel_write(s_tx, p, n, &w, 100);
+        size_t fill = MUSIC_RB_SIZE - xRingbufferGetCurFreeSize(s_music_rb);
+        
+        /* Compensação de deriva de clock (drift) I2S vs Celular:
+         * Manter o nível do buffer saudável (alvo ~ prefill).
+         * Se estiver muito cheio (overrun iminente), descarta 1 frame (4 bytes).
+         * Se estiver muito vazio (underrun iminente), duplica 1 frame (4 bytes).
+         */
+        if (fill > 12 * 1024 && n >= 4) {
+            i2s_channel_write(s_tx, (uint8_t*)p + 4, n - 4, &w, 100);
+        } else if (fill < 2 * 1024 && n >= 4) {
+            i2s_channel_write(s_tx, p, n, &w, 100);
+            i2s_channel_write(s_tx, (uint8_t*)p + n - 4, 4, &w, 100);
+        } else {
+            i2s_channel_write(s_tx, p, n, &w, 100);
+        }
+
         vRingbufferReturnItem(s_music_rb, p);
     } else {                                    /* underrun: toca silencio e reenche o colchao */
         static const int16_t silence[256];
@@ -80,6 +111,7 @@ static void pump_call(void)
 
     /* downlink: voz do interlocutor (mono) -> L e R. Falta de dados = silencio. */
     memset(out, 0, sizeof out);
+    trim_rb_reader_side(s_dl_rb);
     size_t n = 0;
     int16_t *dl = xRingbufferReceiveUpTo(s_dl_rb, &n, 0, frames * 2);
     if (dl) {
@@ -136,7 +168,12 @@ esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
     ESP_GOTO_ON_ERROR(i2s_channel_reconfig_std_clock(s_rx, &clk), out, TAG, "rx clock");
 
     drain(s_music_rb); drain(s_dl_rb); drain(s_ul_rb);
-    if (mode == AUDIO_IO_CALL) voice_nr_init(rate);
+    if (mode == AUDIO_IO_CALL) {
+        voice_nr_init(rate);
+        s_call_limit_bytes = rate * 2 * 35 / 1000;
+    } else {
+        s_call_limit_bytes = 0;
+    }
 
     ESP_GOTO_ON_ERROR(i2s_channel_enable(s_tx), out, TAG, "tx enable");
     if (mode == AUDIO_IO_CALL) ESP_GOTO_ON_ERROR(i2s_channel_enable(s_rx), out, TAG, "rx enable");
@@ -186,6 +223,7 @@ uint32_t audio_io_call_uplink_pull(uint8_t *buf, uint32_t size)
 {
     uint32_t got = 0;
     if (s_mode == AUDIO_IO_CALL) {
+        trim_rb_reader_side(s_ul_rb);
         size_t n = 0;
         void *p = xRingbufferReceiveUpTo(s_ul_rb, &n, 0, size);
         if (p) { memcpy(buf, p, n); vRingbufferReturnItem(s_ul_rb, p); got = n; }
@@ -206,6 +244,9 @@ esp_err_t audio_io_init(void)
 
     /* Full-duplex na mesma porta: TX = fones, RX = microfone. ESP32 e o mestre do clock. */
     i2s_chan_config_t cc = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    /* Ativa o auto_clear (limpeza automática). Em caso de underrun do DMA, isso evita que
+       o último bloco seja repetido, o que produziria um "buzz" audível. */
+    cc.auto_clear = true;
     ESP_RETURN_ON_ERROR(i2s_new_channel(&cc, &s_tx, &s_rx), TAG, "new channel");
 
     i2s_std_config_t std = {

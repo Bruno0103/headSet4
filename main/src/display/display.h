@@ -2,14 +2,7 @@
 
 #include "driver/spi_master.h"
 
-// Definições do LCD em pinos livres para não conflitar com o WM8960.
-#define LCD_GPIO_SCLK      19
-#define LCD_GPIO_MOSI      21
-#define LCD_GPIO_DC         2
-#define LCD_GPIO_CS         5
-#define LCD_GPIO_RST        4
-#define LCD_GPIO_BL        15
-
+#include "pinout.h"
 #define LCD_SPI_NUM         SPI2_HOST
 #define LCD_H_RES           128
 #define LCD_V_RES           160

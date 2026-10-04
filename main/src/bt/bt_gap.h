@@ -48,5 +48,6 @@ size_t         bt_gap_get_known(esp_bd_addr_t *out, size_t max);    /* do mais r
 /* ---- comandos (qualquer task; executam na task BT_APP) ---- */
 void bt_gap_forget(esp_bd_addr_t bda);          /* apaga o pareamento (desconecta se ativo) */
 void bt_gap_forget_all(void);
+void bt_gap_disconnect_active(void);            /* desconecta o atual sem esquecer (repouso) */
 void bt_gap_pair_new(void);                     /* desconecta o atual e abre o modo de pareamento */
 void bt_gap_confirm_pairing(bool accept);       /* resposta ao confirm_cb */

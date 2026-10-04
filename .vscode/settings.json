@@ -33,5 +33,5 @@
     "--compile-commands-dir=a:\\BackupDesktopFileBruno\\Estudos\\ESP\\ESP32\\displayTest\\build"
   ],
   "idf.flashType": "UART",
-  "idf.port": "COM8"
+  "idf.port": "COM9"
 }

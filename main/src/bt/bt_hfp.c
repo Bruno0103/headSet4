@@ -8,10 +8,11 @@
 #include "esp_hf_client_api.h"
 #include "esp_log.h"
 
-#include "bt_app_core_utils.h"
+#include "bt_app_core.h"
 
 #include "audio_io.h"
 #include "bt_a2dp.h"
+#include "bt_avrcp.h"
 
 static const char *TAG = "bt_hfp";
 
@@ -36,11 +37,51 @@ static void hf_evt_hdl(uint16_t event, void *p)
 {
     esp_hf_client_cb_param_t *hf = p;
 
-    if (event != ESP_HF_CLIENT_AUDIO_STATE_EVT)
-        return;
-
-    switch (hf->audio_stat.state)
+    switch (event)
     {
+    case ESP_HF_CLIENT_CONNECTION_STATE_EVT:
+        if (hf->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_CONNECTED) {
+            ESP_LOGI(TAG, "HFP Conectado");
+            bt_a2dp_connect(hf->conn_stat.remote_bda);
+        } else if (hf->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_DISCONNECTED) {
+            ESP_LOGI(TAG, "HFP Desconectado");
+        }
+        break;
+
+    case ESP_HF_CLIENT_CIND_CALL_EVT:
+        if (hf->call.status == ESP_HF_CALL_STATUS_CALL_IN_PROGRESS) {
+            ESP_LOGI(TAG, "Chamada em andamento");
+        } else {
+            ESP_LOGI(TAG, "Sem chamada");
+        }
+        break;
+
+    case ESP_HF_CLIENT_CIND_CALL_SETUP_EVT:
+        if (hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_INCOMING) {
+            ESP_LOGI(TAG, "Chamada recebendo");
+        } else if (hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_OUTGOING_DIALING || hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_OUTGOING_ALERTING) {
+            ESP_LOGI(TAG, "Chamada efetuando");
+        }
+        break;
+
+    case ESP_HF_CLIENT_RING_IND_EVT:
+        ESP_LOGI(TAG, "Tocando...");
+        break;
+
+    case ESP_HF_CLIENT_CLIP_EVT:
+        ESP_LOGI(TAG, "Numero: %s", hf->clip.number);
+        break;
+
+    case ESP_HF_CLIENT_VOLUME_CONTROL_EVT:
+        if (hf->volume_control.type == ESP_HF_VOLUME_CONTROL_TARGET_SPK || hf->volume_control.type == ESP_HF_VOLUME_CONTROL_TARGET_MIC) {
+            ESP_LOGI(TAG, "Volume de chamada do celular: %d/15", hf->volume_control.volume);
+            bt_avrcp_set_volume(hf->volume_control.volume * 127 / 15);
+        }
+        break;
+
+    case ESP_HF_CLIENT_AUDIO_STATE_EVT:
+        switch (hf->audio_stat.state)
+        {
     case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED: /* CVSD: banda estreita */
         audio_io_start(AUDIO_IO_CALL, 8000);
         break;
@@ -50,6 +91,10 @@ static void hf_evt_hdl(uint16_t event, void *p)
     case ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED:
         audio_io_stop_mode(AUDIO_IO_CALL);
         bt_a2dp_resume_audio(); /* volta a musica, se estava tocando */
+        break;
+        default:
+            break;
+        }
         break;
     default:
         break;
@@ -68,6 +113,9 @@ void bt_hfp_connect(esp_bd_addr_t remote)
 
 void bt_hfp_disconnect(esp_bd_addr_t remote) { esp_hf_client_disconnect(remote); }
 
+esp_err_t bt_hfp_answer_call(void) { return esp_hf_client_answer_call(); }
+esp_err_t bt_hfp_reject_call(void) { return esp_hf_client_reject_call(); }
+
 esp_err_t bt_hfp_start(void)
 {
     ESP_RETURN_ON_ERROR(esp_hf_client_register_callback(hf_cb), TAG, "register cb");
@@ -81,5 +129,7 @@ esp_err_t bt_hfp_start(void)
 esp_err_t bt_hfp_start(void) { return ESP_OK; }
 void bt_hfp_connect(esp_bd_addr_t r) { (void)r; }
 void bt_hfp_disconnect(esp_bd_addr_t r) { (void)r; }
+esp_err_t bt_hfp_answer_call(void) { return ESP_OK; }
+esp_err_t bt_hfp_reject_call(void) { return ESP_OK; }
 
 #endif
