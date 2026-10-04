@@ -8,9 +8,7 @@
 #include "bt_app_core.h"      /* bt_app_work_dispatch */
 
 #include "audio_io.h"
-#include "bt_hfp.h"
-#include "esp_gap_bt_api.h"
-#include "bt_gap.h"
+#include "headset_events.h"
 
 static esp_bd_addr_t s_remote;
 static bool s_has_remote;
@@ -23,16 +21,6 @@ static bool s_streaming;
 static const char *s_a2d_conn_state_str[] = {"Disconnected", "Connecting", "Connected", "Disconnecting"};
 static const char *s_a2d_audio_state_str[] = {"Suspended", "Started"};
 #define APP_DELAY_VALUE 50 // 5ms
-
-#include "esp_timer.h"
-#define INACTIVITY_TIMEOUT_MS (5 * 60 * 1000) // 5 minutos de inatividade para derrubar o link
-static esp_timer_handle_t s_inactivity_timer;
-
-static void inactivity_timer_cb(void *arg)
-{
-    ESP_LOGI(TAG, "Inatividade detectada (%d ms de silencio), derrubando link Classic (repouso TWS)", INACTIVITY_TIMEOUT_MS);
-    bt_gap_disconnect_active();
-}
 
 /* Contexto da pilha BT: so repassa o PCM (ja decodificado de SBC) para o buffer. */
 static void a2dp_data_cb(const uint8_t *data, uint32_t len)
@@ -54,6 +42,26 @@ static uint32_t rate_from_cfg(const esp_a2d_mcc_t *mcc)
     return 16000;
 }
 
+/* Registra a configuracao SBC negociada: quem escolhe bitpool/modo e o celular (source). */
+static void log_sbc_cfg(const esp_a2d_mcc_t *mcc)
+{
+    if (mcc->type != ESP_A2D_MCT_SBC) {
+        ESP_LOGW(TAG, "Codec negociado nao e SBC (tipo %d)", mcc->type);
+        return;
+    }
+    const esp_a2d_cie_sbc_t *c = &mcc->cie.sbc_info;
+    const char *mode = c->ch_mode == ESP_A2D_SBC_CIE_CH_MODE_JOINT_STEREO ? "joint stereo" :
+                       c->ch_mode == ESP_A2D_SBC_CIE_CH_MODE_STEREO       ? "stereo" :
+                       c->ch_mode == ESP_A2D_SBC_CIE_CH_MODE_DUAL_CHANNEL ? "dual" : "mono";
+    int blocks = c->block_len == ESP_A2D_SBC_CIE_BLOCK_LEN_16 ? 16 : c->block_len == ESP_A2D_SBC_CIE_BLOCK_LEN_12 ? 12 :
+                 c->block_len == ESP_A2D_SBC_CIE_BLOCK_LEN_8 ? 8 : 4;
+    int bands = c->num_subbands == ESP_A2D_SBC_CIE_NUM_SUBBANDS_8 ? 8 : 4;
+    ESP_LOGI(TAG, "SBC: %lu Hz, %s, %d blocos, %d subbandas, %s, bitpool %u..%u",
+             (unsigned long)s_rate, mode, blocks, bands,
+             c->alloc_mthd == ESP_A2D_SBC_CIE_ALLOC_MTHD_LOUDNESS ? "loudness" : "SNR",
+             c->min_bitpool, c->max_bitpool);
+}
+
 /* Roda na task BT_APP (pode demorar: mexe em I2C/I2S) */
 static void a2dp_evt_hdl(uint16_t event, void *p)
 {
@@ -65,52 +73,50 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
         uint8_t *bda = a2d->conn_stat.remote_bda;
         ESP_LOGI(TAG, "A2DP connection state: %s, [%02x:%02x:%02x:%02x:%02x:%02x]",
                  s_a2d_conn_state_str[a2d->conn_stat.state], bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
-        
+
+        /* Quem decide o que fazer com o link e o bt_link_mgr: aqui so se publica o fato. */
+        headset_link_evt_t ev = { .profile = HEADSET_PROFILE_A2DP };
+        memcpy(ev.bda, bda, sizeof ev.bda);
+
         if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED)
         {
-            esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
-            memcpy(s_remote, a2d->conn_stat.remote_bda, sizeof s_remote);
+            memcpy(s_remote, bda, sizeof s_remote);
             s_has_remote = true;
-            bt_hfp_connect(a2d->conn_stat.remote_bda);
-            
-            // Inicia timer de inatividade ao conectar (caso não dê play)
-            esp_timer_stop(s_inactivity_timer);
-            esp_timer_start_once(s_inactivity_timer, INACTIVITY_TIMEOUT_MS * 1000ULL);
+            headset_event_post(HEADSET_EVT_LINK_UP, &ev, sizeof ev);
         }
         else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED)
         {
-            esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
-            if (s_has_remote && memcmp(a2d->conn_stat.remote_bda, s_remote, sizeof s_remote) != 0)
-            {
-                break; /* aparelho antigo, ja substituido: nao mexe no audio do atual */
+            ESP_LOGI(TAG, "Motivo da desconexao: %s",
+                     a2d->conn_stat.disc_rsn == ESP_A2D_DISC_RSN_NORMAL ? "normal" : "anormal (perda de sinal)");
+            if (s_has_remote && memcmp(bda, s_remote, sizeof s_remote) == 0) {
+                s_has_remote = false;
+                s_streaming = false;
+                audio_io_stop_mode(AUDIO_IO_MUSIC);
+                headset_streaming_evt_t st = { .streaming = false };
+                headset_event_post(HEADSET_EVT_STREAMING, &st, sizeof st);
             }
-            s_has_remote = false;
-            s_streaming = false;
-            audio_io_stop_mode(AUDIO_IO_MUSIC);
-            
-            esp_timer_stop(s_inactivity_timer);
+            headset_event_post(HEADSET_EVT_LINK_DOWN, &ev, sizeof ev);
         }
         break;
     }
 
     case ESP_A2D_AUDIO_CFG_EVT: /* chega antes do STARTED */
         s_rate = rate_from_cfg(&a2d->audio_cfg.mcc);
-        ESP_LOGI(TAG, "SBC @ %lu Hz", (unsigned long)s_rate);
+        log_sbc_cfg(&a2d->audio_cfg.mcc);
         break;
 
-    case ESP_A2D_AUDIO_STATE_EVT:
+    case ESP_A2D_AUDIO_STATE_EVT: {
         ESP_LOGI(TAG, "A2DP audio state: %s", s_a2d_audio_state_str[a2d->audio_stat.state]);
         s_streaming = (a2d->audio_stat.state == ESP_A2D_AUDIO_STATE_STARTED);
         if (s_streaming) {
             audio_io_start(AUDIO_IO_MUSIC, s_rate);
-            esp_timer_stop(s_inactivity_timer);
         } else {
             audio_io_stop_mode(AUDIO_IO_MUSIC);
-            if (s_has_remote) {
-                esp_timer_start_once(s_inactivity_timer, INACTIVITY_TIMEOUT_MS * 1000ULL);
-            }
         }
+        headset_streaming_evt_t st = { .streaming = s_streaming };
+        headset_event_post(HEADSET_EVT_STREAMING, &st, sizeof st);
         break;
+    }
 
     case ESP_A2D_PROF_STATE_EVT:
         if (ESP_A2D_INIT_SUCCESS == a2d->a2d_prof_stat.init_state) {
@@ -171,12 +177,6 @@ void bt_a2dp_resume_audio(void)
 
 esp_err_t bt_a2dp_start(void)
 {
-    const esp_timer_create_args_t timer_args = {
-        .callback = inactivity_timer_cb,
-        .name = "a2dp_inactivity"
-    };
-    ESP_RETURN_ON_ERROR(esp_timer_create(&timer_args, &s_inactivity_timer), TAG, "inactivity timer");
-
     ESP_RETURN_ON_ERROR(esp_a2d_register_callback(&a2dp_cb), TAG, "register cb");
     ESP_RETURN_ON_ERROR(esp_a2d_sink_init(), TAG, "sink init");
     ESP_RETURN_ON_ERROR(esp_a2d_sink_register_data_callback(a2dp_data_cb), TAG, "data cb");

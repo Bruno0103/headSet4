@@ -10,6 +10,7 @@
 #include "audio_codec.h"
 
 #include "driver/i2c_master.h"
+#include "board_i2c.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -173,15 +174,9 @@ esp_err_t audio_codec_apply_filters(const audio_filters_t *f)
 
 esp_err_t audio_codec_init(void)
 {
-    i2c_master_bus_config_t bus_cfg = {
-        .i2c_port          = I2C_NUM_0,
-        .sda_io_num        = BOARD_I2C_SDA,
-        .scl_io_num        = BOARD_I2C_SCL,
-        .clk_source        = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,                /* o breakout ja tem pull-ups de 2.2k */
-    };
-    i2c_master_bus_handle_t bus;
-    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &bus), TAG, "i2c bus");
+    /* O barramento I2C e compartilhado com o APDS-9930 (board_i2c). */
+    ESP_RETURN_ON_ERROR(board_i2c_init(), TAG, "i2c bus");
+    i2c_master_bus_handle_t bus = board_i2c_get_bus();
     ESP_RETURN_ON_ERROR(wm8960_attach(bus), TAG, "attach");
     ESP_RETURN_ON_ERROR(wm8960_reset(), TAG, "reset");
 

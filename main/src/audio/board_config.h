@@ -4,7 +4,6 @@
 #include "pinout.h"
 
 /* I2C: controle do WM8960 (Qwiic do SparkFun Thing Plus ESP32) */
-#define BOARD_I2C_HZ 100000
 #define WM8960_I2C_ADDR 0x1A
 
 /* I2S: mesmos pinos do sketch Super Headphones (Thing Plus C) */

@@ -1,40 +1,47 @@
 #include "esp_err.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-// #include "display.h"
-#include "audio.h"
-#include "bluetooth.h"
-#include "bt_multipoint.h" // Inclui o gerenciador Multipoint
+#include "nvs_flash.h"
 
-// #include "sensores.h"
-// #include "atuadores.h"
 #include "apds9930.h"
+#include "audio.h"
 #include "battery.h"
+#include "board_button.h"
+#include "bt_core.h"
+#include "headset_events.h"
 
+static const char *TAG = "main";
 
-void app_main(void) {
-  // --- Display / LVGL ---
-  // display_init();
-  // xTaskCreate(display_task, "display_task", 8192, NULL, 5, NULL);
+static esp_err_t nvs_init(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "NVS corrompida/versao nova; apagando e recriando");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    return err;
+}
 
-  // --- Audio (WM8960 + I2S) - deve vir ANTES do Bluetooth ---
-  ESP_ERROR_CHECK(audio_init());
+void app_main(void)
+{
+    ESP_ERROR_CHECK(nvs_init());
+    ESP_ERROR_CHECK(headset_events_init());
 
-  // --- Gerenciador Multipoint Inteligente ---
-  bt_multipoint_init();
+    /* Codec/I2S antes do Bluetooth: o stack ja pode entregar PCM assim que conectar */
+    ESP_ERROR_CHECK(audio_init());
 
-  // --- Bluetooth (A2DP + AVRCP + HFP) ---
-  if (bluetooth_init() != ESP_OK) {
-      printf("Bluetooth init failed\n");
-  }
+    if (bt_core_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao iniciar o Bluetooth");
+    }
 
-  // --- Bateria ---
-  xTaskCreate(battery_task, "battery_task", 4096, NULL, 5, NULL);
-
-  // --- Sensor APDS-9930 ---
-  apds9930_init();
-  xTaskCreate(apds9930_task, "apds9930_task", 2048, NULL, 5, NULL);
-  //
-  // atuadores_init();
-  // xTaskCreate(atuadores_task, "atuadores_task", 4096, NULL, 5, NULL);
+    /* Sensores/botao so publicam eventos; o bt_link_mgr consulta o ultimo estado ao iniciar */
+    if (board_button_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao iniciar o botao");
+    }
+    if (apds9930_start() != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao iniciar o APDS-9930");
+    }
+    xTaskCreate(battery_task, "battery_task", 4096, NULL, 4, NULL);
 }

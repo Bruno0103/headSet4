@@ -7,6 +7,7 @@
 #include "esp_log.h"
 
 #include "bt_app_core.h"
+#include "bt_link_mgr.h"
 
 #include "audio_codec.h"
 #include "board_config.h"
@@ -44,6 +45,7 @@ static esp_err_t set_volume(uint8_t requested_volume, const char *source)
     }
 
     s_volume = volume;
+    bt_link_mgr_set_volume(volume);          /* volume por slot, gravado no NVS com atraso */
     ESP_LOGI(TAG, "volume aplicado (%s): %u/127", source, (unsigned)s_volume);
     return ESP_OK;
 }
@@ -55,7 +57,13 @@ static void avrcp_evt_hdl(uint16_t event, void *p)
 
     switch (event) {
     case ESP_AVRC_TG_CONNECTION_STATE_EVT:
-        if (!rc->conn_stat.connected) {
+        if (rc->conn_stat.connected) {
+            uint8_t v = bt_link_mgr_get_volume();   /* volume salvo do slot; o celular o adota via interim */
+            if (audio_codec_set_volume(v) == ESP_OK) {
+                s_volume = v;
+                ESP_LOGI(TAG, "volume do slot restaurado: %u/127", (unsigned)v);
+            }
+        } else {
             s_notify_registered = false;
             ESP_LOGI(TAG, "conexao AVRCP encerrada; notificacao pendente removida");
         }

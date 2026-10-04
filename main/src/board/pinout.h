@@ -25,6 +25,7 @@
 // Utilizando os pinos padrão do I2C do ESP32
 #define BOARD_I2C_SDA          21
 #define BOARD_I2C_SCL          22
+#define BOARD_I2C_HZ           100000   /* 100 kHz: poupa ruido no audio, suficiente p/ codec e APDS */
 
 // ============================================================================
 // I2S - Interface de Áudio (WM8960)
@@ -39,3 +40,15 @@
 // ============================================================================
 #define BAT_ADC_PIN         GPIO_NUM_34
 #define BAT_CTRL_PIN        GPIO_NUM_14   /* Mantido no 14, agora livre */
+
+// ============================================================================
+// Botao de troca de dispositivo / pareamento
+// ============================================================================
+// GPIO0 = botao BOOT do Thing Plus (ativo em nivel baixo, pull-up interno).
+// Evitar GPIO12 (MTDI): nivel alto no boot selecionaria flash de 1.8 V.
+#define BOARD_BUTTON_SWITCH_GPIO   GPIO_NUM_0
+
+// ============================================================================
+// Sensor de proximidade APDS-9930 (I2C compartilhado com o codec)
+// ============================================================================
+#define BOARD_APDS9930_I2C_ADDR    0x39

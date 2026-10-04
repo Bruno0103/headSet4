@@ -40,10 +40,11 @@ static void bt_app_task_handler(void *arg) {
 
 void bt_app_task_start_up(void) {
     if (s_bt_app_task_queue == NULL) {
-        s_bt_app_task_queue = xQueueCreate(10, sizeof(bt_app_msg_t));
+        s_bt_app_task_queue = xQueueCreate(20, sizeof(bt_app_msg_t));
     }
     if (s_bt_app_task_handle == NULL) {
-        xTaskCreate(bt_app_task_handler, "BtAppTask", 3072, NULL, 10, &s_bt_app_task_handle);
+        /* Stack maior: os handlers de GAP/GATT/Fast Pair (PSA, ECDH) rodam aqui. Core 0 = core do BT. */
+        xTaskCreatePinnedToCore(bt_app_task_handler, "BtAppTask", 8192, NULL, 10, &s_bt_app_task_handle, 0);
     }
 }
 

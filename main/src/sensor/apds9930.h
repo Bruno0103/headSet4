@@ -1,6 +1,14 @@
-#ifndef APDS9930_H
-#define APDS9930_H
+/**
+ * @file apds9930.h
+ * @brief Sensor de proximidade APDS-9930 (uso/retirada do fone).
+ *
+ * O driver NUNCA chama o Bluetooth: apenas publica HEADSET_EVT_WORN /
+ * HEADSET_EVT_REMOVED no barramento de eventos. Histerese + debounce evitam
+ * transicoes falsas (ajuste fino em menuconfig -> Headset).
+ */
+#pragma once
 
+#include <stdbool.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -8,29 +16,16 @@ extern "C" {
 #endif
 
 /**
- * @brief Inicializa o sensor de proximidade APDS-9930 e inicia a task de monitoramento.
- *
- * @return esp_err_t ESP_OK em caso de sucesso.
+ * Inicializa o sensor no barramento compartilhado e inicia a task de leitura.
+ * Requer board_i2c_init() e headset_events_init(). Se o sensor nao responder,
+ * publica WORN (assume fone em uso, para o BT funcionar sem o sensor) e
+ * retorna o erro.
  */
-esp_err_t apds9930_init(void);
+esp_err_t apds9930_start(void);
 
-/**
- * @brief Retorna o status atual do sensor de presenca.
- *
- * @return true se o fone estiver na cabeca (presenca detectada).
- * @return false se o fone estiver fora da cabeca.
- */
-bool apds9930_is_headset_on(void);
-
-/**
- * @brief Task do sensor de proximidade.
- * 
- * @param pvParameters Parâmetros da task.
- */
-void apds9930_task(void *pvParameters);
+/** Estado filtrado atual (true = fone na cabeca). */
+bool apds9930_is_worn(void);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif // APDS9930_H

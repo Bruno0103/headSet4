@@ -1,0 +1,46 @@
+menu "Headset"
+
+    config HEADSET_DEVICE_NAME
+        string "Nome Bluetooth do headset"
+        default "HeadSet4"
+
+    menu "Sensor de proximidade (APDS-9930)"
+        config HEADSET_APDS_ON_THRESHOLD
+            int "Limiar de 'colocado' (leitura >= valor)"
+            range 1 1023
+            default 200
+
+        config HEADSET_APDS_OFF_THRESHOLD
+            int "Limiar de 'retirado' (leitura <= valor; deve ser < limiar de colocado)"
+            range 0 1022
+            default 120
+
+        config HEADSET_APDS_DEBOUNCE_MS
+            int "Debounce (ms) para confirmar a mudanca"
+            range 50 2000
+            default 300
+
+        config HEADSET_APDS_POLL_MS
+            int "Periodo de leitura (ms)"
+            range 20 1000
+            default 100
+    endmenu
+
+    menu "Google Fast Pair"
+        config HEADSET_FASTPAIR_MODEL_ID
+            string "Model ID (3 bytes em hexa, ex.: 0A1B2C) - do Google Nearby Console"
+            default ""
+            help
+                Deixe vazio para DESATIVAR o Fast Pair (o headset segue com pareamento
+                Classic manual). A imagem do pop-up e configurada no console, nao aqui.
+
+        config HEADSET_FASTPAIR_ANTISPOOF_PRIVATE_KEY_B64
+            string "Anti-Spoofing PRIVATE key (Base64, 32 bytes) - do Nearby Console"
+            default ""
+            help
+                Segredo do produto. Fica no sdkconfig local (ignorado pelo git): NAO
+                versione este valor. Para producao, mova-o para uma particao NVS
+                criptografada / eFuse.
+    endmenu
+
+endmenu

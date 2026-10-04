@@ -1,0 +1,9 @@
+- Sempre escreva código baseado no ESP-IDF v6.1 nativo
+- Use os drivers mais recentes (como o novo driver de I2S ou o 'driver/i2c_master.h' se aplicável).
+- Otimize o código para baixo consumo de energia quando solicitado.
+- Adicione logs detalhados usando as macros ESP_LOGI, ESP_LOGE e ESP_LOGW.
+- Sempre trate erros de retorno das funções do ESP-IDF.
+- Prefira o uso de FreeRTOS para tarefas concorrentes e temporização.
+- Utilize a memória de forma eficiente, evitando vazamentos e acessos inválidos.
+- Comente o código de forma clara, explicando a lógica e as decisões de design.
+- Siga as convenções de nomenclatura e estilo do ESP-IDF.
