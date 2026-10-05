@@ -8,5 +8,9 @@ set(LV_BUILD_CONF_PATH
     FORCE
 )
 
+# Garante que o LVGL encontre o lv_conf.h diretamente pelo caminho absoluto
+add_compile_definitions(LV_CONF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/main/lv_conf.h")
+add_compile_options(-I"${CMAKE_CURRENT_SOURCE_DIR}/main")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(headSet4)

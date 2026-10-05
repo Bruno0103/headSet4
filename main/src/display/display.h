@@ -24,9 +24,14 @@
 #define LCD_INVERT_COLOR    0
 #define LCD_COLOR_BGR       1       /* a maioria dos modulos ILI9341 e BGR */
 
-/* Inicializa SPI, ILI9341, XPT2046, LVGL (display + ponteiro) e a tela inicial.
- * Chame uma unica vez a partir da main.c, antes de criar a task. */
+/* Inicializa SPI, ILI9341, XPT2046 e o LVGL base (drivers e buffers).
+ * Chame uma unica vez a partir da main.c. */
 esp_err_t display_init(void);
+
+/* Inicializa a interface grafica gerada (ui) e carrega a tela screen.
+ * Possui tratativa de erro e fallback caso app_create falhe. */
+esp_err_t display_create_app_ui(void);
 
 /* Loop da task do LVGL (lv_timer_handler + delay). A main.c cria a task do FreeRTOS. */
 void display_task(void *arg);
+

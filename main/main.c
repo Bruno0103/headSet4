@@ -81,10 +81,20 @@ void app_main(void)
     }
     xTaskCreate(battery_task, "battery_task", 4096, NULL, 4, NULL);
 
+    /* 
+     * Inicializacao do Display e Interface Grafica (LVGL 9 + FreeRTOS):
+     * display_init() prepara o hardware (ILI9341, XPT2046) e carrega a interface de ui.
+     * Em seguida, uma tarefa dedicada no FreeRTOS (lvgl_task) com 6 KB de stack cuida do loop de desenho.
+     */
     if (display_init() == ESP_OK) {
-        xTaskCreate(display_task, "lvgl_task", 6144, NULL, 3, NULL);
+        BaseType_t task_ret = xTaskCreate(display_task, "lvgl_task", 6144, NULL, 3, NULL);
+        if (task_ret != pdPASS) {
+            ESP_LOGE(TAG, "Falha ao criar a tarefa FreeRTOS do LVGL (lvgl_task)");
+        } else {
+            ESP_LOGI(TAG, "Tarefa FreeRTOS do LVGL iniciada com sucesso");
+        }
     } else {
-        ESP_LOGE(TAG, "Falha ao iniciar o display/touch");
+        ESP_LOGE(TAG, "Falha ao inicializar o display/touch/UI");
     }
 
     log_memory("boot");

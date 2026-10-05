@@ -1,0 +1,47 @@
+[
+  {
+    "nodeId": "1:109",
+    "nodeName": "Headphones",
+    "name": "image_headphones_1109",
+    "svgPath": "vectors/1_109.svg",
+    "width": 12,
+    "height": 12,
+    "pngPath": "images/headphones_1109.png"
+  },
+  {
+    "nodeId": "1:111",
+    "nodeName": "Cpu",
+    "name": "image_cpu_1111",
+    "svgPath": "vectors/1_111.svg",
+    "width": 15,
+    "height": 15,
+    "pngPath": "images/cpu_1111.png"
+  },
+  {
+    "nodeId": "1:115",
+    "nodeName": "Bluetooth",
+    "name": "image_bluetooth_1115",
+    "svgPath": "vectors/1_115.svg",
+    "width": 7,
+    "height": 15,
+    "pngPath": "images/bluetooth_1115.png"
+  },
+  {
+    "nodeId": "1:105",
+    "nodeName": "Battery",
+    "name": "image_battery_1105",
+    "svgPath": "vectors/1_105.svg",
+    "width": 15,
+    "height": 8,
+    "pngPath": "images/battery_1105.png"
+  },
+  {
+    "nodeId": "1:113",
+    "nodeName": "Battery charging",
+    "name": "image_battery_charging_1113",
+    "svgPath": "vectors/1_113.svg",
+    "width": 15,
+    "height": 8,
+    "pngPath": "images/battery_charging_1113.png"
+  }
+]

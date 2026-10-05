@@ -123,21 +123,50 @@ static esp_err_t display_hw_init(lv_display_t *disp)
     return ESP_OK;
 }
 
-/* Tela provisoria para validar display e toque; substitua pela interface real. */
+#include "ui.h"
+#include "screens/app_gen.h"
+
+/* Tela provisoria para validar display e toque ou fallback de erro. */
 static void ui_placeholder(void)
 {
     lv_obj_t *scr = lv_screen_active();
 
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "HeadSet4");
+    lv_label_set_text(title, "HeadSet4 - Fallback");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
 
     lv_obj_t *btn = lv_button_create(scr);
-    lv_obj_set_size(btn, 140, 50);
+    lv_obj_set_size(btn, 160, 50);
     lv_obj_center(btn);
     lv_obj_t *lbl = lv_label_create(btn);
-    lv_label_set_text(lbl, "Toque aqui");
+    lv_label_set_text(lbl, "UI Padrao Ativa");
     lv_obj_center(lbl);
+}
+
+/**
+ * @brief Inicializa e carrega a interface de usuario gerada pelo LVGL Pro (ui).
+ * Possui tratativa de erro robusta: se a criacao falhar ou o ponteiro de tela for nulo,
+ * registra logs detalhados e carrega a tela de fallback para o usuario nao ficar sem visualizacao.
+ */
+esp_err_t display_create_app_ui(void)
+{
+    ESP_LOGI(TAG, "Inicializando interface grafica gerada (ui)...");
+
+    /* Inicializacao das variaveis, estilos, fontes e imagens geradas */
+    ui_init_gen("");
+
+    /* Criacao da tela principal do aplicativo */
+    lv_obj_t *screen = app_create();
+    if (screen == NULL) {
+        ESP_LOGE(TAG, "ERRO CRITICO: app_create() retornou NULL! Carregando tela placeholder de emergencia...");
+        ui_placeholder();
+        return ESP_FAIL;
+    }
+
+    /* Carrega a tela com sucesso */
+    lv_screen_load(screen);
+    ESP_LOGI(TAG, "Tela principal carregada com sucesso.");
+    return ESP_OK;
 }
 
 esp_err_t display_init(void)
@@ -164,10 +193,12 @@ esp_err_t display_init(void)
     lv_indev_set_read_cb(indev, lvgl_touch_read_cb);
     lv_indev_set_display(indev, disp);
 
-    ui_placeholder();
+    /* Carrega a UI customizada ou ativa fallback */
+    if (display_create_app_ui() != ESP_OK) {
+        ESP_LOGW(TAG, "Falha na UI gerada, mantendo tela de fallback.");
+    }
 
-    /* Liga o backlight so depois da primeira tela, evitando o flash branco */
-    lv_timer_handler();
+    /* Liga o backlight */
     gpio_set_level(LCD_GPIO_BL, 1);
     return ESP_OK;
 }
@@ -182,3 +213,4 @@ void display_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(wait_ms));
     }
 }
+

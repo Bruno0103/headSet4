@@ -44,4 +44,6 @@ idf_component_register(
     REQUIRES
         bt
         esp_timer
+        lvgl
+        ui
 )

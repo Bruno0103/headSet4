@@ -12,7 +12,7 @@
  */
 
 /* clang-format off */
-#if 0 /* Set this to "1" to enable content */
+#if 1 /* Set this to "1" to enable content */
 
 #ifndef LV_CONF_H
 #define LV_CONF_H
@@ -734,7 +734,7 @@
 #define LV_OBJ_STYLE_CACHE 1
 
 /** Widget names (lv_obj_set_name) */
-#define LV_USE_OBJ_NAME 0
+#define LV_USE_OBJ_NAME 1
 
 /** Widget id (lv_obj_set_id) */
 #define LV_USE_OBJ_ID 0
@@ -778,7 +778,7 @@
 #define LV_USE_OBSERVER 1
 
 /** Look up strings by ID for the selected language with lv_translation_get(). */
-#define LV_USE_TRANSLATION 0
+#define LV_USE_TRANSLATION 1
 
 /** Color filter style */
 #define LV_USE_COLOR_FILTER 0
@@ -1144,7 +1144,7 @@
  *  - LV_FONT_DEFAULT_UNSCII_8 (enable: LV_FONT_UNSCII_8)
  *  - LV_FONT_DEFAULT_UNSCII_16 (enable: LV_FONT_UNSCII_16)
  */
-#define LV_FONT_DEFAULT LV_FONT_DEFAULT_MONTSERRAT_14
+#define LV_FONT_DEFAULT &lv_font_montserrat_14
 
 #endif /*!LV_USE_CUSTOM_FONT_DEFAULT*/
 
@@ -2068,11 +2068,11 @@
 #endif /*LV_USE_FS_FROGFS*/
 
 /** Reach data already in memory through the lv_fs API, without a real file system. */
-#define LV_USE_FS_MEMFS 0
+#define LV_USE_FS_MEMFS 1
 
 #if LV_USE_FS_MEMFS
 /** Drive letter for memfs (65 = 'A', 0 = disabled) */
-#define LV_FS_MEMFS_LETTER 0
+#define LV_FS_MEMFS_LETTER 'M'
 
 #endif /*LV_USE_FS_MEMFS*/
 
