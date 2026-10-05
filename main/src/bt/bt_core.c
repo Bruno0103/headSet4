@@ -9,6 +9,7 @@
 #include "bt_app_core.h"
 #include "bt_avrcp.h"
 #include "bt_ble.h"
+#include "bt_eq_service.h"
 #include "bt_fastpair.h"
 #include "bt_gap.h"
 #include "bt_hfp.h"
@@ -41,6 +42,8 @@ static void stack_up_hdl(uint16_t event, void *p)
 
     log_step("BLE", bt_ble_init(CONFIG_HEADSET_DEVICE_NAME));
     log_step("Fast Pair", bt_fastpair_init());   /* registra o servico 0xFE2C e o provider no bt_ble */
+
+    log_step("EQ GATT", bt_eq_service_init());
 
     log_step("Link manager", bt_link_mgr_start());
 }

@@ -12,10 +12,14 @@
 
 #include "audio_codec.h"
 #include "board_config.h"
+#include "eq.h"
 #include "voice_nr.h"
 
-#define MUSIC_RB_SIZE   (16 * 1024)
-#define MUSIC_PREFILL   (6 * 1024)     /* acumula isto antes de comecar a tocar */
+#define MUSIC_RB_SIZE   (32 * 1024)    /* ~185 ms a 44.1 kHz; fica em PSRAM quando disponivel */
+/* Limiares relativos ao tamanho real do buffer (pode cair para metade sem PSRAM) */
+#define MUSIC_PREFILL   (s_music_size * 3 / 8)   /* acumula isto antes de comecar a tocar */
+#define DRIFT_HIGH      (s_music_size * 3 / 4)
+#define DRIFT_LOW       (s_music_size / 8)
 #define MUSIC_CHUNK     1024
 #define CALL_RB_SIZE    (4 * 1024)
 #define CALL_FRAMES     128            /* 16 ms a 8 kHz, 8 ms a 16 kHz */
@@ -27,7 +31,9 @@ static SemaphoreHandle_t   s_lock;              /* protege I2S + troca de modo *
 static RingbufHandle_t     s_music_rb, s_dl_rb, s_ul_rb;
 static volatile audio_io_mode_t s_mode = AUDIO_IO_IDLE;
 static volatile bool       s_reconfig_req;
+static size_t              s_music_size;
 static bool                s_prebuffering;
+static int16_t             s_chunk[MUSIC_CHUNK / 2];
 static uint32_t            s_call_limit_bytes;
 
 /* APLL so em 44.1/48 kHz (precisao); taxas de voz usam o clock padrao */
@@ -65,7 +71,7 @@ static void trim_rb_reader_side(RingbufHandle_t rb)
 static void pump_music(void)
 {
     if (s_prebuffering) {
-        size_t fill = MUSIC_RB_SIZE - xRingbufferGetCurFreeSize(s_music_rb);
+        size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
         if (fill < MUSIC_PREFILL) { vTaskDelay(pdMS_TO_TICKS(5)); return; }
         s_prebuffering = false;
     }
@@ -73,23 +79,30 @@ static void pump_music(void)
     size_t n = 0, w = 0;
     void *p = xRingbufferReceiveUpTo(s_music_rb, &n, pdMS_TO_TICKS(10), MUSIC_CHUNK);
     if (p) {
-        size_t fill = MUSIC_RB_SIZE - xRingbufferGetCurFreeSize(s_music_rb);
-        
+        size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
+
+        /* Copia para um buffer local (o EQ altera no lugar) e libera o ringbuffer logo */
+        n &= ~3u;
+        memcpy(s_chunk, p, n);
+        vRingbufferReturnItem(s_music_rb, p);
+        eq_process(s_chunk, n / 4);
+        uint8_t *d = (uint8_t *)s_chunk;
+
         /* Compensação de deriva de clock (drift) I2S vs Celular:
-         * Manter o nível do buffer saudável (alvo ~ prefill).
+         * Manter o nível do buffer saudável (alvo ~ metade).
          * Se estiver muito cheio (overrun iminente), descarta 1 frame (4 bytes).
          * Se estiver muito vazio (underrun iminente), duplica 1 frame (4 bytes).
          */
-        if (fill > 12 * 1024 && n >= 4) {
-            i2s_channel_write(s_tx, (uint8_t*)p + 4, n - 4, &w, 100);
-        } else if (fill < 2 * 1024 && n >= 4) {
-            i2s_channel_write(s_tx, p, n, &w, 100);
-            i2s_channel_write(s_tx, (uint8_t*)p + n - 4, 4, &w, 100);
-        } else {
-            i2s_channel_write(s_tx, p, n, &w, 100);
+        if (n >= 4) {
+            if (fill > DRIFT_HIGH) {
+                i2s_channel_write(s_tx, d + 4, n - 4, &w, 100);
+            } else if (fill < DRIFT_LOW) {
+                i2s_channel_write(s_tx, d, n, &w, 100);
+                i2s_channel_write(s_tx, d + n - 4, 4, &w, 100);
+            } else {
+                i2s_channel_write(s_tx, d, n, &w, 100);
+            }
         }
-
-        vRingbufferReturnItem(s_music_rb, p);
     } else {                                    /* underrun: toca silencio e reenche o colchao */
         static const int16_t silence[256];
         i2s_channel_write(s_tx, silence, sizeof silence, &w, 100);
@@ -159,6 +172,7 @@ esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
     audio_codec_mute(true);
 
     ESP_GOTO_ON_ERROR(audio_codec_set_sample_rate(rate), out, TAG, "codec rate");
+    if (mode == AUDIO_IO_MUSIC) eq_set_sample_rate(rate);
     ESP_GOTO_ON_ERROR(audio_codec_apply_filters(mode == AUDIO_IO_CALL ? &AUDIO_FILTERS_CALL
                                                                       : &AUDIO_FILTERS_MUSIC),
                       out, TAG, "filtros");
@@ -237,7 +251,14 @@ uint32_t audio_io_call_uplink_pull(uint8_t *buf, uint32_t size)
 esp_err_t audio_io_init(void)
 {
     s_lock = xSemaphoreCreateMutex();
-    s_music_rb = xRingbufferCreate(MUSIC_RB_SIZE, RINGBUF_TYPE_BYTEBUF);
+    /* Buffer grande de musica em PSRAM (acesso so da task de audio e do callback A2DP); sem PSRAM cai na RAM interna */
+    s_music_size = MUSIC_RB_SIZE;
+    s_music_rb = xRingbufferCreateWithCaps(s_music_size, RINGBUF_TYPE_BYTEBUF, MALLOC_CAP_SPIRAM);
+    if (!s_music_rb) {
+        s_music_size = MUSIC_RB_SIZE / 2;
+        ESP_LOGW(TAG, "PSRAM indisponivel para o buffer de musica; usando RAM interna");
+        s_music_rb = xRingbufferCreateWithCaps(s_music_size, RINGBUF_TYPE_BYTEBUF, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
     s_dl_rb    = xRingbufferCreate(CALL_RB_SIZE, RINGBUF_TYPE_BYTEBUF);
     s_ul_rb    = xRingbufferCreate(CALL_RB_SIZE, RINGBUF_TYPE_BYTEBUF);
     ESP_RETURN_ON_FALSE(s_lock && s_music_rb && s_dl_rb && s_ul_rb, ESP_ERR_NO_MEM, TAG, "sem memoria");

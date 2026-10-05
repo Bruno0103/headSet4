@@ -148,5 +148,6 @@ esp_err_t apds9930_start(void)
 
 bool apds9930_is_worn(void)
 {
+    ESP_LOGI(TAG, "APDS-9930 ativo s_worn=%d", s_worn);
     return s_worn;
 }

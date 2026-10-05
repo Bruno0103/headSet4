@@ -15,8 +15,16 @@ static const char *TAG = "main";
 
 static esp_err_t nvs_init(void)
 {
+    /* 
+     * Apaga a partição NVS inteira sempre que o ESP32 é reiniciado.
+     * Isso garante que nenhum dado anterior (como pareamentos Bluetooth) permaneça armazenado.
+     */
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    
+    // Inicializa a partição NVS padrão
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        // Se houver algum problema de versão ou falta de espaço, tenta apagar novamente
         ESP_LOGW(TAG, "NVS corrompida/versao nova; apagando e recriando");
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
