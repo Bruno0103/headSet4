@@ -31,6 +31,7 @@ typedef enum {
     HEADSET_EVT_LINK_DOWN,       /**< BT: perfil desconectado (payload headset_link_evt_t)   */
     HEADSET_EVT_PAIRING_MODE,    /**< link_mgr: janela de pareamento (payload headset_pairing_evt_t) */
     HEADSET_EVT_STREAMING,       /**< A2DP: inicio/fim de stream (payload headset_streaming_evt_t) */
+    HEADSET_EVT_BATTERY,         /**< battery: nivel mudou (payload headset_battery_evt_t)   */
 } headset_event_id_t;
 
 typedef enum {
@@ -50,6 +51,11 @@ typedef struct {
 typedef struct {
     bool streaming;
 } headset_streaming_evt_t;
+
+typedef struct {
+    uint8_t  percent;       /**< 0..100 */
+    uint16_t millivolts;    /**< tensao real da bateria */
+} headset_battery_evt_t;
 
 /** Cria o loop de eventos dedicado (task propria no core 0). Idempotente. */
 esp_err_t headset_events_init(void);

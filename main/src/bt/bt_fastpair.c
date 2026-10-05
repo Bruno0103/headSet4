@@ -838,7 +838,7 @@ esp_err_t bt_fastpair_init(void)
     keys_load();
 
     /* ECDH + SHA/AES precisam de stack; roda fora da task do Bluedroid */
-    BaseType_t ok = xTaskCreatePinnedToCore(fp_task, "fp_crypto", 6144, NULL, 3, NULL, 0);
+    BaseType_t ok = xTaskCreatePinnedToCore(fp_task, "fp_crypto", 8192, NULL, 3, NULL, 0);
     ESP_RETURN_ON_FALSE(ok == pdPASS, ESP_ERR_NO_MEM, TAG, "task fp_crypto");
 
     build_db();

@@ -8,6 +8,7 @@
  */
 
 #include "battery.h"
+#include <stdint.h>
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -19,6 +20,7 @@
 
 static const char *TAG = "BATTERY";
 
+#include "headset_events.h"
 #include "pinout.h"
 
 // O GPIO34 corresponde ao Canal 6 do ADC1 no ESP32
@@ -110,12 +112,35 @@ void battery_read_and_print(void)
     ESP_LOGI(TAG, "[BATERIA] Tensão lida no pino: %d mV | Tensão real: %.2f V", voltage_mv, battery_voltage_v);
 }
 
+/* Curva de descarga tipica de uma celula Li-ion/LiPo 1S (em repouso), interpolada linearmente */
+static uint8_t battery_percent_from_mv(int mv)
+{
+    static const struct { uint16_t mv; uint8_t pct; } curve[] = {
+        {4200, 100}, {4150, 95}, {4110, 90}, {4080, 85}, {4020, 80}, {3980, 75}, {3950, 70},
+        {3910, 65},  {3870, 60}, {3850, 55}, {3840, 50}, {3820, 45}, {3800, 40}, {3790, 35},
+        {3770, 30},  {3750, 25}, {3730, 20}, {3710, 15}, {3690, 10}, {3610, 5},  {3400, 0},
+    };
+    const int n = sizeof curve / sizeof curve[0];
+
+    if (mv >= curve[0].mv) return 100;
+    if (mv <= curve[n - 1].mv) return 0;
+    for (int i = 1; i < n; i++) {
+        if (mv >= curve[i].mv) {
+            int span_mv  = curve[i - 1].mv - curve[i].mv;
+            int span_pct = curve[i - 1].pct - curve[i].pct;
+            return (uint8_t)(curve[i].pct + (mv - curve[i].mv) * span_pct / span_mv);
+        }
+    }
+    return 0;
+}
+
 void battery_task(void *pvParameters)
 {
     // Inicializar os pinos e ADC
     battery_init();
 
     int prev_avg = -1;
+    int prev_percent = -1;
 
     while(1) {
         int sum_raw = 0;
@@ -164,6 +189,14 @@ void battery_task(void *pvParameters)
             ESP_LOGI(TAG, "=============================================");
             
             prev_avg = voltage_mv;
+
+            uint8_t percent = battery_percent_from_mv(battery_voltage_mv);
+            if (percent != prev_percent) {
+                prev_percent = percent;
+                headset_battery_evt_t ev = { .percent = percent, .millivolts = (uint16_t)battery_voltage_mv };
+                ESP_LOGI(TAG, "[BATERIA] Nivel: %u%%", percent);
+                headset_event_post(HEADSET_EVT_BATTERY, &ev, sizeof ev);
+            }
         }
 
         // Fazer o monitoramento a cada 15 segundos, conforme solicitado

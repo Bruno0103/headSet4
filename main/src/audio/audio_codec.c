@@ -22,7 +22,8 @@
 static const char *TAG = "audio_codec";
 
 /* ---- campos de registradores (nomes curtos, so para leitura) ---- */
-#define PWR1_VMID_2X50K   (1u << 7)   /* VMIDSEL = 01 */
+#define PWR1_VMID_2X50K   (1u << 7)   /* VMIDSEL = 01: playback/gravacao */
+#define PWR1_VMID_2X250K  (2u << 7)   /* VMIDSEL = 10: standby de baixissimo consumo (mantem o VMID carregado) */
 #define PWR1_VREF         (1u << 6)
 #define PWR1_AINL         (1u << 5)
 #define PWR1_AINR         (1u << 4)
@@ -83,6 +84,7 @@ static const rate_cfg_t RATES[] = {
 
 static uint8_t  s_pll_n;
 static uint32_t s_pll_k;
+static bool     s_powered;
 
 /* ---- presets de filtros ---- */
 const audio_filters_t AUDIO_FILTERS_MUSIC = {
@@ -100,6 +102,45 @@ const audio_filters_t AUDIO_FILTERS_CALL = {   /* ponto de partida: ajuste ouvin
 };
 
 #define W(reg, val)  ESP_RETURN_ON_ERROR(wm8960_write((reg), (val)), TAG, #reg)
+
+/* ------------------------------------------------------------------ */
+
+/* Liga os blocos de entrada/saida na ordem do init: referencias -> entradas/ADC -> mixers -> DAC/headphone.
+ * O DAC fica mudo (R5 nao e tocado aqui); quem toca tira o mudo depois do clock estabilizar. */
+static esp_err_t power_blocks_on(void)
+{
+    W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF | PWR1_AINL | PWR1_AINR | PWR1_ADCL | PWR1_ADCR);
+    W(WM8960_R_PWR3, PWR3_LMIC | PWR3_RMIC | PWR3_LOMIX | PWR3_ROMIX);
+    W(WM8960_R_PWR2, PWR2_DACL | PWR2_DACR | PWR2_LOUT1 | PWR2_ROUT1 | PWR2_OUT3);
+    return ESP_OK;
+}
+
+esp_err_t audio_codec_power_up(void)
+{
+    if (s_powered) return ESP_OK;
+    ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_DACCTL1, DACCTL1_DACMU, DACCTL1_DACMU), TAG, "mute");
+    ESP_RETURN_ON_ERROR(power_blocks_on(), TAG, "power up");
+    vTaskDelay(pdMS_TO_TICKS(10));            /* bias das entradas/saidas assenta (VMID ja esta carregado) */
+    s_powered = true;
+    ESP_LOGI(TAG, "codec ligado");
+    return ESP_OK;
+}
+
+/* Modo "standby" do datasheet (R25 VMIDSEL=10 + VREF): saidas, DAC, ADC, mixers e PLL desligados;
+ * so o VMID e mantido por 2x250k, entao o proximo power_up nao tem rampa nem estalo. */
+esp_err_t audio_codec_power_down(void)
+{
+    if (!s_powered) return ESP_OK;
+    ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_DACCTL1, DACCTL1_DACMU, DACCTL1_DACMU), TAG, "mute");
+    W(WM8960_R_PWR2, 0);                      /* DAC, LOUT1/ROUT1, OUT3 e PLL */
+    W(WM8960_R_PWR3, 0);                      /* microfones e mixers de saida */
+    W(WM8960_R_PWR1, PWR1_VMID_2X250K | PWR1_VREF);   /* entradas e ADC off */
+    s_pll_n = 0;                              /* o PLL caiu: set_sample_rate precisa reprogramar */
+    s_pll_k = 0;
+    s_powered = false;
+    ESP_LOGI(TAG, "codec desligado (standby)");
+    return ESP_OK;
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -204,11 +245,14 @@ esp_err_t audio_codec_init(void)
     /* DAC, headphone e OUT3 (PLL e ligado em set_sample_rate) */
     W(WM8960_R_DACCTL1, DACCTL1_DACMU);       /* comeca mudo; audio_io tira o mudo */
     W(WM8960_R_PWR2, PWR2_DACL | PWR2_DACR | PWR2_LOUT1 | PWR2_ROUT1 | PWR2_OUT3);
+    s_powered = true;
 
     ESP_RETURN_ON_ERROR(audio_codec_set_sample_rate(44100), TAG, "clock");
     ESP_RETURN_ON_ERROR(audio_codec_set_volume(CODEC_DEFAULT_VOLUME), TAG, "volume");
     ESP_RETURN_ON_ERROR(audio_codec_apply_filters(&AUDIO_FILTERS_MUSIC), TAG, "filtros");
 
-    ESP_LOGI(TAG, "WM8960 configurado (44.1 kHz, headphone + mic ambiente)");
+    /* Configurado; fica desligado ate o audio_io iniciar musica ou chamada */
+    ESP_RETURN_ON_ERROR(audio_codec_power_down(), TAG, "power down");
+    ESP_LOGI(TAG, "WM8960 configurado (44.1 kHz, headphone + mic ambiente); aguardando audio em standby");
     return ESP_OK;
 }

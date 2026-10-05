@@ -12,12 +12,21 @@
 
 #include "bt_app_core.h"
 
+#include "audio_codec.h"
 #include "audio_io.h"
 #include "bt_a2dp.h"
-#include "bt_avrcp.h"
+#include "bt_link_mgr.h"
 #include "headset_events.h"
 
 static const char *TAG = "bt_hfp";
+
+/* Extensao Apple (AT+XAPL / AT+IPHONEACCEV), aceita por iOS, Android e Windows para mostrar a bateria do acessorio.
+ * Formato: "<VID hex>-<PID hex>-<versao>" (14 caracteres); VID 303A = Espressif. */
+#define XAPL_INFO "303A-0001-0100"
+
+static volatile bool s_slc_up;
+static volatile bool s_xapl_sent;
+static volatile int  s_last_level = -1;   /* ultimo nivel 0..9 enviado nesta conexao */
 
 /* ---- dados de audio (contexto da pilha BT: nao bloquear) ---- */
 
@@ -47,6 +56,9 @@ static void hf_evt_hdl(uint16_t event, void *p)
         if (hf->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_SLC_CONNECTED ||
             hf->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_DISCONNECTED) {
             const bool up = hf->conn_stat.state == ESP_HF_CLIENT_CONNECTION_STATE_SLC_CONNECTED;
+            s_slc_up = up;
+            s_xapl_sent = false;
+            s_last_level = -1;
             headset_link_evt_t ev = { .profile = HEADSET_PROFILE_HFP };
             memcpy(ev.bda, hf->conn_stat.remote_bda, sizeof ev.bda);
             ESP_LOGI(TAG, "HFP %s", up ? "conectado (SLC)" : "desconectado");
@@ -79,9 +91,10 @@ static void hf_evt_hdl(uint16_t event, void *p)
         break;
 
     case ESP_HF_CLIENT_VOLUME_CONTROL_EVT:
-        if (hf->volume_control.type == ESP_HF_VOLUME_CONTROL_TARGET_SPK || hf->volume_control.type == ESP_HF_VOLUME_CONTROL_TARGET_MIC) {
+        /* Volume de chamada so vale para o alto-falante e NAO e gravado no slot (e do HFP, 0..15) */
+        if (hf->volume_control.type == ESP_HF_VOLUME_CONTROL_TARGET_SPK) {
             ESP_LOGI(TAG, "Volume de chamada do celular: %d/15", hf->volume_control.volume);
-            bt_avrcp_set_volume(hf->volume_control.volume * 127 / 15);
+            audio_codec_set_volume((uint8_t)(hf->volume_control.volume * 127 / 15));
         }
         break;
 
@@ -96,6 +109,7 @@ static void hf_evt_hdl(uint16_t event, void *p)
         break;
     case ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED:
         audio_io_stop_mode(AUDIO_IO_CALL);
+        audio_codec_set_volume(bt_link_mgr_get_volume()); /* devolve o volume da musica do slot */
         bt_a2dp_resume_audio(); /* volta a musica, se estava tocando */
         break;
         default:
@@ -122,6 +136,31 @@ void bt_hfp_disconnect(esp_bd_addr_t remote) { esp_hf_client_disconnect(remote);
 esp_err_t bt_hfp_answer_call(void) { return esp_hf_client_answer_call(); }
 esp_err_t bt_hfp_reject_call(void) { return esp_hf_client_reject_call(); }
 
+void bt_hfp_report_battery(uint8_t percent)
+{
+    if (!s_slc_up) {
+        return;
+    }
+    const int level = ((percent > 100 ? 100 : percent) * 9 + 50) / 100;   /* 0..9 */
+    if (level == s_last_level) {
+        return;
+    }
+    if (!s_xapl_sent) {
+        char info[] = XAPL_INFO;
+        if (esp_hf_client_send_xapl(info, ESP_HF_CLIENT_XAPL_FEAT_BATTERY_REPORT) != ESP_OK) {
+            ESP_LOGW(TAG, "XAPL recusado pela pilha");
+            return;
+        }
+        s_xapl_sent = true;
+    }
+    if (esp_hf_client_send_iphoneaccev((uint32_t)level, false) == ESP_OK) {
+        s_last_level = level;
+        ESP_LOGI(TAG, "Bateria informada ao celular: %u%% (nivel %d/9)", percent, level);
+    } else {
+        ESP_LOGW(TAG, "IPHONEACCEV recusado pela pilha");
+    }
+}
+
 esp_err_t bt_hfp_start(void)
 {
     ESP_RETURN_ON_ERROR(esp_hf_client_register_callback(hf_cb), TAG, "register cb");
@@ -137,5 +176,6 @@ void bt_hfp_connect(esp_bd_addr_t r) { (void)r; }
 void bt_hfp_disconnect(esp_bd_addr_t r) { (void)r; }
 esp_err_t bt_hfp_answer_call(void) { return ESP_OK; }
 esp_err_t bt_hfp_reject_call(void) { return ESP_OK; }
+void bt_hfp_report_battery(uint8_t p) { (void)p; }
 
 #endif

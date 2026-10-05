@@ -47,6 +47,7 @@ static esp_timer_handle_t s_connect_tmr, s_complete_tmr, s_pair_tmr, s_vol_tmr;
 static bool          s_worn = true;
 static volatile bool s_pairing;
 static int           s_attempts;
+static int           s_battery = -1;   /* ultimo nivel (0..100); -1 = ainda nao medido */
 
 /* Unico link Classic aceito (do slot selecionado) */
 static struct {
@@ -348,6 +349,9 @@ static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void 
         s_attempts = 0;
         esp_timer_stop(s_connect_tmr);
         ESP_LOGI(TAG, "Link ativo com " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_link.bda), s_link.profiles);
+        if ((ev->profile & HEADSET_PROFILE_HFP) && s_battery >= 0) {
+            bt_hfp_report_battery((uint8_t)s_battery);   /* celular recem-conectado ainda nao conhece o nivel */
+        }
         if (s_link.profiles != (HEADSET_PROFILE_A2DP | HEADSET_PROFILE_HFP) && !s_link.complete_tried) {
             esp_timer_stop(s_complete_tmr);
             esp_timer_start_once(s_complete_tmr, (uint64_t)COMPLETE_DELAY_MS * 1000);
@@ -371,6 +375,15 @@ static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void 
     case HEADSET_EVT_STREAMING: {
         const headset_streaming_evt_t *ev = data;
         bt_ble_set_streaming(ev->streaming);
+        break;
+    }
+
+    case HEADSET_EVT_BATTERY: {
+        const headset_battery_evt_t *ev = data;
+        s_battery = ev->percent;
+        if (s_link.profiles & HEADSET_PROFILE_HFP) {   /* so o celular do slot ativo recebe */
+            bt_hfp_report_battery(ev->percent);
+        }
         break;
     }
 
@@ -509,7 +522,7 @@ esp_err_t bt_link_mgr_start(void)
 
     static const headset_event_id_t ids[] = {
         HEADSET_EVT_WORN, HEADSET_EVT_REMOVED, HEADSET_EVT_BUTTON_SWITCH, HEADSET_EVT_BUTTON_PAIRING,
-        HEADSET_EVT_LINK_UP, HEADSET_EVT_LINK_DOWN, HEADSET_EVT_STREAMING,
+        HEADSET_EVT_LINK_UP, HEADSET_EVT_LINK_DOWN, HEADSET_EVT_STREAMING, HEADSET_EVT_BATTERY,
     };
     for (size_t i = 0; i < sizeof ids / sizeof ids[0]; i++) {
         ESP_RETURN_ON_ERROR(headset_event_register(ids[i], on_headset_event, NULL), TAG, "assinatura de evento");

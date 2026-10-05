@@ -47,6 +47,12 @@ esp_err_t audio_codec_init(void);
 /** Reprograma PLL/divisores. Suporta 44100, 48000, 32000, 16000 e 8000 Hz. */
 esp_err_t audio_codec_set_sample_rate(uint32_t hz);
 
+/** Liga DAC, headphone, ADC e mixers (DAC continua mudo). Idempotente. Chamar antes de set_sample_rate. */
+esp_err_t audio_codec_power_up(void);
+
+/** Desliga tudo exceto o VMID (standby do datasheet, ~10-30 uA). Idempotente. Perde o PLL: set_sample_rate reprograma. */
+esp_err_t audio_codec_power_down(void);
+
 /** Volume do headphone na escala do AVRCP: 0 = mudo, 127 = maximo (0 dB). */
 esp_err_t audio_codec_set_volume(uint8_t avrcp_volume);
 

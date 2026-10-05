@@ -149,13 +149,15 @@ static void audio_task(void *arg)
 
 /* ---------------- controle de modo ---------------- */
 
-static void stop_locked(void)
+/* power_down=false quando o chamador vai religar o audio em seguida (troca de modo) */
+static void stop_locked(bool power_down)
 {
     if (s_mode == AUDIO_IO_IDLE) return;
     audio_codec_mute(true);
     i2s_channel_disable(s_tx);
     if (s_mode == AUDIO_IO_CALL) i2s_channel_disable(s_rx);
     s_mode = AUDIO_IO_IDLE;
+    if (power_down) audio_codec_power_down();
 }
 
 esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
@@ -168,7 +170,8 @@ esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
         ret = ESP_ERR_INVALID_STATE;
         goto out;
     }
-    stop_locked();
+    stop_locked(false);
+    ESP_GOTO_ON_ERROR(audio_codec_power_up(), out, TAG, "codec power up");
     audio_codec_mute(true);
 
     ESP_GOTO_ON_ERROR(audio_codec_set_sample_rate(rate), out, TAG, "codec rate");
@@ -197,6 +200,7 @@ esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
     ESP_LOGI(TAG, "modo %s @ %lu Hz", mode == AUDIO_IO_CALL ? "CHAMADA" : "MUSICA", (unsigned long)rate);
 
 out:
+    if (ret != ESP_OK && s_mode == AUDIO_IO_IDLE) audio_codec_power_down();   /* falhou sem nada tocando */
     xSemaphoreGive(s_lock);
     s_reconfig_req = false;
     if (ret == ESP_OK) {
@@ -210,7 +214,7 @@ void audio_io_stop_mode(audio_io_mode_t mode)
 {
     s_reconfig_req = true;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (s_mode == mode) stop_locked();
+    if (s_mode == mode) stop_locked(true);
     xSemaphoreGive(s_lock);
     s_reconfig_req = false;
 }
