@@ -1,5 +1,6 @@
 #include "audio_io.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "driver/i2s_std.h"
@@ -35,6 +36,18 @@ static size_t              s_music_size;
 static bool                s_prebuffering;
 static int16_t             s_chunk[MUSIC_CHUNK / 2];
 static uint32_t            s_call_limit_bytes;
+static uint32_t            s_rate;
+
+#define SFX_IDLE_RATE   44100
+#define SFX_AMPLITUDE   9000.0f
+#define SFX_RAMP_MS     6              /* sobe/desce suave para nao estalar */
+
+static const audio_tone_t *s_tone_seq;
+static size_t              s_tone_len, s_tone_idx;
+static uint32_t            s_tone_pos;     /* amostras ja geradas na nota atual */
+static float               s_tone_phase;
+static volatile bool       s_tone_active;
+static bool                s_tone_owns;    /* o efeito ligou o audio sozinho: ele mesmo desliga ao terminar */
 
 /* APLL so em 44.1/48 kHz (precisao); taxas de voz usam o clock padrao */
 static i2s_std_clk_config_t clk_for(uint32_t rate)
@@ -66,13 +79,78 @@ static void trim_rb_reader_side(RingbufHandle_t rb)
     }
 }
 
+/* ---------------- efeitos sonoros (tons) ---------------- */
+
+static void tone_render(int16_t *dst, size_t frames)
+{
+    for (size_t i = 0; i < frames; i++) {
+        int16_t v = 0;
+        while (s_tone_idx < s_tone_len) {
+            const audio_tone_t *t = &s_tone_seq[s_tone_idx];
+            uint32_t total = (uint32_t)t->ms * s_rate / 1000;
+            if (s_tone_pos >= total) {
+                s_tone_idx++;
+                s_tone_pos = 0;
+                s_tone_phase = 0;
+                continue;
+            }
+            if (t->hz) {
+                uint32_t ramp = s_rate * SFX_RAMP_MS / 1000;
+                float env = 1.0f;
+                if (s_tone_pos < ramp)                env = (float)s_tone_pos / ramp;
+                else if (total - s_tone_pos < ramp)   env = (float)(total - s_tone_pos) / ramp;
+                v = (int16_t)(sinf(s_tone_phase) * env * SFX_AMPLITUDE);
+                s_tone_phase += 2.0f * (float)M_PI * t->hz / s_rate;
+                if (s_tone_phase > 2.0f * (float)M_PI) s_tone_phase -= 2.0f * (float)M_PI;
+            }
+            s_tone_pos++;
+            break;
+        }
+        dst[i] = v;
+    }
+}
+
+static inline int16_t sat16(int32_t x)
+{
+    return (int16_t)(x > 32767 ? 32767 : (x < -32768 ? -32768 : x));
+}
+
+/* Soma o efeito (mono) em um bloco estereo intercalado */
+static void tone_mix_stereo(int16_t *st, size_t frames)
+{
+    int16_t tone[MUSIC_CHUNK / 4];
+    while (frames) {
+        size_t n = frames < MUSIC_CHUNK / 4 ? frames : MUSIC_CHUNK / 4;
+        tone_render(tone, n);
+        for (size_t i = 0; i < n; i++) {
+            st[2 * i]     = sat16((int32_t)st[2 * i] + tone[i]);
+            st[2 * i + 1] = sat16((int32_t)st[2 * i + 1] + tone[i]);
+        }
+        st += 2 * n;
+        frames -= n;
+    }
+}
+
+/* Sem musica no buffer: o efeito toca sozinho */
+static void pump_tone_only(void)
+{
+    int16_t st[CALL_FRAMES * 2] = { 0 };
+    size_t w = 0;
+    tone_mix_stereo(st, CALL_FRAMES);
+    i2s_channel_write(s_tx, st, sizeof st, &w, 100);
+}
+
 /* ---------------- bombeamento (rodam dentro da task, com s_lock) ---------------- */
 
 static void pump_music(void)
 {
     if (s_prebuffering) {
         size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
-        if (fill < MUSIC_PREFILL) { vTaskDelay(pdMS_TO_TICKS(5)); return; }
+        if (fill < MUSIC_PREFILL) {
+            if (s_tone_active) { pump_tone_only(); return; }
+            vTaskDelay(pdMS_TO_TICKS(5));
+            return;
+        }
         s_prebuffering = false;
     }
 
@@ -86,6 +164,7 @@ static void pump_music(void)
         memcpy(s_chunk, p, n);
         vRingbufferReturnItem(s_music_rb, p);
         eq_process(s_chunk, n / 4);
+        if (s_tone_active) tone_mix_stereo(s_chunk, n / 4);
         uint8_t *d = (uint8_t *)s_chunk;
 
         /* Compensação de deriva de clock (drift) I2S vs Celular:
@@ -104,9 +183,10 @@ static void pump_music(void)
             }
         }
     } else {                                    /* underrun: toca silencio e reenche o colchao */
+        s_prebuffering = true;
+        if (s_tone_active) { pump_tone_only(); return; }
         static const int16_t silence[256];
         i2s_channel_write(s_tx, silence, sizeof silence, &w, 100);
-        s_prebuffering = true;
     }
 }
 
@@ -131,8 +211,11 @@ static void pump_call(void)
         for (size_t i = 0; i < n / 2; i++) out[2 * i] = out[2 * i + 1] = dl[i];
         vRingbufferReturnItem(s_dl_rb, dl);
     }
+    if (s_tone_active) tone_mix_stereo(out, frames);
     i2s_channel_write(s_tx, out, frames * 4, &wr, 100);
 }
+
+static void stop_locked(bool power_down);
 
 static void audio_task(void *arg)
 {
@@ -141,6 +224,10 @@ static void audio_task(void *arg)
         audio_io_mode_t m = s_mode;
         if (m == AUDIO_IO_MUSIC)     pump_music();
         else if (m == AUDIO_IO_CALL) pump_call();
+        if (s_tone_active && s_tone_idx >= s_tone_len) {   /* efeito terminou */
+            s_tone_active = false;
+            if (s_tone_owns) stop_locked(true);
+        }
         xSemaphoreGive(s_lock);
 
         if (m == AUDIO_IO_IDLE || s_reconfig_req) vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 2));
@@ -152,6 +239,8 @@ static void audio_task(void *arg)
 /* power_down=false quando o chamador vai religar o audio em seguida (troca de modo) */
 static void stop_locked(bool power_down)
 {
+    s_tone_active = false;
+    s_tone_owns = false;
     if (s_mode == AUDIO_IO_IDLE) return;
     audio_codec_mute(true);
     i2s_channel_disable(s_tx);
@@ -160,7 +249,7 @@ static void stop_locked(bool power_down)
     if (power_down) audio_codec_power_down();
 }
 
-esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
+static esp_err_t start_mode(audio_io_mode_t mode, uint32_t rate, bool by_tone)
 {
     esp_err_t ret = ESP_OK;
     s_reconfig_req = true;
@@ -197,6 +286,8 @@ esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
 
     s_prebuffering = (mode == AUDIO_IO_MUSIC);
     s_mode = mode;
+    s_rate = rate;
+    s_tone_owns = by_tone;
     ESP_LOGI(TAG, "modo %s @ %lu Hz", mode == AUDIO_IO_CALL ? "CHAMADA" : "MUSICA", (unsigned long)rate);
 
 out:
@@ -209,6 +300,34 @@ out:
     }
     return ret;
 }
+
+esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate)
+{
+    return start_mode(mode, rate, false);
+}
+
+esp_err_t audio_io_play_tones(const audio_tone_t *seq, size_t count)
+{
+    if (!seq || count == 0) return ESP_ERR_INVALID_ARG;
+    if (s_mode == AUDIO_IO_IDLE) {
+        ESP_RETURN_ON_ERROR(start_mode(AUDIO_IO_MUSIC, SFX_IDLE_RATE, true), TAG, "audio para efeito");
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    esp_err_t ret = ESP_ERR_INVALID_STATE;       /* o audio foi parado entre a partida e agora */
+    if (s_mode != AUDIO_IO_IDLE) {
+        s_tone_seq = seq;
+        s_tone_len = count;
+        s_tone_idx = 0;
+        s_tone_pos = 0;
+        s_tone_phase = 0;
+        s_tone_active = true;
+        ret = ESP_OK;
+    }
+    xSemaphoreGive(s_lock);
+    return ret;
+}
+
+bool audio_io_tones_busy(void) { return s_tone_active; }
 
 void audio_io_stop_mode(audio_io_mode_t mode)
 {

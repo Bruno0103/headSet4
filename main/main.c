@@ -1,4 +1,6 @@
 #include "esp_err.h"
+#include "esp_chip_info.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,6 +12,7 @@
 #include "board_button.h"
 #include "bt_core.h"
 #include "headset_events.h"
+#include "sfx.h"
 
 static const char *TAG = "main";
 
@@ -32,13 +35,37 @@ static esp_err_t nvs_init(void)
     return err;
 }
 
+static void log_memory(const char *when)
+{
+    ESP_LOGI(TAG, "[%s] heap interno livre=%u (min=%u, maior bloco=%u) | PSRAM livre=%u", when,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+}
+
+static void memory_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(30000));
+        log_memory("30s");
+    }
+}
+
 void app_main(void)
 {
+    esp_chip_info_t chip;
+    esp_chip_info(&chip);
+    ESP_LOGI(TAG, "Chip ESP32 rev v%d.%d", chip.revision / 100, chip.revision % 100);
     ESP_ERROR_CHECK(nvs_init());
     ESP_ERROR_CHECK(headset_events_init());
 
     /* Codec/I2S antes do Bluetooth: o stack ja pode entregar PCM assim que conectar */
     ESP_ERROR_CHECK(audio_init());
+    if (sfx_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao iniciar os efeitos sonoros");
+    }
 
     if (bt_core_init() != ESP_OK) {
         ESP_LOGE(TAG, "Falha ao iniciar o Bluetooth");
@@ -52,4 +79,7 @@ void app_main(void)
         ESP_LOGE(TAG, "Falha ao iniciar o APDS-9930");
     }
     xTaskCreate(battery_task, "battery_task", 4096, NULL, 4, NULL);
+
+    log_memory("boot");
+    xTaskCreate(memory_task, "mem_diag", 2048, NULL, 1, NULL);
 }

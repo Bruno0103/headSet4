@@ -52,3 +52,4 @@
 // Sensor de proximidade APDS-9930 (I2C compartilhado com o codec)
 // ============================================================================
 #define BOARD_APDS9930_I2C_ADDR    0x39
+#define BOARD_APDS9930_PWR_GPIO    19   /* alimenta o VDD do sensor (-1 = VDD sempre ligado); VL fica em 3,3 V fixo */

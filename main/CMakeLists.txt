@@ -17,6 +17,7 @@ idf_component_register(
          "src/audio/audio_codec.c"
          "src/audio/audio_io.c"
          "src/audio/eq.c"
+         "src/audio/sfx.c"
          "src/audio/voice_nr.c"
          "src/audio/wm8960.c"
          "src/sensor/apds9930.c"

@@ -15,6 +15,7 @@
 #include "bt_gap.h"
 #include "bt_hfp.h"
 #include "headset_events.h"
+#include "sfx.h"
 
 static const char *TAG = "bt_link";
 
@@ -296,6 +297,7 @@ static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void 
     switch (id) {
     case HEADSET_EVT_WORN:
         ESP_LOGI(TAG, "Fone colocado");
+        if (!s_worn) sfx_play(SFX_WORN);
         s_worn = true;
         s_attempts = 0;
         apply_state();
@@ -303,6 +305,7 @@ static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void 
 
     case HEADSET_EVT_REMOVED:
         ESP_LOGI(TAG, "Fone retirado");
+        if (s_worn) sfx_play(SFX_REMOVED);
         s_worn = false;
         apply_state();
         break;
@@ -344,6 +347,7 @@ static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void 
         if (!s_link.profiles) {
             memcpy(s_link.bda, ev->bda, ESP_BD_ADDR_LEN);
             s_link.complete_tried = false;
+            sfx_play(SFX_CONNECTED);
         }
         s_link.profiles |= ev->profile;
         s_attempts = 0;
@@ -366,6 +370,7 @@ static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void 
             ESP_LOGI(TAG, "Perfil 0x%X caiu (restam 0x%X)", ev->profile, s_link.profiles);
             if (!s_link.profiles) {
                 esp_timer_stop(s_complete_tmr);
+                sfx_play(SFX_DISCONNECTED);
                 apply_state();
             }
         }

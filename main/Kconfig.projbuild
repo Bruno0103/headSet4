@@ -6,12 +6,12 @@ menu "Headset"
 
     menu "Sensor de proximidade (APDS-9930)"
         config HEADSET_APDS_ON_THRESHOLD
-            int "Limiar de 'colocado' (leitura >= valor)"
+            int "Colocado: leitura >= (nivel sem nada perto + valor)"
             range 1 1023
             default 200
 
         config HEADSET_APDS_OFF_THRESHOLD
-            int "Limiar de 'retirado' (leitura <= valor; deve ser < limiar de colocado)"
+            int "Retirado: leitura <= (nivel sem nada perto + valor); deve ser < o de colocado"
             range 0 1022
             default 120
 
@@ -22,8 +22,20 @@ menu "Headset"
 
         config HEADSET_APDS_POLL_MS
             int "Periodo de leitura (ms)"
-            range 20 1000
+            range 20 5000
             default 100
+
+        config HEADSET_APDS_DUTY_CYCLE
+            bool "Desligar o sensor (PON=0) entre as leituras para economizar energia"
+            default y
+            help
+                A cada leitura o sensor e ligado, espera ~15 ms por uma medida valida e volta a dormir.
+                Aumente o periodo de leitura para economizar mais (o debounce continua em ms).
+
+        config HEADSET_APDS_LOG_PERIOD_MS
+            int "Periodo do log com a leitura bruta (ms; 0 = desligado) - util para ajustar os limiares"
+            range 0 60000
+            default 1000
     endmenu
 
     menu "Google Fast Pair"
