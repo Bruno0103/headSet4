@@ -11,6 +11,7 @@
 #include "battery.h"
 #include "board_button.h"
 #include "bt_core.h"
+#include "display.h"
 #include "headset_events.h"
 #include "sfx.h"
 
@@ -79,6 +80,12 @@ void app_main(void)
         ESP_LOGE(TAG, "Falha ao iniciar o APDS-9930");
     }
     xTaskCreate(battery_task, "battery_task", 4096, NULL, 4, NULL);
+
+    if (display_init() == ESP_OK) {
+        xTaskCreate(display_task, "lvgl_task", 6144, NULL, 3, NULL);
+    } else {
+        ESP_LOGE(TAG, "Falha ao iniciar o display/touch");
+    }
 
     log_memory("boot");
     xTaskCreate(memory_task, "mem_diag", 2048, NULL, 1, NULL);

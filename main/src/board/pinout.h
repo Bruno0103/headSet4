@@ -9,15 +9,18 @@
  */
 
 // ============================================================================
-// Display LCD (ST7735/SPI)
+// Display LCD ILI9341 240x320 (SPI) + touch resistivo XPT2046 (mesmo barramento)
 // ============================================================================
-// Utilizando os pinos padrão do VSPI do ESP32
-#define LCD_GPIO_SCLK      18   // SCK padrão (VSPI_SCK)
-#define LCD_GPIO_MOSI      23   // MOSI padrão (VSPI_MOSI)
+#define LCD_GPIO_SCLK      18   // T_CLK e SCK do LCD
+#define LCD_GPIO_MOSI      23   // T_DIN e SDI do LCD
+#define LCD_GPIO_MISO      39   // T_DO (entrada apenas; so o touch responde). SDO do LCD pode ficar desligado
 #define LCD_GPIO_DC         2
-#define LCD_GPIO_CS         5   // CS padrão (VSPI_SS)
+#define LCD_GPIO_CS         5
 #define LCD_GPIO_RST        4
 #define LCD_GPIO_BL        15
+
+#define TOUCH_GPIO_CS      33   // T_CS
+#define TOUCH_GPIO_IRQ     36   // T_IRQ (entrada apenas, ativo em nivel baixo); -1 = so polling
 
 // ============================================================================
 // I2C - Controle do Codec de Áudio (WM8960)

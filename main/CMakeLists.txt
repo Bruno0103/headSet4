@@ -22,17 +22,21 @@ idf_component_register(
          "src/audio/wm8960.c"
          "src/sensor/apds9930.c"
          "src/sensor/battery.c"
+         "src/display/display.c"
     INCLUDE_DIRS "."
                  "src/core"
                  "src/board"
                  "src/bt"
                  "src/audio"
                  "src/sensor"
+                 "src/display"
     PRIV_REQUIRES
         nvs_flash
         esp_driver_i2c
         esp_driver_i2s
         esp_driver_gpio
+        esp_driver_spi
+        esp_lcd
         esp_ringbuf
         esp_adc
         esp_event

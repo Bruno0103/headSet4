@@ -15,6 +15,7 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
-  #espressif/esp_lvgl_port: ^2.9.0
-  #waveshare/esp_lcd_st7735: ^2.0.0
-  #lvgl/lvgl: =9.5.0
+  lvgl/lvgl: =9.5.0
+  espressif/esp_lcd_ili9341: ^2.0.0
+  espressif/esp_lcd_touch: ">=1.0.4,<2.0.0"
+  atanisoft/esp_lcd_touch_xpt2046: ~1.0.6
