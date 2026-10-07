@@ -23,6 +23,8 @@ idf_component_register(
          "src/sensor/apds9930.c"
          "src/sensor/battery.c"
          "src/display/display.c"
+         "src/display/ui_bridge.c"
+         "src/bt/phone_app_bridge.c"
     INCLUDE_DIRS "."
                  "src/core"
                  "src/board"

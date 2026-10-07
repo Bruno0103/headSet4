@@ -134,6 +134,59 @@ static uint8_t battery_percent_from_mv(int mv)
     return 0;
 }
 
+
+/**
+ * @brief Função auxiliar para ordenar vetor de inteiros (Bubble Sort simples para N pequeno).
+ * 
+ * Necessário para calcular a mediana de um conjunto de valores.
+ * 
+ * @param array Ponteiro para o array a ser ordenado.
+ * @param n Quantidade de elementos no array.
+ */
+static void sort_samples(int *array, int n)
+{
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (array[j] > array[j + 1]) {
+                int temp = array[j];
+                array[j] = array[j + 1];
+                array[j + 1] = temp;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Calcula a mediana de um conjunto de leituras do ADC.
+ * 
+ * A mediana é muito mais robusta contra ruídos esporádicos, picos de consumo
+ * e flutuações pontuais de RF do que a média aritmética.
+ * 
+ * @param samples Array contendo as amostras brutas.
+ * @param count Quantidade de amostras (espera-se 10).
+ * @return int Valor mediano calculado.
+ */
+static int calculate_median(int *samples, int count)
+{
+    if (count <= 0) return 0;
+    
+    // Cria uma cópia local para não alterar o array original durante a ordenação
+    int sorted[count];
+    for (int i = 0; i < count; i++) {
+        sorted[i] = samples[i];
+    }
+
+    // Ordena as amostras em ordem crescente
+    sort_samples(sorted, count);
+
+    // Para número par de elementos (ex: 10), a mediana é a média entre os dois valores centrais
+    if (count % 2 == 0) {
+        return (sorted[(count / 2) - 1] + sorted[count / 2]) / 2;
+    } else {
+        return sorted[count / 2];
+    }
+}
+
 void battery_task(void *pvParameters)
 {
     // Inicializar os pinos e ADC
@@ -142,64 +195,70 @@ void battery_task(void *pvParameters)
     int prev_avg = -1;
     int prev_percent = -1;
 
+    #define BATTERY_MEDIAN_SAMPLES 10
+
     while(1) {
-        int sum_raw = 0;
+        int samples_raw[BATTERY_MEDIAN_SAMPLES];
         
-        // Coleta 5 leituras rápidas para fazer uma média
-        for(int i = 0; i < 5; i++) {
-            // Ligar o divisor de tensão colocando o GPIO14 em nível ALTO
+        // Coleta 10 leituras com intervalo de estabilização para calcular a mediana
+        for(int i = 0; i < BATTERY_MEDIAN_SAMPLES; i++) {
+            // Ligar o divisor de tensão colocando o GPIO14 em nível ALTO através do MOSFET
             gpio_set_level(BAT_CTRL_PIN, 1);
             
-            // Aguardar 10ms para garantir a estabilização da tensão antes de medir
+            // Aguardar 10ms para garantir a estabilização completa do circuito RC / divisor de tensão
             vTaskDelay(pdMS_TO_TICKS(10));
 
             int adc_raw = 0;
-            // Efetuar a leitura do valor bruto no ADC
+            // Efetuar a leitura do valor bruto no ADC1 canal 6
             ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, BAT_ADC_CHANNEL, &adc_raw));
 
-            // Imediatamente após a leitura, desligar o divisor colocando o GPIO14 em BAIXO
+            // Imediatamente após a medição, desligar o divisor colocando o pino em nível BAIXO para economizar carga
             gpio_set_level(BAT_CTRL_PIN, 0);
 
-            sum_raw += adc_raw;
-            vTaskDelay(pdMS_TO_TICKS(10)); // pequeno atraso entre leituras
+            samples_raw[i] = adc_raw;
+            vTaskDelay(pdMS_TO_TICKS(10)); // Pequeno atraso entre amostras subsequentes
         }
         
-        int avg_raw = sum_raw / 5;
+        // Calcula a mediana das 10 medidas brutas coletadas
+        int median_raw = calculate_median(samples_raw, BATTERY_MEDIAN_SAMPLES);
         int voltage_mv = 0;
         
-        // Converter o valor bruto (raw) médio para milivolts
+        // Converter o valor mediano bruto (raw) para milivolts utilizando a calibração do ESP32
         if (do_calibration) {
-            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, avg_raw, &voltage_mv));
+            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, median_raw, &voltage_mv));
         } else {
-            // Fallback básico caso a calibração do hardware falhe 
-            // 4095 é o max de 12bits, e 3300mV é aprox o fundo de escala com atenuação de 12dB
-            voltage_mv = (avg_raw * 3300) / 4095;
+            // Fallback básico caso a calibração de fábrica não esteja disponível:
+            // 4095 é o fundo de escala de 12 bits do ADC, e ~3300mV é o range com atenuação de 12dB
+            voltage_mv = (median_raw * 3300) / 4095;
         }
 
-        // Se for a primeira leitura, ou se a média lida agora for diferente da média anterior
+        // Se for a primeira leitura, ou se houver variação na tensão medida
         if (prev_avg == -1 || prev_avg != voltage_mv) {
-            // O divisor (200K / 100K) fornece 1/3 da tensão total da bateria no pino
-            // Multiplicamos por 3 para obter o valor real (3.7V a 4.2V típico)
+            // O divisor de tensão resistivo (200K / 100K) atenua a tensão da bateria em 1/3.
+            // Portanto, multiplicamos a tensão do pino por 3 para obter a tensão real da bateria.
             int battery_voltage_mv = voltage_mv * 3;
             float battery_voltage_v = battery_voltage_mv / 1000.0f;
 
             ESP_LOGI(TAG, "=============================================");
-            ESP_LOGI(TAG, "[BATERIA] MUDANCA DETECTADA NA MEDIA DE 5 LEITURAS");
+            ESP_LOGI(TAG, "[BATERIA] MEDIANA DE 10 LEITURAS CALCULADA");
             ESP_LOGI(TAG, "[BATERIA] Tensão no pino: %d mV | Tensão real da bateria: %.2f V", voltage_mv, battery_voltage_v);
             ESP_LOGI(TAG, "=============================================");
             
             prev_avg = voltage_mv;
 
+            // Converte a tensão real em porcentagem linearizada (0 a 100%)
             uint8_t percent = battery_percent_from_mv(battery_voltage_mv);
             if (percent != prev_percent) {
                 prev_percent = percent;
                 headset_battery_evt_t ev = { .percent = percent, .millivolts = (uint16_t)battery_voltage_mv };
-                ESP_LOGI(TAG, "[BATERIA] Nivel: %u%%", percent);
+                ESP_LOGI(TAG, "[BATERIA] Nivel real da bateria: %u%%", percent);
+                // Notifica todo o sistema (display, link manager, etc) com o percentual e tensão real
                 headset_event_post(HEADSET_EVT_BATTERY, &ev, sizeof ev);
             }
         }
 
-        // Fazer o monitoramento a cada 15 segundos, conforme solicitado
+        // Fazer o ciclo de monitoramento a cada 15 segundos
         vTaskDelay(pdMS_TO_TICKS(15000));
     }
 }
+

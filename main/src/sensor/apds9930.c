@@ -76,8 +76,24 @@ static esp_err_t apds_program(void)
     return write_reg(REG_ENABLE, ENABLE_PON | ENABLE_PEN);
 }
 
+/**
+ * @brief Calcula a mediana de um vetor de leituras de 16 bits não assinaladas.
+ * 
+ * Utiliza o algoritmo Insertion Sort (adequado e rápido para pequenas quantidades de amostras)
+ * para ordenar o vetor 'v'.
+ * - Para N ímpar: seleciona o valor central exato.
+ * - Para N par (ex: 10 amostras): calcula a média entre os dois valores centrais.
+ * 
+ * A mediana elimina ruídos pontuais de reflexão óptica, interferência de luz externa
+ * e variações espúrias durante a amostragem do sensor de proximidade.
+ * 
+ * @param v Vetor com os dados brutos lidos do sensor.
+ * @param n Quantidade de amostras (definido como 10 pelo MEDIAN_SAMPLES).
+ * @return uint16_t Valor mediano filtrado.
+ */
 static uint16_t median_u16(uint16_t *v, int n)
 {
+    // Algoritmo de ordenação por inserção para ordenar as amostras
     for (int i = 1; i < n; i++) {
         uint16_t k = v[i];
         int j = i - 1;
@@ -87,12 +103,23 @@ static uint16_t median_u16(uint16_t *v, int n)
         }
         v[j + 1] = k;
     }
+    // Se o número de elementos for ímpar pega o elemento central, se for par calcula a média dos dois elementos centrais
     return (n & 1) ? v[n / 2] : (uint16_t)(((int)v[n / 2 - 1] + v[n / 2]) / 2);
 }
 
-/* Acorda o sensor (registrador PON ou, se houver GPIO de energia, cortando o VDD), le MEDIAN_SAMPLES vezes e
- * devolve a mediana; depois o poe para dormir. Cada ciclo de proximidade leva ~5.5 ms, entao 2 ticks (>=10 ms)
- * entre leituras garantem amostras novas. */
+/**
+ * @brief Amostra a proximidade do sensor APDS-9930 utilizando a mediana de 10 medições.
+ * 
+ * Sequência de operação:
+ * 1. Energiza o sensor (ou ativa registradores PON/PEN).
+ * 2. Aguarda estabilização térmica e óptica inicial (15ms).
+ * 3. Coleta consecutivamente 10 leituras do registrador PDATA com pequeno intervalo entre elas.
+ * 4. Aplica o filtro de mediana sobre o conjunto de 10 amostras.
+ * 5. Coloca o sensor em modo de baixo consumo (sleep).
+ * 
+ * @param[out] out Ponteiro para armazenar a mediana calculada.
+ * @return esp_err_t ESP_OK em caso de sucesso ou código de erro I2C.
+ */
 static esp_err_t sample_proximity(uint16_t *out)
 {
     esp_err_t err = ESP_OK;
@@ -104,14 +131,20 @@ static esp_err_t sample_proximity(uint16_t *out)
     err = write_reg(REG_ENABLE, ENABLE_PON | ENABLE_PEN);
 #endif
     if (err == ESP_OK) {
+        // Buffer local contendo exatamente as 10 leituras para cálculo da mediana
         uint16_t s[MEDIAN_SAMPLES];
         vTaskDelay(pdMS_TO_TICKS(15));
+        
+        // Laço para colher as 10 amostras consecutivas
         for (int i = 0; i < MEDIAN_SAMPLES && err == ESP_OK; i++) {
             err = read_proximity(&s[i]);
             if (i < MEDIAN_SAMPLES - 1) {
-                vTaskDelay(2);
+                // Intervalo mínimo entre ciclos internos do conversor óptico
+                vTaskDelay(pdMS_TO_TICKS(6));
             }
         }
+        
+        // Se todas as 10 leituras foram efetuadas com sucesso, obtém a mediana
         if (err == ESP_OK) {
             *out = median_u16(s, MEDIAN_SAMPLES);
         }
@@ -123,6 +156,7 @@ static esp_err_t sample_proximity(uint16_t *out)
 #endif
     return err;
 }
+
 
 static void publish(bool worn)
 {
