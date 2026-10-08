@@ -7,7 +7,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "nvs.h"
+#include "settings.h"
 
 #include "bt_a2dp.h"
 #include "bt_ble.h"
@@ -18,10 +18,6 @@
 #include "sfx.h"
 
 static const char *TAG = "bt_link";
-
-#define NVS_NS              "lnkmgr"
-#define NVS_KEY_SLOTS       "slots"
-#define NVS_KEY_SEL         "sel"
 
 #define PAIRING_WINDOW_MS   120000
 #define COMPLETE_DELAY_MS   2500      /* espera o celular abrir o 2o perfil antes de conectarmos */
@@ -64,48 +60,36 @@ static struct {
 
 static void nvs_load(void)
 {
-    nvs_handle_t h;
     memset(s_slot, 0, sizeof s_slot);
     for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
         s_slot[i].volume = DEFAULT_VOLUME;
     }
     s_sel = 0;
 
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) {
-        ESP_LOGI(TAG, "Sem slots salvos (primeiro boot)");
-        return;
-    }
-    size_t len = sizeof s_slot;
+    /* Leitura delegada ao actor settings (dono único do NVS) */
     slot_nv_t tmp[BT_LINK_NUM_SLOTS];
-    if (nvs_get_blob(h, NVS_KEY_SLOTS, tmp, &len) == ESP_OK && len == sizeof tmp) {
-        memcpy(s_slot, tmp, sizeof s_slot);
+    if (settings_get_blob(SETTINGS_KEY_BT_SLOTS, tmp, sizeof(tmp)) == ESP_OK) {
+        memcpy(s_slot, tmp, sizeof(s_slot));
+    } else {
+        ESP_LOGI(TAG, "Sem slots salvos no actor settings (primeiro boot)");
     }
+
     uint8_t sel = 0;
-    if (nvs_get_u8(h, NVS_KEY_SEL, &sel) == ESP_OK && sel < BT_LINK_NUM_SLOTS) {
+    if (settings_get_u8(SETTINGS_KEY_BT_SEL_SLOT, &sel, 0) == ESP_OK && sel < BT_LINK_NUM_SLOTS) {
         s_sel = sel;
     }
-    nvs_close(h);
 }
 
 static void nvs_save(void)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "nvs_open: %s", esp_err_to_name(err));
-        return;
-    }
-    err = nvs_set_blob(h, NVS_KEY_SLOTS, s_slot, sizeof s_slot);
+    /* Gravação delegada ao actor settings com debounce automático */
+    esp_err_t err = settings_set_blob(SETTINGS_KEY_BT_SLOTS, s_slot, sizeof(s_slot));
     if (err == ESP_OK) {
-        err = nvs_set_u8(h, NVS_KEY_SEL, (uint8_t)s_sel);
-    }
-    if (err == ESP_OK) {
-        err = nvs_commit(h);
+        err = settings_set_u8(SETTINGS_KEY_BT_SEL_SLOT, (uint8_t)s_sel);
     }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Falha ao gravar slots no NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Falha ao solicitar gravacao de slots ao actor settings: %s", esp_err_to_name(err));
     }
-    nvs_close(h);
 }
 
 /* ---------------- helpers ---------------- */

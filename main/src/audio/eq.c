@@ -8,12 +8,10 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "nvs.h"
+#include "settings.h"
 
 static const char *TAG = "eq";
 
-#define NVS_NS         "eq"
-#define NVS_KEY        "state"
 #define SAVE_DELAY_MS  3000      /* NVS so depois que o usuario parar de mexer (nao competir com o streaming) */
 
 typedef enum { BAND_LOWSHELF, BAND_PEAK, BAND_HIGHSHELF } band_type_t;
@@ -120,15 +118,10 @@ static void save_cb(void *arg)
     snap = s_cfg;
     xSemaphoreGive(s_mtx);
 
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err == ESP_OK) {
-        err = nvs_set_blob(h, NVS_KEY, &snap, sizeof snap);
-        if (err == ESP_OK) err = nvs_commit(h);
-        nvs_close(h);
-    }
+    /* Gravação delegada ao actor settings (dono único do NVS) */
+    esp_err_t err = settings_set_blob(SETTINGS_KEY_EQ_PRESET, &snap, sizeof(snap));
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Falha ao gravar o EQ no NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Falha ao solicitar gravacao de EQ para o actor settings: %s", esp_err_to_name(err));
     }
 }
 
@@ -140,19 +133,17 @@ esp_err_t eq_init(void)
     ESP_RETURN_ON_ERROR(esp_timer_create(&ta, &s_save_tmr), TAG, "timer");
 
     memset(&s_cfg, 0, sizeof s_cfg);
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        nv_t tmp;
-        size_t len = sizeof tmp;
-        if (nvs_get_blob(h, NVS_KEY, &tmp, &len) == ESP_OK && len == sizeof tmp && tmp.preset < EQ_PRESET_COUNT) {
-            bool ok = true;
-            for (int i = 0; i < EQ_NUM_BANDS; i++) {
-                if (tmp.gains[i] < -EQ_GAIN_MAX || tmp.gains[i] > EQ_GAIN_MAX) ok = false;
-            }
-            if (ok) s_cfg = tmp;
+
+    /* Leitura delegada ao actor settings (dono único do NVS) */
+    nv_t tmp;
+    if (settings_get_blob(SETTINGS_KEY_EQ_PRESET, &tmp, sizeof(tmp)) == ESP_OK && tmp.preset < EQ_PRESET_COUNT) {
+        bool ok = true;
+        for (int i = 0; i < EQ_NUM_BANDS; i++) {
+            if (tmp.gains[i] < -EQ_GAIN_MAX || tmp.gains[i] > EQ_GAIN_MAX) ok = false;
         }
-        nvs_close(h);
+        if (ok) s_cfg = tmp;
     }
+
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     rebuild_locked();
     xSemaphoreGive(s_mtx);
