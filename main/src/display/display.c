@@ -65,25 +65,32 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
       data->point.y = pt_data.y;
       data->state = LV_INDEV_STATE_PRESSED;
 
-      /* Log serial rate-limited (a cada 100 ms enquanto pressionado) para depuração */
+#if CONFIG_HEADSET_TOUCH_DIAG
+      /*
+       * Log serial rate-limited (throttling de no máximo 1 mensagem a cada 1000 ms / 1 segundo)
+       * para depuração sem sobrecarregar a CPU ou inundar a saída serial durante o toque contínuo.
+       */
       static uint32_t last_log_time = 0;
       uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-      if (now - last_log_time > 100) {
+      if (now - last_log_time >= 1000) {
         last_log_time = now;
         ESP_LOGI(TAG, ">>> TOUCH ATIVO: X=%d, Y=%d (força Z=%d) <<<", pt_data.x, pt_data.y, pt_data.strength);
       }
+#endif
       return;
     }
   }
 
+#if CONFIG_HEADSET_TOUCH_DIAG
   /*
    * Diagnóstico periódico de hardware:
    * Testa leitura direta dos registradores brutos do XPT2046 para saber se o pino MISO
    * está respondendo ou se o barramento SPI está recebendo apenas 0x0000 ou 0xFFFF.
+   * Rate-limited para no máximo 1 mensagem a cada 2000 ms (2 segundos).
    */
   static uint32_t last_diag_time = 0;
   uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-  if (now - last_diag_time > 2000) {
+  if (now - last_diag_time >= 2000) {
     last_diag_time = now;
     uint8_t raw_z1[2] = {0}, raw_z2[2] = {0}, raw_x[2] = {0};
     esp_err_t r1 = esp_lcd_panel_io_rx_param(s_touch->io, 0xB0 | 0x01, raw_z1, 2);
@@ -96,6 +103,7 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
     ESP_LOGI(TAG, "[DIAG TOUCH] SPI status: r=(%d,%d,%d) | Z1=0x%04X Z2=0x%04X X=0x%04X | calc_z=%u",
              r1, r2, r3, val_z1, val_z2, val_x, calc_z);
   }
+#endif
 
   /* Caso não haja toque detectado ou o comando retorne liberado */
   data->state = LV_INDEV_STATE_RELEASED;

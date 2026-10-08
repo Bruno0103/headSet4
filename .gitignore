@@ -76,3 +76,13 @@ Desktop.ini
 *.workspace # General workspace files, can be from various tools
 *.suo       # Visual Studio Solution User Options
 *.sln.docstates # Visual Studio
+
+# ==============================================================================
+# Agentes de IA e Automação (Antigravity / Assistentes)
+# ==============================================================================
+# Diretório de skills e definições dos agentes locais
+.agents/
+agents/
+
+# Documentação e guias de suporte aos agentes
+docs/AGENT_CHEATSHEET.md

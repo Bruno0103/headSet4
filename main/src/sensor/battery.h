@@ -6,28 +6,32 @@
 #ifndef BATTERY_H
 #define BATTERY_H
 
-/**
- * @brief Inicializa os pinos e o ADC para a leitura da bateria.
- * 
- * Configura o GPIO14 como saída para controle do MOSFET e o
- * GPIO34 como entrada analógica (ADC1) para a leitura da tensão.
- */
-void battery_init(void);
+#include "esp_err.h"
 
 /**
- * @brief Lê a tensão da bateria, converte para Volts reais e exibe no terminal.
+ * @brief Inicializa os pinos de controle e o periférico ADC1 para medição da bateria.
  * 
- * Liga o MOSFET através do GPIO14, realiza a leitura analógica no GPIO34,
- * multiplica o valor obtido por 3 (devido ao divisor de tensão 200K/100K) e 
- * exibe o resultado no terminal. Após a leitura, desliga o MOSFET.
+ * Configura o pino BAT_CTRL_PIN (GPIO14) como saída para controle do MOSFET do divisor de tensão,
+ * e inicializa a unidade ADC1 (canal 6 / GPIO34) com calibração de fábrica por line fitting.
+ * 
+ * Esta função deve ser chamada na inicialização do sistema (antes de instanciar battery_task).
+ * Não utiliza ESP_ERROR_CHECK internamente, retornando os códigos de erro apropriados.
+ * 
+ * @return esp_err_t ESP_OK em caso de sucesso na inicialização do hardware,
+ *                   ou código de erro retornado pelos drivers de GPIO ou ADC.
  */
-void battery_read_and_print(void);
+esp_err_t battery_init(void);
 
 /**
- * @brief Tarefa FreeRTOS para monitorar a bateria periodicamente.
+ * @brief Tarefa FreeRTOS para monitorar a bateria periodicamente com resiliência.
  * 
- * @param pvParameters Parâmetros da tarefa (não utilizado).
+ * Executa a amostragem com filtro de mediana, conversão de tensão, cálculo de percentual
+ * e publicação de eventos HEADSET_EVT_BATTERY. Caso ocorram erros transitórios no ADC,
+ * aplica retentativas com backoff exponencial sem causar panic ou crash no sistema.
+ * 
+ * @param pvParameters Parâmetros da tarefa FreeRTOS (não utilizado).
  */
 void battery_task(void *pvParameters);
 
 #endif // BATTERY_H
+

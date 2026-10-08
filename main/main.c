@@ -17,23 +17,65 @@
 
 static const char *TAG = "main";
 
+/**
+ * @brief Inicializa a partição de armazenamento não-volátil (NVS).
+ * 
+ * Em conformidade com o WP 0.1 da arquitetura (Agente A2 - Settings/NVS):
+ * - O NVS NÃO deve ser apagado incondicionalmente a cada boot, permitindo a persistência
+ *   de slots Bluetooth, calibrações, equalizador (EQ) e volumes.
+ * - Caso a partição esteja sem páginas livres (ESP_ERR_NVS_NO_FREE_PAGES) ou ocorra
+ *   mudança de versão incompatível (ESP_ERR_NVS_NEW_VERSION_FOUND), a partição é
+ *   apagada e reinicializada de forma recuperativa.
+ * - Suporta a opção de Factory Reset via Kconfig (CONFIG_HEADSET_FACTORY_RESET_ON_BOOT)
+ *   para testes manuais controlados.
+ * 
+ * @return esp_err_t ESP_OK em caso de sucesso, ou código de erro do ESP-IDF.
+ */
 static esp_err_t nvs_init(void)
 {
+#if CONFIG_HEADSET_FACTORY_RESET_ON_BOOT
     /* 
-     * Apaga a partição NVS inteira sempre que o ESP32 é reiniciado.
-     * Isso garante que nenhum dado anterior (como pareamentos Bluetooth) permaneça armazenado.
+     * Factory Reset forçado via Kconfig (CONFIG_HEADSET_FACTORY_RESET_ON_BOOT):
+     * Útil para testes limpos quando solicitado explicitamente pelo desenvolvedor.
      */
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    
-    // Inicializa a partição NVS padrão
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        // Se houver algum problema de versão ou falta de espaço, tenta apagar novamente
-        ESP_LOGW(TAG, "NVS corrompida/versao nova; apagando e recriando");
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        err = nvs_flash_init();
+    ESP_LOGW(TAG, "CONFIG_HEADSET_FACTORY_RESET_ON_BOOT ativado: executando nvs_flash_erase()");
+    esp_err_t erase_err = nvs_flash_erase();
+    if (erase_err != ESP_OK) {
+        ESP_LOGE(TAG, "Falha ao apagar NVS durante Factory Reset: %s", esp_err_to_name(erase_err));
+        return erase_err;
     }
-    return err;
+#endif
+
+    // Tenta inicializar a partição padrão NVS
+    esp_err_t err = nvs_flash_init();
+
+    // Se não houver páginas livres ou a estrutura da partição for de nova versão incompatível, apaga e recria
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "Partição NVS sem páginas livres ou versão incompatível (%s). Apagando e recriando...",
+                 esp_err_to_name(err));
+        
+        err = nvs_flash_erase();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Falha ao apagar a partição NVS corrompida: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        // Reinicializa o NVS após apagar
+        err = nvs_flash_init();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Falha ao reinicializar a partição NVS após formatação: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        ESP_LOGI(TAG, "Partição NVS recuperada e reinicializada com sucesso.");
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Falha inesperada ao inicializar NVS: %s", esp_err_to_name(err));
+        return err;
+    } else {
+        ESP_LOGI(TAG, "Partição NVS inicializada com sucesso (dados persistidos preservados).");
+    }
+
+    return ESP_OK;
 }
 
 static void log_memory(const char *when)
@@ -79,7 +121,14 @@ void app_main(void)
     if (apds9930_start() != ESP_OK) {
         ESP_LOGE(TAG, "Falha ao iniciar o APDS-9930");
     }
+
+    /* Inicializa o módulo de bateria (hardware, GPIO do MOSFET e ADC1) antes de criar a task */
+    if (battery_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Falha na inicialização do hardware de bateria; task tentará recuperação resiliente");
+    }
     xTaskCreate(battery_task, "battery_task", 4096, NULL, 4, NULL);
+
+
 
     /* 
      * Inicializacao do Display e Interface Grafica (LVGL 9 + FreeRTOS):

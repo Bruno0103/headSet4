@@ -18,7 +18,6 @@
  * Livres/reserva: GPIO2, GPIO12 (nao recomendado), GPIO16, GPIO17 (PSRAM - nao
  * usar)
  */
-#pragma once
 
 // ============================================================================
 // SPI (VSPI) compartilhado: Display LCD ILI9341 240x320 + touch XPT2046
@@ -77,5 +76,4 @@
 // Sensor de proximidade APDS-9930 (I2C compartilhado com o codec)
 // ============================================================================
 #define BOARD_APDS9930_I2C_ADDR 0x39
-#define BOARD_APDS9930_PWR_GPIO                                                \
-  15 /* alimenta VDD do sensor; VL fixo em 3,3 V */
+#define BOARD_APDS9930_PWR_GPIO 15 /* alimenta o sensor; VL fixo em 3,3V */

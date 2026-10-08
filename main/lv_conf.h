@@ -34,8 +34,23 @@
  *  - LV_STDLIB_RTTHREAD
  *  - LV_STDLIB_CUSTOM: Custom (implemented externally)
  */
-/* No ESP32 com 4MB de PSRAM, usar CLIB permite que fontes grandes com UTF8 e buffers aloquem na PSRAM livremente */
-#define LV_USE_STDLIB_MALLOC LV_STDLIB_CLIB
+/*
+ * Arquitetura Headset4 (WP 0.4):
+ * No ESP32-WROVER com CONFIG_SPIRAM_USE_CAPS_ALLOC=y, a libc padrão malloc() aloca
+ * estritamente no heap INTERNO (DRAM). Dizer que "usar CLIB aloca na PSRAM livremente"
+ * era um comentário ENGANOSO e prejudicial: LVGL consumia a RAM interna que o Bluetooth
+ * (Bluedroid/BTDM), queues e DMA precisam desesperadamente.
+ *
+ * Estratégia de Alocação de Memória:
+ * - O alocador nativo TLSF do LVGL (LV_STDLIB_BUILTIN) gerencia as alocações internas da GUI
+ *   (objetos, widgets, fontes UTF-8 e estilos).
+ * - O pool do LVGL (1 MB de memória) é alocado explicitamente na PSRAM externa (SPIRAM)
+ *   no boot via LV_MEM_POOL_ALLOC -> heap_caps_malloc(..., MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT).
+ * - Isso poupa ~1 MB de RAM interna crítica para a pilha Bluetooth e sistema FreeRTOS!
+ * - Os draw buffers da tela (em display_init em display.c) continuam alocados com
+ *   MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL, pois o controlador SPI DMA exige memória interna.
+ */
+#define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
 
 /** String functions source
  *  Possible values:
@@ -56,13 +71,17 @@
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_CLIB
 
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
-/** Size of the pool `lv_malloc()` allocates from. Needs to be at least 2kB (2048). */
-#define LV_MEM_SIZE 262144
+/** Tamanho do pool do LVGL alocado na PSRAM (1 MB = 1048576 bytes). Folga total para telas complexas e fontes */
+#define LV_MEM_SIZE (1024 * 1024U)
 
-/** Place the pool at a fixed address instead of allocating it as a normal array.
- *  0: unused.
- */
+/** 0: aloca via allocator dinâmico customizado */
 #define LV_MEM_ADR 0x0
+
+/** Include necessário para o heap_caps_malloc do ESP-IDF */
+#define LV_MEM_POOL_INCLUDE "esp_heap_caps.h"
+
+/** Macro para alocar o pool na PSRAM externa */
+#define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
 
 #endif /*LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN*/
 
@@ -2536,7 +2555,7 @@
  *============================================================================*/
 
 /** Build examples */
-#define LV_BUILD_EXAMPLES 1
+#define LV_BUILD_EXAMPLES 0
 
 
 
@@ -2545,7 +2564,7 @@
  *============================================================================*/
 
 /** Build demos */
-#define LV_BUILD_DEMOS 1
+#define LV_BUILD_DEMOS 0
 
 #if LV_BUILD_DEMOS
 /** Benchmark demo

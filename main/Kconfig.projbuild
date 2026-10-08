@@ -4,6 +4,15 @@ menu "Headset"
         string "Nome Bluetooth do headset"
         default "HeadSet4"
 
+    config HEADSET_FACTORY_RESET_ON_BOOT
+        bool "Apagar particao NVS a cada boot (Factory Reset)"
+        default n
+        help
+            Se ativado, apaga toda a particao NVS (nvs_flash_erase) a cada inicializacao.
+            CUIDADO: Isso apagara todos os dados persistidos, como pareamentos Bluetooth,
+            configuracoes de equalizador (EQ), volumes e chaves salvas.
+            Mantenha desativado (n) em operacao normal para preservar os estados.
+
     menu "Sensor de proximidade (APDS-9930)"
         config HEADSET_APDS_ON_THRESHOLD
             int "Colocado: leitura >= (nivel sem nada perto + valor)"
@@ -53,6 +62,17 @@ menu "Headset"
                 Segredo do produto. Fica no sdkconfig local (ignorado pelo git): NAO
                 versione este valor. Para producao, mova-o para uma particao NVS
                 criptografada / eFuse.
+    endmenu
+
+    menu "Display e Touch Screen"
+        config HEADSET_TOUCH_DIAG
+            bool "Habilitar logs de diagnostico do touch screen (XPT2046)"
+            default n
+            help
+                Ativa o envio de logs periodicos de diagnostico e eventos de toque
+                do sensor resistivo XPT2046 via console serial.
+                Quando desabilitado, suprime a impressao continua de diagnostico
+                para poupar CPU e evitar poluicao do log serial.
     endmenu
 
 endmenu

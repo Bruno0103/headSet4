@@ -41,7 +41,13 @@ CONFIG_BT_HFP_CLIENT_ENABLE=y
 CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI=y
 CONFIG_BT_HFP_WBS_ENABLE=y
 
-# --- PSRAM (WROVER): so por heap_caps explicito (buffer de musica); malloc() continua na RAM interna ---
+# --- PSRAM (ESP32-WROVER): Alocacao seletiva via heap_caps ---
+# Em CONFIG_SPIRAM_USE_CAPS_ALLOC=y, o malloc() padrao da libc aloca EXCLUSIVAMENTE
+# no heap INTERNO (DRAM). Isso garante que estruturas sensiveis a latencia e restricoes
+# de hardware (DMA do display, queues, pilhas FreeRTOS) tenham espaco interno garantido.
+# Para evitar esgotamento de DRAM pelo LVGL, o alocador do LVGL (LV_STDLIB_CUSTOM em lv_conf.h)
+# foi configurado para direcionar explicitamente fontes, objetos e estilos para a PSRAM
+# via heap_caps_malloc(MALLOC_CAP_SPIRAM).
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_QUAD=y
 CONFIG_SPIRAM_SPEED_40M=y
@@ -72,8 +78,12 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # Deteccao de estouro de pilha via Canary bytes
 CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
 
-# --- LVGL: Usar arquivo customizado lv_conf.h ---
+# --- LVGL 9: Configuracao de Memoria e Otimizacao de Build (WP 0.4) ---
+# Usa arquivo customizado main/lv_conf.h
 # CONFIG_LV_CONF_SKIP is not set
+# Desativa compilacao de exemplos e demos na raiz do Kconfig para economizar Flash e RAM
+CONFIG_LV_BUILD_EXAMPLES=n
+CONFIG_LV_BUILD_DEMOS=n
 
 # --- Suporte a UTF-8 e Internacionalização ---
 CONFIG_FATFS_API_ENCODING_UTF_8=y
