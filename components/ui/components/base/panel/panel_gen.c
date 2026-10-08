@@ -50,8 +50,8 @@ lv_obj_t * panel_create(lv_obj_t * parent)
 
     lv_obj_t * the_root = NULL;
 
-    #if ui_CHECK_COMPILE_TARGET(ui_TARGET_ALL)
-    if (ui_check_target(ui_TARGET_ALL)) {
+    #if UI_CHECK_COMPILE_TARGET(UI_TARGET_ALL)
+    if (ui_check_target(UI_TARGET_ALL)) {
         lv_obj_t * container_0 = container_create(parent);
         lv_obj_set_name_static(container_0, "panel_#");
 

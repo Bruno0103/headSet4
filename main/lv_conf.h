@@ -34,7 +34,8 @@
  *  - LV_STDLIB_RTTHREAD
  *  - LV_STDLIB_CUSTOM: Custom (implemented externally)
  */
-#define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
+/* No ESP32 com 4MB de PSRAM, usar CLIB permite que fontes grandes com UTF8 e buffers aloquem na PSRAM livremente */
+#define LV_USE_STDLIB_MALLOC LV_STDLIB_CLIB
 
 /** String functions source
  *  Possible values:
@@ -43,7 +44,7 @@
  *  - LV_STDLIB_RTTHREAD: RT-Thread (rt_memcpy/rt_memset/rt_strlen/rt_strcpy)
  *  - LV_STDLIB_CUSTOM: Custom (implemented externally)
  */
-#define LV_USE_STDLIB_STRING LV_STDLIB_BUILTIN
+#define LV_USE_STDLIB_STRING LV_STDLIB_CLIB
 
 /** Sprintf functions source
  *  Possible values:
@@ -52,11 +53,11 @@
  *  - LV_STDLIB_RTTHREAD: RT-Thread (rt_vsnprintf)
  *  - LV_STDLIB_CUSTOM: Custom (implemented externally)
  */
-#define LV_USE_STDLIB_SPRINTF LV_STDLIB_BUILTIN
+#define LV_USE_STDLIB_SPRINTF LV_STDLIB_CLIB
 
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
 /** Size of the pool `lv_malloc()` allocates from. Needs to be at least 2kB (2048). */
-#define LV_MEM_SIZE 65536
+#define LV_MEM_SIZE 262144
 
 /** Place the pool at a fixed address instead of allocating it as a normal array.
  *  0: unused.
@@ -668,6 +669,7 @@
 
 
 
+
 /*============================================================================
  * INPUT DEVICES
  *============================================================================*/
@@ -1007,25 +1009,25 @@
 #define LV_FONT_MONTSERRAT_10 0
 
 /** Montserrat 12 */
-#define LV_FONT_MONTSERRAT_12 0
+#define LV_FONT_MONTSERRAT_12 1
 
 /** Montserrat 14 */
 #define LV_FONT_MONTSERRAT_14 1
 
 /** Montserrat 16 */
-#define LV_FONT_MONTSERRAT_16 0
+#define LV_FONT_MONTSERRAT_16 1
 
 /** Montserrat 18 */
 #define LV_FONT_MONTSERRAT_18 0
 
 /** Montserrat 20 */
-#define LV_FONT_MONTSERRAT_20 0
+#define LV_FONT_MONTSERRAT_20 1
 
 /** Montserrat 22 */
 #define LV_FONT_MONTSERRAT_22 0
 
 /** Montserrat 24 */
-#define LV_FONT_MONTSERRAT_24 0
+#define LV_FONT_MONTSERRAT_24 1
 
 /** Montserrat 26 */
 #define LV_FONT_MONTSERRAT_26 0

@@ -75,4 +75,12 @@ CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
 # --- LVGL: Usar arquivo customizado lv_conf.h ---
 # CONFIG_LV_CONF_SKIP is not set
 
+# --- Suporte a UTF-8 e Internacionalização ---
+CONFIG_FATFS_API_ENCODING_UTF_8=y
+CONFIG_FATFS_CODEPAGE_DYNAMIC=y
 
+# --- Touch Screen XPT2046 ---
+# Reduz o limiar de pressão Z (padrão é 400) para detectar toques resistivos leves
+CONFIG_XPT2046_Z_THRESHOLD=50
+CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=y
+CONFIG_XPT2046_INTERRUPT_MODE=n

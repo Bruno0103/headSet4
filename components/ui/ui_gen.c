@@ -29,7 +29,7 @@ static void check_font(lv_font_t ** font, const char * name);
  *  STATIC VARIABLES
  **********************/
 
-static uint32_t ui_target = ui_TARGET_ALL;
+static uint32_t ui_target = UI_TARGET_ALL;
 
 /*----------------
  * Translations
@@ -57,29 +57,17 @@ static uint32_t ui_target = ui_TARGET_ALL;
  * Fonts
  *----------------*/
 
-lv_font_t * font_inter_bold_7;
-lv_font_t * font_inter_bold_6_5;
-lv_font_t * font_inter_extra_bold_11_5;
-lv_font_t * font_inter_regular_8;
-lv_font_t * font_inter_bold_8_5;
+lv_font_t * font_montserrat_regular_12;
+lv_font_t * font_montserrat_regular_16;
+lv_font_t * font_montserrat_regular_14;
+lv_font_t * font_montserrat_regular_20;
+lv_font_t * font_montserrat_regular_24;
 
 /*----------------
  * Images
  *----------------*/
 
-/* Targets: any */
-const void * image_linkedin_image_7_1 = NULL;
-extern const void * image_linkedin_image_7_1_data;
-const void * image_headphones_1109 = NULL;
-extern const void * image_headphones_1109_data;
-const void * image_cpu_1111 = NULL;
-extern const void * image_cpu_1111_data;
-const void * image_bluetooth_1115 = NULL;
-extern const void * image_bluetooth_1115_data;
-const void * image_battery_1105 = NULL;
-extern const void * image_battery_1105_data;
-const void * image_battery_charging_1113 = NULL;
-extern const void * image_battery_charging_1113_data;
+
 
 /*----------------
  * Global styles
@@ -121,41 +109,41 @@ void ui_init_gen(const char * asset_path)
 
     /* Targets: any */
 
-    #if ui_CHECK_COMPILE_TARGET(ui_TARGET_ALL)
-    if (ui_check_target(ui_TARGET_ALL)) {
-        if (!font_inter_bold_7) {
-            /* font_inter_bold_7 */
-            /* create bin font 'font_inter_bold_7' from file */
-            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_inter_bold_7.bin");
-            font_inter_bold_7 = lv_binfont_create(buf);
+    #if UI_CHECK_COMPILE_TARGET(UI_TARGET_ALL)
+    if (ui_check_target(UI_TARGET_ALL)) {
+        if (!font_montserrat_regular_12) {
+            /* font_montserrat_regular_12 */
+            /* create bin font 'font_montserrat_regular_12' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_regular_12.bin");
+            font_montserrat_regular_12 = lv_binfont_create(buf);
 
         }
-        if (!font_inter_bold_6_5) {
-            /* font_inter_bold_6_5 */
-            /* create bin font 'font_inter_bold_6_5' from file */
-            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_inter_bold_6_5.bin");
-            font_inter_bold_6_5 = lv_binfont_create(buf);
+        if (!font_montserrat_regular_16) {
+            /* font_montserrat_regular_16 */
+            /* create bin font 'font_montserrat_regular_16' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_regular_16.bin");
+            font_montserrat_regular_16 = lv_binfont_create(buf);
 
         }
-        if (!font_inter_extra_bold_11_5) {
-            /* font_inter_extra_bold_11_5 */
-            /* create bin font 'font_inter_extra_bold_11_5' from file */
-            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_inter_extra_bold_11_5.bin");
-            font_inter_extra_bold_11_5 = lv_binfont_create(buf);
+        if (!font_montserrat_regular_14) {
+            /* font_montserrat_regular_14 */
+            /* create bin font 'font_montserrat_regular_14' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_regular_14.bin");
+            font_montserrat_regular_14 = lv_binfont_create(buf);
 
         }
-        if (!font_inter_regular_8) {
-            /* font_inter_regular_8 */
-            /* create bin font 'font_inter_regular_8' from file */
-            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_inter_regular_8.bin");
-            font_inter_regular_8 = lv_binfont_create(buf);
+        if (!font_montserrat_regular_20) {
+            /* font_montserrat_regular_20 */
+            /* create bin font 'font_montserrat_regular_20' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_regular_20.bin");
+            font_montserrat_regular_20 = lv_binfont_create(buf);
 
         }
-        if (!font_inter_bold_8_5) {
-            /* font_inter_bold_8_5 */
-            /* create bin font 'font_inter_bold_8_5' from file */
-            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_inter_bold_8_5.bin");
-            font_inter_bold_8_5 = lv_binfont_create(buf);
+        if (!font_montserrat_regular_24) {
+            /* font_montserrat_regular_24 */
+            /* create bin font 'font_montserrat_regular_24' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_regular_24.bin");
+            font_montserrat_regular_24 = lv_binfont_create(buf);
 
         }
     }
@@ -165,35 +153,7 @@ void ui_init_gen(const char * asset_path)
      * Images
      *----------------*/
 
-    /* Targets: any */
-    #if ui_CHECK_COMPILE_TARGET(ui_TARGET_ALL)
-    if (ui_check_target(ui_TARGET_ALL)) {
-        /* image_linkedin_image_7_1 */
-        if (!image_linkedin_image_7_1) {
-            image_linkedin_image_7_1 = &image_linkedin_image_7_1_data;
-        }
-        /* image_headphones_1109 */
-        if (!image_headphones_1109) {
-            image_headphones_1109 = &image_headphones_1109_data;
-        }
-        /* image_cpu_1111 */
-        if (!image_cpu_1111) {
-            image_cpu_1111 = &image_cpu_1111_data;
-        }
-        /* image_bluetooth_1115 */
-        if (!image_bluetooth_1115) {
-            image_bluetooth_1115 = &image_bluetooth_1115_data;
-        }
-        /* image_battery_1105 */
-        if (!image_battery_1105) {
-            image_battery_1105 = &image_battery_1105_data;
-        }
-        /* image_battery_charging_1113 */
-        if (!image_battery_charging_1113) {
-            image_battery_charging_1113 = &image_battery_charging_1113_data;
-        }
-    }
-    #endif
+
 
     /*----------------
      * Global styles
@@ -230,18 +190,18 @@ void ui_init_gen(const char * asset_path)
 
     /* Check all fonts / default if needed. This prevents fonts that are used in one target but
        defined in another from causing assertion failures during rendering of the Preview. */
-    check_font(&font_inter_bold_7, "font_inter_bold_7");
-    check_font(&font_inter_bold_6_5, "font_inter_bold_6_5");
-    check_font(&font_inter_extra_bold_11_5, "font_inter_extra_bold_11_5");
-    check_font(&font_inter_regular_8, "font_inter_regular_8");
-    check_font(&font_inter_bold_8_5, "font_inter_bold_8_5");
+    check_font(&font_montserrat_regular_12, "font_montserrat_regular_12");
+    check_font(&font_montserrat_regular_16, "font_montserrat_regular_16");
+    check_font(&font_montserrat_regular_14, "font_montserrat_regular_14");
+    check_font(&font_montserrat_regular_20, "font_montserrat_regular_20");
+    check_font(&font_montserrat_regular_24, "font_montserrat_regular_24");
 
     /* Register fonts */
-    lv_xml_register_font(NULL, "font_inter_bold_7", font_inter_bold_7);
-    lv_xml_register_font(NULL, "font_inter_bold_6_5", font_inter_bold_6_5);
-    lv_xml_register_font(NULL, "font_inter_extra_bold_11_5", font_inter_extra_bold_11_5);
-    lv_xml_register_font(NULL, "font_inter_regular_8", font_inter_regular_8);
-    lv_xml_register_font(NULL, "font_inter_bold_8_5", font_inter_bold_8_5);
+    lv_xml_register_font(NULL, "font_montserrat_regular_12", font_montserrat_regular_12);
+    lv_xml_register_font(NULL, "font_montserrat_regular_16", font_montserrat_regular_16);
+    lv_xml_register_font(NULL, "font_montserrat_regular_14", font_montserrat_regular_14);
+    lv_xml_register_font(NULL, "font_montserrat_regular_20", font_montserrat_regular_20);
+    lv_xml_register_font(NULL, "font_montserrat_regular_24", font_montserrat_regular_24);
 
     /* Register subjects */
 
@@ -252,12 +212,6 @@ void ui_init_gen(const char * asset_path)
      * While running in the editor skip this step to update the preview when the XML changes */
 #if defined(LV_USE_XML) && LV_USE_XML && !defined(LV_EDITOR_PREVIEW)
     /* Register images */
-    lv_xml_register_image(NULL, "image_linkedin_image_7_1", image_linkedin_image_7_1);
-    lv_xml_register_image(NULL, "image_headphones_1109", image_headphones_1109);
-    lv_xml_register_image(NULL, "image_cpu_1111", image_cpu_1111);
-    lv_xml_register_image(NULL, "image_bluetooth_1115", image_bluetooth_1115);
-    lv_xml_register_image(NULL, "image_battery_1105", image_battery_1105);
-    lv_xml_register_image(NULL, "image_battery_charging_1113", image_battery_charging_1113);
 #endif
 
 #if !defined(LV_USE_XML) || LV_USE_XML == 0

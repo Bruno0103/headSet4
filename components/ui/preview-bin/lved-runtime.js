@@ -9220,7 +9220,7 @@ function checkIncomingModuleAPI() {
 }
 
 var ASM_CONSTS = {
-  17028344: ($0, $1, $2) => {
+  16970120: ($0, $1, $2) => {
     var w = $0;
     var h = $1;
     var pixels = $2;
@@ -9291,7 +9291,7 @@ var ASM_CONSTS = {
     }
     SDL2.ctx.putImageData(SDL2.image, 0, 0);
   },
-  17029812: ($0, $1, $2, $3, $4) => {
+  16971588: ($0, $1, $2, $3, $4) => {
     var w = $0;
     var h = $1;
     var hot_x = $2;
@@ -9328,19 +9328,19 @@ var ASM_CONSTS = {
     stringToUTF8(url, urlBuf, url.length + 1);
     return urlBuf;
   },
-  17030800: $0 => {
+  16972576: $0 => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = UTF8ToString($0);
     }
   },
-  17030883: () => {
+  16972659: () => {
     if (Module["canvas"]) {
       Module["canvas"].style["cursor"] = "none";
     }
   },
-  17030952: () => window.innerWidth,
-  17030982: () => window.innerHeight,
-  17031013: $0 => {
+  16972728: () => window.innerWidth,
+  16972758: () => window.innerHeight,
+  16972789: $0 => {
     var str = UTF8ToString($0) + "\n\n" + "Abort/Retry/Ignore/AlwaysIgnore? [ariA] :";
     var reply = window.prompt(str, "i");
     if (reply === null) {
@@ -9348,7 +9348,7 @@ var ASM_CONSTS = {
     }
     return allocate(intArrayFromString(reply), "i8", ALLOC_NORMAL);
   },
-  17031238: () => {
+  16973014: () => {
     if (typeof (AudioContext) !== "undefined") {
       return true;
     } else if (typeof (webkitAudioContext) !== "undefined") {
@@ -9356,7 +9356,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  17031385: () => {
+  16973161: () => {
     if ((typeof (navigator.mediaDevices) !== "undefined") && (typeof (navigator.mediaDevices.getUserMedia) !== "undefined")) {
       return true;
     } else if (typeof (navigator.webkitGetUserMedia) !== "undefined") {
@@ -9364,7 +9364,7 @@ var ASM_CONSTS = {
     }
     return false;
   },
-  17031619: $0 => {
+  16973395: $0 => {
     if (typeof (Module["SDL2"]) === "undefined") {
       Module["SDL2"] = {};
     }
@@ -9388,11 +9388,11 @@ var ASM_CONSTS = {
     }
     return SDL2.audioContext === undefined ? -1 : 0;
   },
-  17032171: () => {
+  16973947: () => {
     var SDL2 = Module["SDL2"];
     return SDL2.audioContext.sampleRate;
   },
-  17032239: ($0, $1, $2, $3) => {
+  16974015: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     var have_microphone = function(stream) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -9434,7 +9434,7 @@ var ASM_CONSTS = {
       }, have_microphone, no_microphone);
     }
   },
-  17033932: ($0, $1, $2, $3) => {
+  16975708: ($0, $1, $2, $3) => {
     var SDL2 = Module["SDL2"];
     SDL2.audio.scriptProcessorNode = SDL2.audioContext["createScriptProcessor"]($1, 0, $0);
     SDL2.audio.scriptProcessorNode["onaudioprocess"] = function(e) {
@@ -9466,7 +9466,7 @@ var ASM_CONSTS = {
       SDL2.audio.silenceTimer = setInterval(silence_callback, ($1 / SDL2.audioContext.sampleRate) * 1e3);
     }
   },
-  17035107: ($0, $1) => {
+  16976883: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var numChannels = SDL2.capture.currentCaptureBuffer.numberOfChannels;
     for (var c = 0; c < numChannels; ++c) {
@@ -9485,7 +9485,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  17035712: ($0, $1) => {
+  16977488: ($0, $1) => {
     var SDL2 = Module["SDL2"];
     var buf = $0 >>> 2;
     var numChannels = SDL2.audio.currentOutputBuffer["numberOfChannels"];
@@ -9499,7 +9499,7 @@ var ASM_CONSTS = {
       }
     }
   },
-  17036201: $0 => {
+  16977977: $0 => {
     var SDL2 = Module["SDL2"];
     if ($0) {
       if (SDL2.capture.silenceTimer !== undefined) {
@@ -9922,9 +9922,9 @@ var _lvrt_health_check = Module["_lvrt_health_check"] = createExportWrapper("lvr
 
 var _get_screenshot = Module["_get_screenshot"] = createExportWrapper("get_screenshot", 3);
 
-var _testeFinal_set_target = Module["_testeFinal_set_target"] = createExportWrapper("testeFinal_set_target", 1);
+var _ui_set_target = Module["_ui_set_target"] = createExportWrapper("ui_set_target", 1);
 
-var _testeFinal_init = Module["_testeFinal_init"] = createExportWrapper("testeFinal_init", 1);
+var _ui_init = Module["_ui_init"] = createExportWrapper("ui_init", 1);
 
 var ___funcs_on_exit = createExportWrapper("__funcs_on_exit", 0);
 

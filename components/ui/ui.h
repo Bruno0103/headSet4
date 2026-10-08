@@ -34,7 +34,7 @@ extern "C" {
 /**
  * Initialize the component library
  */
-void ui_init(const char *asset_path);
+void ui_init(const char * asset_path);
 
 /**********************
  *      MACROS

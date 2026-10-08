@@ -13,9 +13,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
-#include "screens/app_gen.h"
+#include "ui.h"
 #include "ui_bridge.h"
-#include "ui_gen.h"
 
 static const char *TAG = "display";
 
@@ -39,18 +38,67 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area,
                             area->y2 + 1, px_map);
 }
 
+/**
+ * @brief Callback do LVGL para leitura do estado e posição do Touch Screen.
+ * 
+ * Este callback é chamado ciclicamente pelo LVGL (através de lv_timer_handler).
+ * O controlador resistivo XPT2046 realiza a conversão analógica nos canais X/Y/Z.
+ * 
+ * Implementação correta e robusta:
+ * 1. Invoca esp_lcd_touch_read_data(s_touch) para amostrar os eixos e a pressão.
+ * 2. Verifica se houve coordenadas válidas retornadas por esp_lcd_touch_get_data.
+ * 3. Repassa as coordenadas (X, Y) e o estado (LV_INDEV_STATE_PRESSED/RELEASED).
+ * 4. Mantém diagnóstico no log serial para inspecionar exatamente o que o hardware responde.
+ */
 static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
-  uint16_t x[1], y[1];
   uint8_t cnt = 0;
+  esp_lcd_touch_point_data_t pt_data = {0};
 
-  esp_lcd_touch_read_data(s_touch);
-  if (esp_lcd_touch_get_coordinates(s_touch, x, y, NULL, &cnt, 1) && cnt > 0) {
-    data->point.x = x[0];
-    data->point.y = y[0];
-    data->state = LV_INDEV_STATE_PRESSED;
-  } else {
-    data->state = LV_INDEV_STATE_RELEASED;
+  /* Dispara a amostragem física via SPI no XPT2046 */
+  esp_err_t ret = esp_lcd_touch_read_data(s_touch);
+
+  if (ret == ESP_OK) {
+    /* Recupera os pontos convertidos e filtrados pelo driver */
+    esp_err_t err = esp_lcd_touch_get_data(s_touch, &pt_data, &cnt, 1);
+    if (err == ESP_OK && cnt > 0) {
+      data->point.x = pt_data.x;
+      data->point.y = pt_data.y;
+      data->state = LV_INDEV_STATE_PRESSED;
+
+      /* Log serial rate-limited (a cada 100 ms enquanto pressionado) para depuração */
+      static uint32_t last_log_time = 0;
+      uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+      if (now - last_log_time > 100) {
+        last_log_time = now;
+        ESP_LOGI(TAG, ">>> TOUCH ATIVO: X=%d, Y=%d (força Z=%d) <<<", pt_data.x, pt_data.y, pt_data.strength);
+      }
+      return;
+    }
   }
+
+  /*
+   * Diagnóstico periódico de hardware:
+   * Testa leitura direta dos registradores brutos do XPT2046 para saber se o pino MISO
+   * está respondendo ou se o barramento SPI está recebendo apenas 0x0000 ou 0xFFFF.
+   */
+  static uint32_t last_diag_time = 0;
+  uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+  if (now - last_diag_time > 2000) {
+    last_diag_time = now;
+    uint8_t raw_z1[2] = {0}, raw_z2[2] = {0}, raw_x[2] = {0};
+    esp_err_t r1 = esp_lcd_panel_io_rx_param(s_touch->io, 0xB0 | 0x01, raw_z1, 2);
+    esp_err_t r2 = esp_lcd_panel_io_rx_param(s_touch->io, 0xC0 | 0x01, raw_z2, 2);
+    esp_err_t r3 = esp_lcd_panel_io_rx_param(s_touch->io, 0xD0 | 0x01, raw_x, 2);
+    uint16_t val_z1 = (raw_z1[0] << 8) | raw_z1[1];
+    uint16_t val_z2 = (raw_z2[0] << 8) | raw_z2[1];
+    uint16_t val_x  = (raw_x[0] << 8) | raw_x[1];
+    uint16_t calc_z = (val_z1 >> 3) + (4096 - (val_z2 >> 3));
+    ESP_LOGI(TAG, "[DIAG TOUCH] SPI status: r=(%d,%d,%d) | Z1=0x%04X Z2=0x%04X X=0x%04X | calc_z=%u",
+             r1, r2, r3, val_z1, val_z2, val_x, calc_z);
+  }
+
+  /* Caso não haja toque detectado ou o comando retorne liberado */
+  data->state = LV_INDEV_STATE_RELEASED;
 }
 
 static uint32_t lvgl_tick_cb(void) {
@@ -75,6 +123,14 @@ static esp_err_t display_hw_init(lv_display_t *disp) {
   };
   ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_SPI_NUM, &buscfg, SPI_DMA_CH_AUTO),
                       TAG, "spi bus");
+
+  /*
+   * Habilita pull-up interno no pino MISO (T_DO).
+   * No GPIO 26 o ESP32 possui resistor de pull-up interno de ~45k,
+   * evitando que a linha flutue para nível indeterminado quando o chip XPT2046
+   * entra em modo tri-state entre transmissões SPI.
+   */
+  gpio_set_pull_mode(LCD_GPIO_MISO, GPIO_PULLUP_ONLY);
 
   /* --- LCD ILI9341 --- */
   esp_lcd_panel_io_handle_t lcd_io = NULL;
@@ -111,7 +167,7 @@ static esp_err_t display_hw_init(lv_display_t *disp) {
   ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, LCD_MIRROR_X, LCD_MIRROR_Y),
                       TAG, "mirror");
 
-  /* --- Touch XPT2046 (mesmo barramento, CS proprio, clock bem menor) --- */
+  /* --- Touch XPT2046 (mesmo barramento SPI, CS dedicado em TOUCH_GPIO_CS) --- */
   esp_lcd_panel_io_handle_t tp_io = NULL;
   esp_lcd_panel_io_spi_config_t tp_io_cfg =
       ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(TOUCH_GPIO_CS);
@@ -121,25 +177,32 @@ static esp_err_t display_hw_init(lv_display_t *disp) {
                                &tp_io_cfg, &tp_io),
       TAG, "touch io");
 
+  /*
+   * Configuração do controlador de toque resistivo XPT2046.
+   * Usamos polling contínuo (rst e int como GPIO_NUM_NC) para evitar
+   * que ruídos no pino de interrupção T_IRQ mascarem ou impeçam leituras válidas do SPI.
+   * A resolução x_max/y_max é alinhada com as dimensões do display ILI9341 (240x320).
+   */
   const esp_lcd_touch_config_t tp_cfg = {
       .x_max = LCD_H_RES,
       .y_max = LCD_V_RES,
       .rst_gpio_num = GPIO_NUM_NC,
-      .int_gpio_num = TOUCH_GPIO_IRQ,
+      .int_gpio_num = GPIO_NUM_NC,
       .levels = {.reset = 0, .interrupt = 0},
-      .flags = {.swap_xy = LCD_SWAP_XY,
-                .mirror_x = LCD_MIRROR_X,
-                .mirror_y = LCD_MIRROR_Y},
+      .flags = {.swap_xy = TOUCH_SWAP_XY,
+                .mirror_x = TOUCH_MIRROR_X,
+                .mirror_y = TOUCH_MIRROR_Y},
   };
   ESP_RETURN_ON_ERROR(esp_lcd_touch_new_spi_xpt2046(tp_io, &tp_cfg, &s_touch),
                       TAG, "xpt2046");
+
+  ESP_LOGI(TAG, "Driver Touch XPT2046 inicializado com sucesso (CS=%d, SCLK=%d, MOSI=%d, MISO=%d)",
+           TOUCH_GPIO_CS, LCD_GPIO_SCLK, LCD_GPIO_MOSI, LCD_GPIO_MISO);
 
   ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
   return ESP_OK;
 }
 
-#include "screens/app_gen.h"
-#include "ui.h"
 
 /* Tela provisoria para validar display e toque ou fallback de erro. */
 static void ui_placeholder(void) {
@@ -166,13 +229,16 @@ static void ui_placeholder(void) {
 esp_err_t display_create_app_ui(void) {
   ESP_LOGI(TAG, "Inicializando interface grafica gerada (ui)...");
 
-  /* Inicializacao das variaveis, estilos, fontes e imagens geradas */
-  ui_init_gen("");
+  /* Inicializacao das variaveis, estilos e fontes */
+  ui_init("");
 
-  /* Criacao da tela principal do aplicativo */
-  lv_obj_t *screen = app_create();
+  /* 
+   * Criacao da tela principal gerada pelo novo projeto de interface (LVGL Pro).
+   * A nova tela inicial exportada por ui.h / screen_main_gen.h e a screen_main_create().
+   */
+  lv_obj_t *screen = screen_main_create();
   if (screen == NULL) {
-    ESP_LOGE(TAG, "ERRO CRITICO: app_create() retornou NULL! Carregando tela "
+    ESP_LOGE(TAG, "ERRO CRITICO: screen_main_create() retornou NULL! Carregando tela "
                   "placeholder de emergencia...");
     ui_placeholder();
     return ESP_FAIL;
@@ -180,7 +246,7 @@ esp_err_t display_create_app_ui(void) {
 
   /* Carrega a tela com sucesso */
   lv_screen_load(screen);
-  ESP_LOGI(TAG, "Tela principal carregada com sucesso.");
+  ESP_LOGI(TAG, "Tela principal (screen_main) carregada com sucesso.");
   return ESP_OK;
 }
 

@@ -2,8 +2,8 @@
  * @file ui_gen.h
  */
 
-#ifndef LVGL_PRO_ui_GEN_H
-#define LVGL_PRO_ui_GEN_H
+#ifndef LVGL_PRO_UI_GEN_H
+#define LVGL_PRO_UI_GEN_H
 
 #ifndef UI_SUBJECT_STRING_LENGTH
 #define UI_SUBJECT_STRING_LENGTH 256
@@ -41,18 +41,20 @@ bool ui_check_target(uint32_t target);
  *      DEFINES
  *********************/
 
-#define ui_TARGET_UNDEFINED  (0 << 1)
-#define ui_TARGET_TARGET1    (1 << 1)
-#define ui_TARGET_ALL        0x0FFFFFFF
+#define UI_TARGET_UNDEFINED  (0 << 1)
+#define UI_TARGET_TARGET1    (1 << 1)
+#define UI_TARGET_ALL        0x0FFFFFFF
 
 /* By default compile for all targets, allowing to switch to any targets at runtime */
-#ifndef ui_COMPILE_TARGET
-#define ui_COMPILE_TARGET ui_TARGET_ALL
+#ifndef UI_COMPILE_TARGET
+#define UI_COMPILE_TARGET UI_TARGET_ALL
 #endif
 
-#define ui_CHECK_COMPILE_TARGET(target) (ui_COMPILE_TARGET & (target) ? 1 : 0)
+#define UI_CHECK_COMPILE_TARGET(target) (UI_COMPILE_TARGET & (target) ? 1 : 0)
 
 #define CONST_BASELIB_ACCENT_GLOBAL lv_color_hex(0x70609C)
+#define CONST_BASELIB_ACCENT_TEXT_GLOBAL lv_color_hex(0xFFFFFF)
+#define CONST_BASELIB_RADIUS_GLOBAL 8
 #define CONST_BASELIB_UNIT_SM_GLOBAL 4
 
 
@@ -83,24 +85,18 @@ extern lv_style_t style_screen_base_global;
  *----------------*/
 
 /* Targets: any */
-extern lv_font_t * font_inter_bold_7;
-extern lv_font_t * font_inter_bold_6_5;
-extern lv_font_t * font_inter_extra_bold_11_5;
-extern lv_font_t * font_inter_regular_8;
-extern lv_font_t * font_inter_bold_8_5;
+extern lv_font_t * font_montserrat_regular_12;
+extern lv_font_t * font_montserrat_regular_16;
+extern lv_font_t * font_montserrat_regular_14;
+extern lv_font_t * font_montserrat_regular_20;
+extern lv_font_t * font_montserrat_regular_24;
 
 
 /*----------------
  * Images
  *----------------*/
 
-/* Targets: any */
-extern const void * image_linkedin_image_7_1;
-extern const void * image_headphones_1109;
-extern const void * image_cpu_1111;
-extern const void * image_bluetooth_1115;
-extern const void * image_battery_1105;
-extern const void * image_battery_charging_1113;
+
 
 /*----------------
  * Subjects
@@ -129,19 +125,34 @@ void ui_init_gen(const char * asset_path);
  **********************/
 
 /*Include all the widgets, components and screens of this library*/
+#include "components/base/button_subtle/button_subtle_gen.h"
+#include "components/base/button/button_gen.h"
 #include "components/base/card/card_gen.h"
+#include "components/base/column/column_gen.h"
 #include "components/base/container/container_gen.h"
-#include "components/base/image/image_gen.h"
+#include "components/base/label/label_gen.h"
 #include "components/base/panel/panel_gen.h"
-#include "components/battery_charging/battery_charging_gen.h"
-#include "components/battery/battery_gen.h"
-#include "components/bluetooth/bluetooth_gen.h"
-#include "components/cpu/cpu_gen.h"
-#include "components/headphones/headphones_gen.h"
-#include "screens/app_gen.h"
+#include "components/base/row/row_gen.h"
+#include "components/derived/tile_2/tile_2_gen.h"
+#include "components/derived/tile_3/tile_3_gen.h"
+#include "components/derived/tile_4/tile_4_gen.h"
+#include "components/derived/tile_5/tile_5_gen.h"
+#include "components/derived/tile/tile_gen.h"
+#include "screens/screen_apps_gen.h"
+#include "screens/screen_bluetooth_gen.h"
+#include "screens/screen_display_gen.h"
+#include "screens/screen_galeria_gifs_gen.h"
+#include "screens/screen_galeria_imagens_gen.h"
+#include "screens/screen_main_gen.h"
+#include "screens/screen_main_gif_gen.h"
+#include "screens/screen_orelhas_gen.h"
+#include "screens/screen_proximidade_gen.h"
+#include "screens/screen_settings_gen.h"
+#include "screens/screen_status_gen.h"
+#include "screens/screen_vibracall_gen.h"
 
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif
 
-#endif /*LVGL_PRO_ui_GEN_H*/
+#endif /*LVGL_PRO_UI_GEN_H*/

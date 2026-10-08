@@ -1,21 +1,30 @@
 list(
   APPEND
   LV_EDITOR_PROJECT_SOURCES
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/button_subtle/button_subtle_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/button/button_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/card/card_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/column/column_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/container/container_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/components/base/image/image_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/label/label_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/panel/panel_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/components/battery_charging/battery_charging_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/components/battery/battery_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/components/bluetooth/bluetooth_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/components/cpu/cpu_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/components/headphones/headphones_gen.c
-  ${CMAKE_CURRENT_LIST_DIR}/images/image_battery_1105_data.c
-  ${CMAKE_CURRENT_LIST_DIR}/images/image_battery_charging_1113_data.c
-  ${CMAKE_CURRENT_LIST_DIR}/images/image_bluetooth_1115_data.c
-  ${CMAKE_CURRENT_LIST_DIR}/images/image_cpu_1111_data.c
-  ${CMAKE_CURRENT_LIST_DIR}/images/image_headphones_1109_data.c
-  ${CMAKE_CURRENT_LIST_DIR}/images/image_linkedin_image_7_1_data.c
-  ${CMAKE_CURRENT_LIST_DIR}/screens/app_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/row/row_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_2/tile_2_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_3/tile_3_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_4/tile_4_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_5/tile_5_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile/tile_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_apps_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_bluetooth_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_display_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_galeria_gifs_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_galeria_imagens_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_main_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_main_gif_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_orelhas_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_proximidade_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_settings_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_status_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_vibracall_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/ui_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/ui.c)

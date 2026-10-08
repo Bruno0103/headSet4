@@ -230,7 +230,12 @@ static void audio_task(void *arg)
         }
         xSemaphoreGive(s_lock);
 
-        if (m == AUDIO_IO_IDLE || s_reconfig_req) vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 2));
+        if (m == AUDIO_IO_IDLE || s_reconfig_req) {
+            vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 2));
+        } else {
+            /* Cede 1 tick de forma cooperativa para alimentar o Task Watchdog do Core 1 */
+            vTaskDelay(1);
+        }
     }
 }
 

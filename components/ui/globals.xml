@@ -8,6 +8,8 @@
          Regenerated on each export. Add your own entries outside the fence. -->
 
     <color name="const_baselib_accent_global" value="0x70609C" />
+    <color name="const_baselib_accent_text_global" value="0xFFFFFF" />
+    <int name="const_baselib_radius_global" value="8" />
     <int name="const_baselib_unit_sm_global" value="4" />
 
     <!-- ─────────────────── <lvgl-figma-flow end="consts"/> ──────────────────── -->
@@ -22,24 +24,7 @@
     <!-- ────────────────── <lvgl-figma-flow begin="images"/> ───────────────────
          Regenerated on each export. Add your own entries outside the fence. -->
 
-    <data
-      name="image_linkedin_image_7_1"
-      src_path="images/linkedin_image_7_1.png"
-      color_format="rgb565a8" />
-    <data
-      name="image_headphones_1109"
-      src_path="images/headphones_1109.png"
-      color_format="rgb565a8" />
-    <data name="image_cpu_1111" src_path="images/cpu_1111.png" color_format="rgb565a8" />
-    <data
-      name="image_bluetooth_1115"
-      src_path="images/bluetooth_1115.png"
-      color_format="rgb565a8" />
-    <data name="image_battery_1105" src_path="images/battery_1105.png" color_format="rgb565a8" />
-    <data
-      name="image_battery_charging_1113"
-      src_path="images/battery_charging_1113.png"
-      color_format="rgb565a8" />
+    <!-- No image assets found -->
 
     <!-- ─────────────────── <lvgl-figma-flow end="images"/> ──────────────────── -->
     <!-- Add <file> or <data> tags here -->
@@ -50,39 +35,39 @@
          Regenerated on each export. Add your own entries outside the fence. -->
 
     <bin
-      name="font_inter_bold_7"
-      size="7"
-      bpp="4"
-      as_file="true"
-      src_path="fonts/Inter-Bold.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
-    <bin
-      name="font_inter_bold_6_5"
-      size="7"
-      bpp="4"
-      as_file="true"
-      src_path="fonts/Inter-Bold.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
-    <bin
-      name="font_inter_extra_bold_11_5"
+      name="font_montserrat_regular_12"
       size="12"
       bpp="4"
       as_file="true"
-      src_path="fonts/Inter-ExtraBold.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
+      src_path="fonts/Montserrat-Regular.ttf"
+      range="0x20-0x7F, 0xA0-0xFF, 0x2000-0x206F" />
     <bin
-      name="font_inter_regular_8"
-      size="8"
+      name="font_montserrat_regular_16"
+      size="16"
       bpp="4"
       as_file="true"
-      src_path="fonts/Inter-Regular.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
+      src_path="fonts/Montserrat-Regular.ttf"
+      range="0x20-0x7F" />
     <bin
-      name="font_inter_bold_8_5"
-      size="9"
+      name="font_montserrat_regular_14"
+      size="14"
       bpp="4"
       as_file="true"
-      src_path="fonts/Inter-Bold.ttf"
+      src_path="fonts/Montserrat-Regular.ttf"
+      range="0x20-0x7F, 0xA0-0xFF" />
+    <bin
+      name="font_montserrat_regular_20"
+      size="20"
+      bpp="4"
+      as_file="true"
+      src_path="fonts/Montserrat-Regular.ttf"
+      range="0x20-0x7F, 0xA0-0xFF" />
+    <bin
+      name="font_montserrat_regular_24"
+      size="24"
+      bpp="4"
+      as_file="true"
+      src_path="fonts/Montserrat-Regular.ttf"
       range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
 
     <!-- ──────────────────── <lvgl-figma-flow end="fonts"/> ──────────────────── -->

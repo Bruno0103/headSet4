@@ -28,7 +28,6 @@
 #include "bt_link_mgr.h"
 #include "headset_events.h"
 #include "pinout.h"
-#include "ui_gen.h"
 
 static const char *TAG = "ui_bridge";
 
@@ -92,14 +91,13 @@ static struct {
              .display_screen_timeout_sec = 30,
              .display_selected_img_index = 0};
 
-/* Itens da galeria de imagens disponíveis na UI (geradas pelo LVGL UI
- * Generator) */
+/* Itens da galeria de imagens disponíveis na UI (placeholder/assets seguros) */
 static const ui_bridge_gallery_item_t s_gallery_items[] = {
-    {.name = "Headphones", .img_src = &image_headphones_1109},
-    {.name = "Bluetooth Icon", .img_src = &image_bluetooth_1115},
-    {.name = "CPU Chip", .img_src = &image_cpu_1111},
-    {.name = "Bateria Normal", .img_src = &image_battery_1105},
-    {.name = "Bateria Carga", .img_src = &image_battery_charging_1113},
+    {.name = "Headphones", .img_src = NULL},
+    {.name = "Bluetooth Icon", .img_src = NULL},
+    {.name = "CPU Chip", .img_src = NULL},
+    {.name = "Bateria Normal", .img_src = NULL},
+    {.name = "Bateria Carga", .img_src = NULL},
 };
 #define GALLERY_ITEMS_COUNT                                                    \
   (sizeof(s_gallery_items) / sizeof(s_gallery_items[0]))
