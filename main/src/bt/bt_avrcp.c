@@ -9,7 +9,7 @@
 #include "bt_app_core.h"
 #include "bt_link_mgr.h"
 
-#include "audio_codec.h"
+#include "audio.h"
 #include "board_config.h"
 
 static const char *TAG = "bt_avrcp";
@@ -37,9 +37,11 @@ static esp_err_t set_volume(uint8_t requested_volume, const char *source)
                  source, (unsigned)requested_volume);
     }
 
-    esp_err_t err = audio_codec_set_volume(volume);
+    /* Converte de escala 0..127 para escala 0..100% para o comando AUDIO_CMD_SET_VOLUME */
+    uint8_t vol_pct = (uint8_t)((uint32_t)volume * 100 / 127);
+    esp_err_t err = audio_cmd_set_volume_send(vol_pct);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "falha ao aplicar volume %u recebido de %s: %s",
+        ESP_LOGE(TAG, "falha ao enviar comando de volume %u recebido de %s: %s",
                  (unsigned)volume, source, esp_err_to_name(err));
         return err;
     }
@@ -59,9 +61,10 @@ static void avrcp_evt_hdl(uint16_t event, void *p)
     case ESP_AVRC_TG_CONNECTION_STATE_EVT:
         if (rc->conn_stat.connected) {
             uint8_t v = bt_link_mgr_get_volume();   /* volume salvo do slot; o celular o adota via interim */
-            if (audio_codec_set_volume(v) == ESP_OK) {
+            uint8_t v_pct = (uint8_t)((uint32_t)v * 100 / 127);
+            if (audio_cmd_set_volume_send(v_pct) == ESP_OK) {
                 s_volume = v;
-                ESP_LOGI(TAG, "volume do slot restaurado: %u/127", (unsigned)v);
+                ESP_LOGI(TAG, "volume do slot restaurado via comando: %u/127", (unsigned)v);
             }
         } else {
             s_notify_registered = false;

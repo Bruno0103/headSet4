@@ -1,79 +1,102 @@
 #pragma once
 
-#include "driver/gpio.h" // Necessário para macros GPIO_NUM_*
+#include "driver/gpio.h" /* macros GPIO_NUM_* */
 
 /**
  * @file pinout.h
- * @brief Pinagem do projeto HeadSet - ESP32-WROVER-E (revisada).
+ * @brief Pinagem do projeto HeadSet - ESP32-WROVER-E (rev. 3).
  *
- * Regras seguidas:
- *  - GPIO6-11  : flash SPI interna  -> NAO usar
- *  - GPIO16/17 : PSRAM do WROVER    -> NAO usar
- *  - GPIO12    : strapping (tensao da flash) -> NAO usar
- *  - GPIO15/2/5: strapping -> evitados em sinais criticos
- *  - GPIO1/3   : UART0 (log/programacao) -> reservados
- *  - GPIO34-39 : somente entrada, SEM pull interno
- *  - ADC2 (0,2,4,12-15,25-27) nao funciona com Wi-Fi/BT -> bateria no ADC1
+ * Prioridade de projeto: 1) WM8960 (I2S + I2C)  2) ILI9341 + XPT2046  3)
+ * demais.
  *
- * Livres/reserva: GPIO2, GPIO12 (nao recomendado), GPIO16, GPIO17 (PSRAM - nao
- * usar)
+ * Proibidos:
+ *  - GPIO6-11  : flash SPI interna
+ *  - GPIO16/17 : PSRAM do WROVER
+ *  - GPIO12    : strapping (tensao da flash) - se alto no boot, o chip nao sobe
+ *  - GPIO0     : strapping/BOOT - reservado ao botao de gravacao, sem fio
+ * externo
+ *  - GPIO1/3   : UART0 (log/programacao)
+ *  Evitar em sinais criticos: GPIO2/5/15 (strapping).
+ *  Somente entrada e sem pull interno: GPIO34-39.
+ *  ADC2 (0,2,4,12-15,25-27) nao funciona com BT ligado -> bateria no ADC1.
  */
 
-// ============================================================================
-// SPI (VSPI) compartilhado: Display LCD ILI9341 240x320 + touch XPT2046
-// ============================================================================
-#define LCD_GPIO_SCLK 18 // LCD SCK  + T_CLK
-#define LCD_GPIO_MOSI 23 // LCD SDI  + T_DIN
-#define LCD_GPIO_MISO 19 // T_DO (XPT2046). Veja nota abaixo sobre o SDO do LCD
+/* ============================================================================
+ * SPI3_HOST (VSPI) compartilhado: ILI9341 240x320 + XPT2046
+ * 18/23/19/5 sao os pinos NATIVOS (IOMUX) do VSPI: sem matriz de GPIO,
+ * clock de 40 MHz estavel no LCD e MISO confiavel para o touch.
+ * Em display.h use: #define LCD_SPI_NUM SPI3_HOST
+ * ========================================================================== */
+#define LCD_GPIO_SCLK 18 /* LCD SCK  + T_CLK */
+#define LCD_GPIO_MOSI 23 /* LCD SDI  + T_DIN */
+#define LCD_GPIO_MISO 19 /* SOMENTE T_DO. NAO ligar LCD SDO nem SD_MISO */
+#define LCD_GPIO_CS                                                            \
+  5 /* CS do LCD (VSPI CS0 nativo; strapping, tem pull-up externo no modulo)   \
+     */
+#define LCD_GPIO_DC 27 /* DC/RS */
+#define LCD_GPIO_RST 4 /* RST do LCD */
+#define LCD_GPIO_BL                                                            \
+  13 /* Backlight (via transistor/MOSFET se o modulo nao tiver) */
 
-#define LCD_GPIO_CS 5  // CS do LCD
-#define LCD_GPIO_DC 27 // DC/RS do LCD (antes no GPIO2, pino de strapping)
-#define LCD_GPIO_RST 4 // RST do LCD
-#define LCD_GPIO_BL 13 // Backlight (antes no GPIO15, pino de strapping)
+#define TOUCH_GPIO_CS 26 /* T_CS */
+#define TOUCH_GPIO_IRQ                                                         \
+  39 /* T_IRQ: entrada pura; o modulo ja tem pull-up. Nao usado (polling) */
 
-#define TOUCH_GPIO_CS 26  // T_CS
-#define TOUCH_GPIO_IRQ 39 // T_IRQ -> entrada pura (antes no GPIO12, strapping)
-/* NOTA IMPORTANTE (causa comum de touch morto):
- * Em muitos modulos ILI9341 o pino SDO/MISO do LCD NAO vai a alta impedancia
- * quando o CS do LCD esta em nivel alto, e disputa a linha MISO com o T_DO.
- * Como o LCD so recebe dados, NAO ligue o SDO do LCD ao ESP32: ligue apenas
- * o T_DO ao GPIO19. Rode o touch a ~2 MHz (clock proprio do device SPI). */
+/* Checklist de fiacao do touch (causa mais comum de touch morto):
+ *  - LCD SDO, SD_CS, SD_MISO, SD_MOSI, SD_SCK: SEM LIGACAO.
+ *  - T_DO -> GPIO19 (fio curto, longe do BCLK/WS do audio).
+ *  - Touch a 1-2 MHz em device proprio (ja configurado em display.h).
+ *  - 3,3 V e GND do modulo no mesmo ponto de GND do codec (estrela), nao em
+ * serie. */
 
-// ============================================================================
-// I2C - Controle do Codec de Audio (WM8960) + APDS-9930
-// ============================================================================
+/* ============================================================================
+ * I2C0 - WM8960 (0x1A) + APDS-9930 (0x39). Pull-ups ja existem no breakout.
+ * ========================================================================== */
 #define BOARD_I2C_SDA 21
 #define BOARD_I2C_SCL 22
-#define BOARD_I2C_HZ 100000 /* 100 kHz: poupa ruido no audio */
+#define BOARD_I2C_HZ 100000
 
-// ============================================================================
-// I2S - Audio (WM8960)
-// ============================================================================
-// O WM8960 precisa de MCLK (a PLL interna tambem usa MCLK como entrada).
-// No ESP32 o MCLK so pode sair em GPIO0, GPIO1 ou GPIO3 -> usamos o GPIO0.
-#define BOARD_I2S_MCLK 0  /* -> MCLK do WM8960 (CLK_OUT1) */
-#define BOARD_I2S_BCLK 32 /* -> BCLK */
-#define BOARD_I2S_WS 33   /* -> DACLRC *e* ADCLRC (ligados juntos) */
-#define BOARD_I2S_DOUT 25 /* ESP32 -> DACDAT (musica / voz) */
-#define BOARD_I2S_DIN 35  /* ADCDAT -> ESP32 (microfone); pino so entrada */
+/* ============================================================================
+ * I2S0 - WM8960. O ESP32 e o mestre de BCLK/WS.
+ * MCLK: o breakout gera o proprio (cristal de 24 MHz), que e o que o
+ * audio_codec.c assume no PLL. O ESP32 NAO envia MCLK: nao ligue nada ao
+ * GPIO0 (o MCLK do breakout so vai para o codec).
+ * ========================================================================== */
+#define BOARD_I2S_MCLK (-1) /* I2S_GPIO_UNUSED */
+#define BOARD_I2S_BCLK 32   /* -> BCLK */
+#define BOARD_I2S_WS 33     /* -> DACLRC e ADCLRC (ligados juntos) */
+#define BOARD_I2S_DOUT 25   /* ESP32 -> DACDAT */
+#define BOARD_I2S_DIN 35    /* ADCDAT -> ESP32 (entrada pura) */
 
-// ============================================================================
-// Medidor de Bateria
-// ============================================================================
-#define BAT_ADC_PIN GPIO_NUM_34  /* ADC1_CH6, compativel com Wi-Fi/BT */
-#define BAT_CTRL_PIN GPIO_NUM_14 /* habilita divisor resistivo */
+/* ============================================================================
+ * Bateria
+ * ========================================================================== */
+#define BAT_ADC_PIN GPIO_NUM_34 /* ADC1_CH6 */
+#define BAT_CTRL_PIN                                                           \
+  GPIO_NUM_14 /* habilita o divisor via MOSFET (pino emite sinal curto no      \
+                 boot: inofensivo) */
 
-// ============================================================================
-// Botao de troca de dispositivo / pareamento
-// ============================================================================
-// O GPIO0 agora e o MCLK, entao o botao BOOT da placa NAO pode mais ser usado.
-// Botao externo entre GPIO2 e GND (pull-up interno ativado em software).
-// (GPIO2 em nivel baixo no boot e inofensivo; so entra em modo download se
-//  GPIO0 tambem estiver baixo.)
+/* ============================================================================
+ * Botao de troca de dispositivo / pareamento (GPIO2 -> GND, pull-up interno).
+ * Baixo no boot so importa se o GPIO0 tambem estiver baixo.
+ * ========================================================================== */
 #define BOARD_BUTTON_SWITCH_GPIO GPIO_NUM_2
 
-// ============================================================================
-// Sensor de proximidade APDS-9930 (I2C compartilhado com o codec)
-// ============================================================================
+/* ============================================================================
+ * APDS-9930 (I2C compartilhado)
+ * VDD ligado direto em 3,3 V (sem GPIO de energia): evita alimentar o sensor
+ * pelos pull-ups do I2C e tira um pino de strapping do circuito.
+ * O driver usa PON/PEN por registrador quando CONFIG_HEADSET_APDS_DUTY_CYCLE=y.
+ * ========================================================================== */
 #define BOARD_APDS9930_I2C_ADDR 0x39
-#define BOARD_APDS9930_PWR_GPIO 15 /* alimenta o sensor; VL fixo em 3,3V */
+#define BOARD_APDS9930_PWR_GPIO (-1) /* -1 = sem controle de energia por GPIO  \
+                                      */
+
+/* ============================================================================
+ * Reserva
+ *  Livres/uso restrito: GPIO0 (BOOT, deixar livre), GPIO15 (strapping, so saida
+ *  com pull-down externo), GPIO36 (somente entrada).
+ *  Todos os pinos de saida "normais" estao ocupados. Para vibracall e servos
+ *  use um PCA9685 no I2C ja existente (16 canais PWM, endereco 0x40), em vez
+ *  de gastar GPIO.
+ * ========================================================================== */

@@ -12,8 +12,8 @@
 
 #include "bt_app_core.h"
 
-#include "audio_codec.h"
-#include "audio_io.h"
+#include "audio.h"
+#include "audio_data.h"
 #include "bt_a2dp.h"
 #include "bt_link_mgr.h"
 #include "headset_events.h"
@@ -28,19 +28,19 @@ static volatile bool s_slc_up;
 static volatile bool s_xapl_sent;
 static volatile int  s_last_level = -1;   /* ultimo nivel 0..9 enviado nesta conexao */
 
-/* ---- dados de audio (contexto da pilha BT: nao bloquear) ---- */
+/* ---- dados de audio (plano de dados de streaming contínuo PCM: nao bloquear) ---- */
 
 /* voz do interlocutor, PCM 16 bits mono (8 kHz CVSD / 16 kHz mSBC) */
 static void hf_incoming_cb(const uint8_t *buf, uint32_t len)
 {
-    audio_io_call_downlink_push(buf, len);
+    audio_data_call_downlink_push(buf, len);
     esp_hf_client_outgoing_data_ready(); /* o envio do microfone acompanha o recebimento */
 }
 
-/* seu microfone: preenche 'sz' bytes */
+/* seu microfone: preenche 'sz' bytes a partir do uplink com Voice NR */
 static uint32_t hf_outgoing_cb(uint8_t *buf, uint32_t sz)
 {
-    return audio_io_call_uplink_pull(buf, sz);
+    return audio_data_call_uplink_pull(buf, sz);
 }
 
 /* ---- eventos (task BT_APP) ---- */
@@ -94,24 +94,30 @@ static void hf_evt_hdl(uint16_t event, void *p)
         /* Volume de chamada so vale para o alto-falante e NAO e gravado no slot (e do HFP, 0..15) */
         if (hf->volume_control.type == ESP_HF_VOLUME_CONTROL_TARGET_SPK) {
             ESP_LOGI(TAG, "Volume de chamada do celular: %d/15", hf->volume_control.volume);
-            audio_codec_set_volume((uint8_t)(hf->volume_control.volume * 127 / 15));
+            uint8_t vol_pct = (uint8_t)(hf->volume_control.volume * 100 / 15);
+            audio_cmd_set_volume_send(vol_pct);
         }
         break;
 
     case ESP_HF_CLIENT_AUDIO_STATE_EVT:
         switch (hf->audio_stat.state)
         {
-    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED: /* CVSD: banda estreita */
-        audio_io_start(AUDIO_IO_CALL, 8000);
+    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED: /* CVSD: banda estreita 8 kHz */
+        audio_cmd_start_call_send(8000, true);
         break;
-    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC: /* mSBC: banda larga */
-        audio_io_start(AUDIO_IO_CALL, 16000);
+    case ESP_HF_CLIENT_AUDIO_STATE_CONNECTED_MSBC: /* mSBC: banda larga 16 kHz */
+        audio_cmd_start_call_send(16000, true);
         break;
-    case ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED:
-        audio_io_stop_mode(AUDIO_IO_CALL);
-        audio_codec_set_volume(bt_link_mgr_get_volume()); /* devolve o volume da musica do slot */
+    case ESP_HF_CLIENT_AUDIO_STATE_DISCONNECTED: {
+        /* Para o modo de chamada via comando */
+        audio_cmd_stop_send(2);
+        /* Devolve o volume da musica do slot */
+        uint8_t v = bt_link_mgr_get_volume();
+        uint8_t v_pct = (uint8_t)((uint32_t)v * 100 / 127);
+        audio_cmd_set_volume_send(v_pct);
         bt_a2dp_resume_audio(); /* volta a musica, se estava tocando */
         break;
+    }
         default:
             break;
         }

@@ -345,23 +345,23 @@ void audio_io_stop_mode(audio_io_mode_t mode)
 
 audio_io_mode_t audio_io_get_mode(void) { return s_mode; }
 
-/* ---------------- entradas de dados (contexto da pilha BT: nao podem bloquear) ---------------- */
+/* ---------------- Entradas de dados (Plano de Dados Puro - áudio contínuo, não bloqueia) ---------------- */
 
-void audio_io_music_push(const uint8_t *d, uint32_t len)
+void audio_data_music_push(const uint8_t *d, uint32_t len)
 {
     len &= ~3u;                                  /* frames de 4 bytes (L16+R16) */
     if (s_mode != AUDIO_IO_MUSIC || len == 0) return;
-    xRingbufferSend(s_music_rb, d, len, 0);      /* cheio: descarta */
+    xRingbufferSend(s_music_rb, d, len, 0);      /* cheio: descarta sem travar a pilha BT */
 }
 
-void audio_io_call_downlink_push(const uint8_t *d, uint32_t len)
+void audio_data_call_downlink_push(const uint8_t *d, uint32_t len)
 {
     len &= ~1u;
     if (s_mode != AUDIO_IO_CALL || len == 0) return;
     xRingbufferSend(s_dl_rb, d, len, 0);
 }
 
-uint32_t audio_io_call_uplink_pull(uint8_t *buf, uint32_t size)
+uint32_t audio_data_call_uplink_pull(uint8_t *buf, uint32_t size)
 {
     uint32_t got = 0;
     if (s_mode == AUDIO_IO_CALL) {
@@ -373,6 +373,7 @@ uint32_t audio_io_call_uplink_pull(uint8_t *buf, uint32_t size)
     if (got < size) memset(buf + got, 0, size - got);   /* falta de dados = silencio */
     return size;
 }
+
 
 /* ---------------- init ---------------- */
 

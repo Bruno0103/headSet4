@@ -7,7 +7,8 @@
 
 #include "bt_app_core.h"      /* bt_app_work_dispatch */
 
-#include "audio_io.h"
+#include "audio.h"
+#include "audio_data.h"
 #include "headset_events.h"
 
 static esp_bd_addr_t s_remote;
@@ -22,10 +23,10 @@ static const char *s_a2d_conn_state_str[] = {"Disconnected", "Connecting", "Conn
 static const char *s_a2d_audio_state_str[] = {"Suspended", "Started"};
 #define APP_DELAY_VALUE 50 // 5ms
 
-/* Contexto da pilha BT: so repassa o PCM (ja decodificado de SBC) para o buffer. */
+/* Contexto da pilha BT: plano de dados de áudio contínuo para o ringbuffer de música */
 static void a2dp_data_cb(const uint8_t *data, uint32_t len)
 {
-    audio_io_music_push(data, len);
+    audio_data_music_push(data, len);
 }
 
 static uint32_t rate_from_cfg(const esp_a2d_mcc_t *mcc)
@@ -91,7 +92,8 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
             if (s_has_remote && memcmp(bda, s_remote, sizeof s_remote) == 0) {
                 s_has_remote = false;
                 s_streaming = false;
-                audio_io_stop_mode(AUDIO_IO_MUSIC);
+                /* Envia comando assíncrono para o Actor Audio parar a reprodução */
+                audio_cmd_stop_send(0xFF);
                 headset_streaming_evt_t st = { .streaming = false };
                 headset_event_post(HEADSET_EVT_STREAMING, &st, sizeof st);
             }
@@ -109,9 +111,11 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
         ESP_LOGI(TAG, "A2DP audio state: %s", s_a2d_audio_state_str[a2d->audio_stat.state]);
         s_streaming = (a2d->audio_stat.state == ESP_A2D_AUDIO_STATE_STARTED);
         if (s_streaming) {
-            audio_io_start(AUDIO_IO_MUSIC, s_rate);
+            /* Envia comando AUDIO_CMD_START_MUSIC para o Actor Audio (Core 1) */
+            audio_cmd_start_music_send(s_rate);
         } else {
-            audio_io_stop_mode(AUDIO_IO_MUSIC);
+            /* Envia comando AUDIO_CMD_STOP para o Actor Audio */
+            audio_cmd_stop_send(1);
         }
         headset_streaming_evt_t st = { .streaming = s_streaming };
         headset_event_post(HEADSET_EVT_STREAMING, &st, sizeof st);
@@ -171,8 +175,10 @@ bool bt_a2dp_is_streaming(void) { return s_streaming; }
 
 void bt_a2dp_resume_audio(void)
 {
-    if (s_streaming)
-        audio_io_start(AUDIO_IO_MUSIC, s_rate);
+    if (s_streaming) {
+        /* Envia comando assíncrono para o Actor Audio retomar a reprodução na taxa configurada */
+        audio_cmd_start_music_send(s_rate);
+    }
 }
 
 esp_err_t bt_a2dp_start(void)

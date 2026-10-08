@@ -36,7 +36,17 @@ esp_err_t audio_io_play_tones(const audio_tone_t *seq, size_t count);
 /** true enquanto uma sequencia de tons ainda esta tocando. */
 bool audio_io_tones_busy(void);
 
-/* --- usados nos callbacks de dados do Bluetooth (nao bloqueiam) --- */
-void     audio_io_music_push(const uint8_t *pcm_stereo16, uint32_t len);          /* A2DP */
-void     audio_io_call_downlink_push(const uint8_t *pcm_mono16, uint32_t len);    /* HFP incoming */
-uint32_t audio_io_call_uplink_pull(uint8_t *pcm_mono16, uint32_t size);           /* HFP outgoing */
+#include "audio_data.h"
+
+/* --- Usados nos callbacks de dados do Bluetooth (plano de dados rápido, não bloqueia) ---
+ * Os aliases abaixo mantêm compatibilidade retroativa enquanto delegam para audio_data_*. */
+static inline void audio_io_music_push(const uint8_t *pcm_stereo16, uint32_t len) {
+    audio_data_music_push(pcm_stereo16, len);
+}
+static inline void audio_io_call_downlink_push(const uint8_t *pcm_mono16, uint32_t len) {
+    audio_data_call_downlink_push(pcm_mono16, len);
+}
+static inline uint32_t audio_io_call_uplink_pull(uint8_t *pcm_mono16, uint32_t size) {
+    return audio_data_call_uplink_pull(pcm_mono16, size);
+}
+
