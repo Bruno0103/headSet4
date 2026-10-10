@@ -142,13 +142,29 @@ flowchart TD
 
 ---
 
-### Passo 7: Exclusão do Legado e Endurecimento (Clean-up Final)
+### Passo 7: App do Celular e Controle BLE (Concluído)
+**Objetivo:** Prover serviço GATT seguro para smartphones e desacoplar o tráfego do app móvel via actor sob demanda.
+- **Tarefas:**
+  1. [x] **WP 7.1:** Serviço GATT de controle `src/bt/bt_ctl_service.c/.h` com comandos criptografados (`PERM_WRITE_ENCRYPTED`) e respostas/telemetria via GATT Notify.
+  2. [x] **WP 7.2:** Actor sob demanda `phone_ctl` (`src/bt/phone_ctl.c/.h`) com parsing JSON estruturado via `cJSON`, fragmentação de pacotes GATT e despacho de ordens para os respectivos atores donos (`audio`, `bt_link`, `settings`).
+  3. [x] **WP 7.3:** Telemetria BLE reativa alimentada pelo barramento central (`SENSOR_EVT`, `BT_EVT`, `AUDIO_EVT`, `CFG_EVT`) com mecanismo de *throttling* temporal (500 ms).
+  4. [x] **WP 7.4:** Documentação técnica da matriz de segurança e comandos com confirmação física (`docs/PHYSICAL_CONFIRMATION_COMMANDS.md`).
+
+---
+
+### Passo 8: Energia e Power Management (Fase 8 - A8) (Concluído)
+**Objetivo:** Habilitação de sono leve (`esp_pm`) e gestão de locks de energia.
+- **Tarefas:**
+  1. [x] **WP 8.1:** Relatório de viabilidade de DFS e tickless idle com BT Classic / A2DP ativo (`docs/PM_VIABILITY_REPORT.md`).
+  2. [x] **WP 8.2:** Tabela de `esp_pm_lock` por actor no firmware (`docs/POWER.md` e suporte a `ESP_PM_APB_FREQ_MAX` em `audio.c`).
+  3. [x] **WP 8.3:** Medição e estimativas de consumo nos diferentes estados (`docs/POWER.md`).
+
+---
+
+### Passo 9: Exclusão do Legado e Endurecimento (Clean-up Final)
 **Objetivo:** Remover permanentemente os canais e arquivos antigos.
 - **Tarefas:**
   1. Deletar os shims de compatibilidade `main/src/core/headset_events.h` e `main/src/core/headset_events.c`.
   2. Substituir todas as referências residuais de `HEADSET_EVENT` pelas bases oficiais (`SENSOR_EVT`, `BT_EVT`, `AUDIO_EVT`, `CFG_EVT`).
-  3. Executar script de auditoria estática:
-     - Garantir que nenhum arquivo de `src/display/` inclui cabeçalhos de `src/bt/` ou `src/sensor/`.
-     - Garantir que nenhum arquivo de `src/bt/` inclui cabeçalhos de `src/audio/` (exceto `audio_data.h`).
-     - Garantir zero ocorrências de `portMAX_DELAY` dentro de handlers registrados no `esp_event`.
-  4. Executar soak test de 24 horas e validar contadores de mensagens descartadas em zero.
+  3. Executar script de auditoria estática de conformidade e soak test.
+

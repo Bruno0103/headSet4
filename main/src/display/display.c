@@ -15,6 +15,7 @@
 #include "lvgl.h"
 #include "ui.h"
 #include "ui_bridge.h"
+#include "ui_model.h"
 
 static const char *TAG = "display";
 
@@ -258,12 +259,15 @@ esp_err_t display_create_app_ui(void) {
 }
 
 esp_err_t display_init(void) {
-  /* Inicializa a camada de ponte entre a UI e os recursos de hardware do fone
-   */
+  /* Inicializa a camada de ponte entre a UI e os recursos de hardware do fone */
   ui_bridge_init();
 
   lv_init();
   lv_tick_set_cb(lvgl_tick_cb);
+
+  /* Inicializa o modelo reativo de dados e os subjects do LVGL 9 */
+  ui_model_init();
+  ui_model_register_events();
 
   lv_display_t *disp = lv_display_create(LCD_H_RES, LCD_V_RES);
   ESP_RETURN_ON_FALSE(disp, ESP_ERR_NO_MEM, TAG, "lv_display_create");
@@ -297,7 +301,33 @@ esp_err_t display_init(void) {
 
 void display_task(void *arg) {
   (void)arg;
+  lv_display_t *disp = lv_display_get_default();
+  bool screen_sleeping = false;
+
   for (;;) {
+    /* WP 6.1: Drena com segurança atualizações recebidas por eventos para o contexto do LVGL */
+    ui_model_drain_updates();
+
+    /* WP 6.4: Gestão do tempo de inatividade da tela */
+    if (disp != NULL) {
+      uint32_t inactive_ms = lv_display_get_inactive_time(disp);
+      int timeout_sec = ui_bridge_display_get_tempo_tela();
+
+      if (timeout_sec > 0 && inactive_ms >= (uint32_t)(timeout_sec * 1000)) {
+        if (!screen_sleeping) {
+          screen_sleeping = true;
+          gpio_set_level(LCD_GPIO_BL, 0);
+          ESP_LOGI(TAG, "Display suspenso por inatividade (%d s)", timeout_sec);
+        }
+      } else {
+        if (screen_sleeping) {
+          screen_sleeping = false;
+          gpio_set_level(LCD_GPIO_BL, 1);
+          ESP_LOGI(TAG, "Display acordado por atividade de usuario");
+        }
+      }
+    }
+
     uint32_t wait_ms = lv_timer_handler();
     if (wait_ms < 5)
       wait_ms = 5;

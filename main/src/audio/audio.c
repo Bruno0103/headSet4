@@ -23,6 +23,10 @@
 #include "sfx.h"
 #include "hs_events.h"
 
+#ifdef CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#endif
+
 static const char *TAG = "act_audio";
 
 /**
@@ -35,6 +39,10 @@ typedef struct {
     uint8_t           current_vol_pct;   /**< Volume master atual (0 a 100%). */
     bool              is_muted;          /**< Estado de mute do canal master. */
     uint8_t           current_eq_preset; /**< Preset ativo do equalizador. */
+#ifdef CONFIG_PM_ENABLE
+    esp_pm_lock_handle_t pm_lock;        /**< Power management lock para manter APB/CPU em alta frequência durante I2S. */
+    bool                 pm_lock_held;   /**< Flag indicando se o lock de energia está atualmente retido. */
+#endif
 } audio_actor_ctx_t;
 
 static audio_actor_ctx_t s_audio_ctx = {
@@ -44,6 +52,10 @@ static audio_actor_ctx_t s_audio_ctx = {
     .current_vol_pct   = 100,
     .is_muted          = false,
     .current_eq_preset = 0,
+#ifdef CONFIG_PM_ENABLE
+    .pm_lock           = NULL,
+    .pm_lock_held      = false,
+#endif
 };
 
 /* ============================================================================
@@ -100,6 +112,41 @@ static void post_eq_changed(uint8_t preset_id, const int8_t gains_db[5])
 }
 
 /* ============================================================================
+ * GERENCIAMENTO DE POWER MANAGEMENT LOCK (esp_pm_lock) - WP 3.4 & WP 8.2
+ * Mantém APB a 80 MHz durante reprodução I2S para evitar jitter/underrun de DMA
+ * ============================================================================ */
+
+static void audio_pm_lock_acquire(void)
+{
+#ifdef CONFIG_PM_ENABLE
+    if (s_audio_ctx.pm_lock && !s_audio_ctx.pm_lock_held) {
+        esp_err_t err = esp_pm_lock_acquire(s_audio_ctx.pm_lock);
+        if (err == ESP_OK) {
+            s_audio_ctx.pm_lock_held = true;
+            ESP_LOGI(TAG, "PM Lock retido (APB_MAX para I2S ativo)");
+        } else {
+            ESP_LOGW(TAG, "Falha ao reter PM Lock: %s", esp_err_to_name(err));
+        }
+    }
+#endif
+}
+
+static void audio_pm_lock_release(void)
+{
+#ifdef CONFIG_PM_ENABLE
+    if (s_audio_ctx.pm_lock && s_audio_ctx.pm_lock_held) {
+        esp_err_t err = esp_pm_lock_release(s_audio_ctx.pm_lock);
+        if (err == ESP_OK) {
+            s_audio_ctx.pm_lock_held = false;
+            ESP_LOGI(TAG, "PM Lock liberado (retorno ao estado ocioso/DFS)");
+        } else {
+            ESP_LOGW(TAG, "Falha ao liberar PM Lock: %s", esp_err_to_name(err));
+        }
+    }
+#endif
+}
+
+/* ============================================================================
  * HANDLER PRINCIPAL DE MENSAGENS DO ACTOR AUDIO
  * Roda exclusivamente na task do Actor (Core 1, Prio 10)
  * ============================================================================ */
@@ -129,6 +176,7 @@ static void audio_actor_msg_handler(hs_actor_t *self, const hs_msg_t *msg)
 
         esp_err_t err = audio_io_start(AUDIO_IO_MUSIC, rate);
         if (err == ESP_OK) {
+            audio_pm_lock_acquire();
             s_audio_ctx.current_mode = AUDIO_MODE_MUSIC_A2DP;
             s_audio_ctx.current_rate = rate;
             post_mode_changed(AUDIO_MODE_MUSIC_A2DP, rate);
@@ -151,6 +199,7 @@ static void audio_actor_msg_handler(hs_actor_t *self, const hs_msg_t *msg)
         /* audio_io_start interrompe qualquer musica ativa comutando o I2S full-duplex e filtros */
         esp_err_t err = audio_io_start(AUDIO_IO_CALL, rate);
         if (err == ESP_OK) {
+            audio_pm_lock_acquire();
             s_audio_ctx.current_mode = AUDIO_MODE_CALL_HFP;
             s_audio_ctx.current_rate = rate;
             post_mode_changed(AUDIO_MODE_CALL_HFP, rate);
@@ -181,6 +230,7 @@ static void audio_actor_msg_handler(hs_actor_t *self, const hs_msg_t *msg)
             }
 
             s_audio_ctx.current_mode = AUDIO_MODE_IDLE;
+            audio_pm_lock_release();
             post_mode_changed(AUDIO_MODE_IDLE, s_audio_ctx.current_rate);
         }
         break;
@@ -303,6 +353,7 @@ static void audio_actor_on_stop(void *ctx)
     audio_io_stop_mode(AUDIO_IO_MUSIC);
     audio_io_stop_mode(AUDIO_IO_CALL);
     audio_codec_power_down();
+    audio_pm_lock_release();
 }
 
 /* ============================================================================
@@ -321,6 +372,18 @@ esp_err_t audio_init(void)
 
     /* 3. Inicializa I2S DMA, canais e buffers de baixa latência */
     ESP_RETURN_ON_ERROR(audio_io_init(), TAG, "io");
+
+#ifdef CONFIG_PM_ENABLE
+    /* Inicializa o Power Management Lock para manter APB em frequência máxima (80 MHz) durante I2S */
+    if (s_audio_ctx.pm_lock == NULL) {
+        esp_err_t pm_err = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "audio_i2s", &s_audio_ctx.pm_lock);
+        if (pm_err != ESP_OK) {
+            ESP_LOGW(TAG, "Não foi possível criar esp_pm_lock para áudio: %s", esp_err_to_name(pm_err));
+        } else {
+            ESP_LOGI(TAG, "Power Management Lock (audio_i2s) registrado com sucesso");
+        }
+    }
+#endif
 
     /* 4. Configuração e criação do Actor Audio conforme AGENTS.md §4.2 (Core 1, Prio 10, Fixo) */
     const hs_actor_cfg_t actor_cfg = {
@@ -355,6 +418,15 @@ esp_err_t audio_deinit(void)
     esp_err_t err = hs_actor_stop(s_audio_ctx.actor, pdMS_TO_TICKS(1000));
     hs_actor_destroy(s_audio_ctx.actor);
     s_audio_ctx.actor = NULL;
+
+#ifdef CONFIG_PM_ENABLE
+    if (s_audio_ctx.pm_lock) {
+        audio_pm_lock_release();
+        esp_pm_lock_delete(s_audio_ctx.pm_lock);
+        s_audio_ctx.pm_lock = NULL;
+    }
+#endif
+
     return err;
 }
 

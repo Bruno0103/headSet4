@@ -18,18 +18,23 @@
 
 #include "esp_log.h"
 #include "ui_bridge.h"
+#include "cJSON.h"
+#include "bt_ctl_service.h"
+#include "phone_ctl.h"
 
 static const char *TAG = "phone_app_bridge";
 
-/* ============================================================================
- * INICIALIZAÇÃO
- * ============================================================================
- */
 
 esp_err_t phone_app_bridge_init(void) {
-  ESP_LOGI(TAG, "Ponte de comunicacao Phone App <-> HeadSet pronta");
+  ESP_LOGI(TAG, "Ponte de comunicacao Phone App <-> HeadSet inicializando");
+  esp_err_t err = phone_ctl_init();
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "phone_ctl_init: %s", esp_err_to_name(err));
+  }
   return ESP_OK;
 }
+
+
 
 /* ============================================================================
  * 1. BLUETOOTH
@@ -296,8 +301,16 @@ esp_err_t phone_app_bridge_process_command(const char *json_cmd,
 
   ESP_LOGI(TAG, "Processando comando recebido do app: %s", json_cmd);
 
-  /* Tratamento simples e direto de strings de comando para retorno em JSON */
-  if (strstr(json_cmd, "get_all_status")) {
+  cJSON *root = cJSON_Parse(json_cmd);
+  if (!root) {
+    snprintf(json_resp, max_resp_len, "{\"status\":\"error\",\"msg\":\"json_invalido\"}");
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  cJSON *cmd_item = cJSON_GetObjectItem(root, "cmd");
+  const char *cmd = cmd_item && cJSON_IsString(cmd_item) ? cmd_item->valuestring : "";
+
+  if (strcmp(cmd, "get_all_status") == 0) {
     char n1[32], n2[32], st1[32], st2[32], st_alt[32];
     phone_app_bt_get_nome_1(n1, sizeof(n1));
     phone_app_bt_get_nome_2(n2, sizeof(n2));
@@ -319,10 +332,12 @@ esp_err_t phone_app_bridge_process_command(const char *json_cmd,
              n1, n2, st1, st2, st_alt, prox_st, vib_st, ear_st, bat_st,
              phone_app_display_get_status() ? "true" : "false",
              phone_app_display_get_brilho());
-    return ESP_OK;
+  } else {
+    /* Resposta padrão de confirmação (ACK) */
+    snprintf(json_resp, max_resp_len, "{\"status\":\"ok\"}");
   }
 
-  /* Resposta padrão de confirmação (ACK) */
-  snprintf(json_resp, max_resp_len, "{\"status\":\"ok\"}");
+  cJSON_Delete(root);
   return ESP_OK;
 }
+

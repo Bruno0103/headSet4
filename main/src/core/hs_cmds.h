@@ -276,6 +276,27 @@ typedef enum {
     FP_CRYPTO_CMD_DECRYPT,
 } fp_crypto_cmd_id_t;
 
+/* ============================================================================
+ * 8. COMANDOS DO ACTOR PHONE_CTL (Tratamento de Comandos BLE do Smartphone)
+ * Sob demanda (Core 0, Prioridade 5)
+ * ============================================================================ */
+
+typedef enum {
+    /** Solicita processamento de mensagem/pacote recebido do app (payload: phone_cmd_msg_t) */
+    PHONE_CMD_PROCESS_MSG = HS_CMD_PHONE_BASE + 1,
+
+    /** Notifica desconexão ou encerramento de link BLE para o ator */
+    PHONE_CMD_CLIENT_DISCONNECTED,
+} phone_cmd_id_t;
+
+typedef struct {
+    uint16_t conn_id;            /**< Identificador da conexão BLE ativa. */
+
+    uint16_t len;                /**< Tamanho dos dados contidos em raw. */
+    uint8_t  raw[40];            /**< Payload fragmentado ou comando direto. */
+} phone_cmd_msg_t;
+
 #ifdef __cplusplus
 }
 #endif
+
