@@ -233,8 +233,11 @@ static void audio_task(void *arg)
         if (m == AUDIO_IO_IDLE || s_reconfig_req) {
             vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 2));
         } else {
-            /* Cede 1 tick de forma cooperativa para alimentar o Task Watchdog do Core 1 */
-            vTaskDelay(1);
+            /* Em streaming ativo (MUSIC ou CALL), a sincronização e temporização do loop
+             * são governadas nativamente pelo bloqueio do DMA (i2s_channel_write com timeout)
+             * e pelo recebimento do Ringbuffer (xRingbufferReceiveUpTo). Inserir vTaskDelay(1)
+             * incondicional a cada iteração causava jitter e subamostragem audível. */
+            taskYIELD();
         }
     }
 }

@@ -176,7 +176,7 @@ typedef struct {
         uint32_t        u32;
         uint16_t        u16;
         uint8_t         u8;
-        uint8_t         bytes[32];   /**< Para blobs curtos ou strings. */
+        uint8_t         bytes[40];   /**< Para blobs curtos ou strings (ex: slots BT). */
     } val;
 } settings_cmd_set_val_t;
 

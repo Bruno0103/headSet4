@@ -434,7 +434,7 @@ esp_err_t settings_set_u32(const char *key, uint32_t val)
 
 esp_err_t settings_set_blob(const char *key, const void *blob, size_t len)
 {
-    if (!s_settings.actor || !key || !blob || len > 32) {
+    if (!s_settings.actor || !key || !blob || len > sizeof(((settings_cmd_set_val_t *)0)->val.bytes)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -557,7 +557,7 @@ esp_err_t settings_get_u32(const char *key, uint32_t *out_val, uint32_t default_
 
 esp_err_t settings_get_blob(const char *key, void *out_blob, size_t len)
 {
-    if (!out_blob || !key || len == 0 || len > 32) {
+    if (!out_blob || !key || len == 0 || len > sizeof(((settings_cmd_set_val_t *)0)->val.bytes)) {
         return ESP_ERR_INVALID_ARG;
     }
 

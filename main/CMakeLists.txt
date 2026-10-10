@@ -29,7 +29,6 @@ idf_component_register(
          "src/display/display.c"
          "src/display/ui_bridge.c"
          "src/display/ui_model.c"
-         "src/bt/phone_app_bridge.c"
     INCLUDE_DIRS "."
                  "src/core"
                  "src/board"

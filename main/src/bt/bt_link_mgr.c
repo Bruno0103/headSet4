@@ -76,7 +76,7 @@ typedef struct {
     esp_event_base_t base;
     int32_t          id;
     uint8_t          len;
-    uint8_t          payload[40];
+    uint8_t          payload[32];
 } bt_internal_evt_msg_t;
 
 /* Payload interno para autenticação GAP */
@@ -221,6 +221,18 @@ static void schedule_connect(void)
     ESP_LOGI(TAG, "Reconexao com slot %d em %u ms (tentativa %d/%d)", s_ctx.sel, (unsigned)ms, s_ctx.attempts + 1,
              MAX_CONNECT_TRIES);
     esp_timer_start_once(s_connect_tmr, (uint64_t)ms * 1000);
+}
+
+static void post_slot_changed(void)
+{
+    bt_slot_evt_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.active_slot = (uint8_t)s_ctx.sel;
+    if (s_ctx.slot[s_ctx.sel].valid) {
+        memcpy(ev.bda, s_ctx.slot[s_ctx.sel].bda, ESP_BD_ADDR_LEN);
+    }
+    ev.is_connected = (s_ctx.link.profiles != 0) && is_sel_bda(s_ctx.link.bda);
+    hs_event_post(BT_EVT, BT_EVT_SLOT_CHANGED, &ev, sizeof(ev));
 }
 
 static const char *state_str(bt_link_state_t s)
@@ -407,6 +419,13 @@ static bt_gap_cfm_decision_t on_ssp_confirm(const uint8_t *bda, uint32_t passkey
         ESP_LOGI(TAG, "Pareamento manual: aceitando " ESP_BD_ADDR_STR, ESP_BD_ADDR_HEX(bda));
         return BT_GAP_CFM_ACCEPT;
     }
+
+    /* Se o dispositivo já tiver vínculo prévio registrado em qualquer slot ou no GAP, aceita a reconexão */
+    if (bt_gap_is_bonded(bda)) {
+        ESP_LOGI(TAG, "Reconexao de dispositivo vinculado aceita: " ESP_BD_ADDR_STR, ESP_BD_ADDR_HEX(bda));
+        return BT_GAP_CFM_ACCEPT;
+    }
+
     ESP_LOGW(TAG, "SSP de " ESP_BD_ADDR_STR " recusado: fora da janela de pareamento", ESP_BD_ADDR_HEX(bda));
     return BT_GAP_CFM_REJECT;
 }
@@ -463,6 +482,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             s_ctx.attempts = 0;
             nvs_save();
             ESP_LOGI(TAG, "Slot selecionado: %d (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
+            post_slot_changed();
             stop_connect_timer();
             apply_state();
             break;
@@ -509,6 +529,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
                     atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
                     s_ctx.attempts = 0;
                     nvs_save();
+                    post_slot_changed();
                     stop_connect_timer();
                 } else {
                     ESP_LOGW(TAG, "Perfil 0x%X de " ESP_BD_ADDR_STR " recusado (nao e o slot selecionado)", ev->profile,
@@ -530,6 +551,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             s_ctx.attempts = 0;
             if (s_connect_tmr) esp_timer_stop(s_connect_tmr);
             ESP_LOGI(TAG, "Link ativo com " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_ctx.link.bda), s_ctx.link.profiles);
+            post_slot_changed();
             if ((ev->profile & BT_PROFILE_HFP) && s_ctx.battery >= 0) {
                 bt_hfp_report_battery((uint8_t)s_ctx.battery);
             }
@@ -549,6 +571,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
                 ESP_LOGI(TAG, "Perfil 0x%X caiu (restam 0x%X)", ev->profile, s_ctx.link.profiles);
                 if (!s_ctx.link.profiles) {
                     if (s_complete_tmr) esp_timer_stop(s_complete_tmr);
+                    post_slot_changed();
                     apply_state();
                 }
             }
@@ -580,6 +603,7 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
                 s_ctx.attempts = 0;
                 nvs_save();
                 ESP_LOGI(TAG, "Comando: Slot %d selecionado (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
+                post_slot_changed();
                 stop_connect_timer();
                 apply_state();
             }
@@ -873,8 +897,9 @@ esp_err_t bt_link_mgr_start(void)
 
     s_ctx.worn = apds9930_is_worn();
 
-    /* 6. Aplica o estado inicial */
+    /* 6. Aplica o estado inicial e notifica o barramento */
     apply_state();
+    post_slot_changed();
 
     ESP_LOGI(TAG, "Actor bt_link pronto no Core 0 (prioridade 6, fone %s)", s_ctx.worn ? "colocado" : "retirado");
     return ESP_OK;

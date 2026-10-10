@@ -30,7 +30,7 @@ extern "C" {
  * ESTRUTURAS E TIPOS PRINCIPAIS
  * ============================================================================ */
 
-#define HS_MSG_PAYLOAD_MAX_LEN 48
+#define HS_MSG_PAYLOAD_MAX_LEN 64
 
 /**
  * @brief Handle opaco do Ator.
@@ -40,7 +40,7 @@ typedef struct hs_actor hs_actor_t;
 /**
  * @brief Mensagem trafegada nas filas dos Atores.
  *
- * Payload embutido de até 48 bytes garante zero alocação dinâmica no envio de comandos.
+ * Payload embutido de até 64 bytes garante zero alocação dinâmica no envio de comandos.
  * O campo 'reply' é utilizado exclusivamente para Direct Task Notification em hs_actor_request.
  */
 typedef struct {

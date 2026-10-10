@@ -136,7 +136,7 @@ esp_err_t settings_set_u32(const char *key, uint32_t val);
  *
  * @param key Chave identificadora.
  * @param blob Ponteiro para os dados binários.
- * @param len Tamanho do blob em bytes (máximo 32 bytes para cópia direta em hs_msg_t).
+ * @param len Tamanho do blob em bytes (máximo 40 bytes para cópia direta em hs_msg_t).
  * @return esp_err_t ESP_OK se enfileirado com sucesso.
  */
 esp_err_t settings_set_blob(const char *key, const void *blob, size_t len);

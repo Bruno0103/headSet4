@@ -232,11 +232,11 @@ esp_err_t audio_codec_init(void)
     W(WM8960_R_RINPATH, PATH_MN1 | PATH_MIC2B);
     ESP_RETURN_ON_ERROR(audio_codec_set_ambient_gain(23), TAG, "gain");     /* 0 dB */
 
-    /* Mixers de saida: DAC + INPUT3 (0 dB) + mic ambiente analogico (0 dB) */
-    W(WM8960_R_LOUTMIX, MIX_DAC2OUT | MIX_IN3OUT);
-    W(WM8960_R_ROUTMIX, MIX_DAC2OUT | MIX_IN3OUT);
-    W(WM8960_R_BYPASS1, BYPASS_B2O);
-    W(WM8960_R_BYPASS2, BYPASS_B2O);
+    /* Mixers de saida: Apenas DAC para fones de ouvido (sem retorno de mic analogico para fones) */
+    W(WM8960_R_LOUTMIX, MIX_DAC2OUT);
+    W(WM8960_R_ROUTMIX, MIX_DAC2OUT);
+    W(WM8960_R_BYPASS1, 0);                   /* Desliga bypass analogico de mic para fone L */
+    W(WM8960_R_BYPASS2, 0);                   /* Desliga bypass analogico de mic para fone R */
 
     /* Interface: I2S, 16 bits, codec = peripheral (o ESP32 gera BCLK/LRCLK) */
     W(WM8960_R_IFACE1, 0x002);
