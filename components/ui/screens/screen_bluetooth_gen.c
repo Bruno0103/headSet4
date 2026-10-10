@@ -67,7 +67,7 @@ lv_obj_t * screen_bluetooth_create(void)
         lv_obj_set_style_text_color(label_0, lv_color_hex(0x67D5E8), 0);
 
         lv_obj_t * label_1 = label_create(row_0);
-        lv_label_set_text(label_1, "Conectado");
+        lv_label_bind_text(label_1, &subject_g_subj_bt_active_slot, NULL);
         lv_obj_set_style_text_font(label_1, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_1, lv_color_hex(0x67D5E8), 0);
 
@@ -80,7 +80,7 @@ lv_obj_t * screen_bluetooth_create(void)
         lv_obj_set_style_text_color(label_2, lv_color_hex(0xABB6BF), 0);
 
         lv_obj_t * label_3 = label_create(row_1);
-        lv_label_set_text(label_3, "82%");
+        lv_label_bind_text(label_3, &subject_subj_battery_percent, "%d%%");
         lv_obj_set_style_text_font(label_3, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_3, lv_color_hex(0xF2F5F7), 0);
 
@@ -117,97 +117,98 @@ lv_obj_t * screen_bluetooth_create(void)
         lv_obj_t * column_0 = column_create(lv_obj_0, 12, 12, 12, 12, 8, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_set_width(column_0, lv_pct(100));
         lv_obj_set_height(column_0, 252);
-        lv_obj_t * card_0 = card_create(column_0);
-        lv_obj_set_flex_flow(card_0, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_flex_cross_place(card_0, LV_FLEX_ALIGN_CENTER, 0);
-        lv_obj_set_style_flex_track_place(card_0, LV_FLEX_ALIGN_CENTER, 0);
-        lv_obj_set_style_pad_all(card_0, 8, 0);
-        lv_obj_set_style_pad_column(card_0, 8, 0);
-        lv_obj_set_width(card_0, lv_pct(100));
-        lv_obj_set_height(card_0, 64);
-        lv_obj_set_style_bg_color(card_0, lv_color_hex(0x1A2026), 0);
-        lv_obj_set_style_radius(card_0, 4, 0);
-        lv_obj_t * column_1 = column_create(card_0, 0, 0, 0, 0, 4, 1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_t * tile_5_0 = tile_5_create(column_0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, false);
+        lv_obj_set_style_pad_column(tile_5_0, 8, 0);
+        lv_obj_set_width(tile_5_0, lv_pct(100));
+        lv_obj_set_height(tile_5_0, 64);
+        lv_obj_t * column_1 = column_create(tile_5_0, 0, 0, 0, 0, 4, 1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_set_width(column_1, 0);
         lv_obj_set_height(column_1, LV_SIZE_CONTENT);
         lv_obj_t * label_6 = label_create(column_1);
         lv_obj_set_height(label_6, 18);
-        lv_label_set_text(label_6, "Fone A");
+        lv_label_bind_text(label_6, &subject_g_subj_bt_nome_1, "%s");
         lv_obj_set_style_text_font(label_6, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_6, lv_color_hex(0xF2F5F7), 0);
 
         lv_obj_t * label_7 = label_create(column_1);
         lv_obj_set_height(label_7, 16);
-        lv_label_set_text(label_7, "Conectado");
+        lv_label_bind_text(label_7, &subject_g_subj_bt_status_1, "%s");
         lv_obj_set_style_text_font(label_7, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_7, lv_color_hex(0xABB6BF), 0);
 
-        lv_obj_t * tile_2_0 = tile_2_create(card_0, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, false);
-        lv_obj_set_style_pad_column(tile_2_0, 0, 0);
-        lv_obj_set_width(tile_2_0, 88);
-        lv_obj_set_height(tile_2_0, 36);
-        lv_obj_t * label_8 = label_create(tile_2_0);
+        lv_obj_t * card_0 = card_create(tile_5_0);
+        lv_obj_set_flex_flow(card_0, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_flex_main_place(card_0, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_cross_place(card_0, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_track_place(card_0, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_pad_hor(card_0, 4, 0);
+        lv_obj_set_style_pad_ver(card_0, 0, 0);
+        lv_obj_set_style_pad_column(card_0, 0, 0);
+        lv_obj_set_width(card_0, 88);
+        lv_obj_set_height(card_0, 36);
+        lv_obj_set_style_bg_color(card_0, lv_color_hex(0x252D35), 0);
+        lv_obj_set_style_radius(card_0, 4, 0);
+        lv_obj_t * label_8 = label_create(card_0);
         lv_label_set_text(label_8, "Desconectar");
         lv_obj_set_style_text_font(label_8, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_8, lv_color_hex(0xF2F5F7), 0);
 
-        lv_obj_t * card_1 = card_create(column_0);
-        lv_obj_set_flex_flow(card_1, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_flex_cross_place(card_1, LV_FLEX_ALIGN_CENTER, 0);
-        lv_obj_set_style_flex_track_place(card_1, LV_FLEX_ALIGN_CENTER, 0);
-        lv_obj_set_style_pad_all(card_1, 8, 0);
-        lv_obj_set_style_pad_column(card_1, 8, 0);
-        lv_obj_set_width(card_1, lv_pct(100));
-        lv_obj_set_height(card_1, 64);
-        lv_obj_set_style_bg_color(card_1, lv_color_hex(0x1A2026), 0);
-        lv_obj_set_style_radius(card_1, 4, 0);
-        lv_obj_t * column_2 = column_create(card_1, 0, 0, 0, 0, 4, 1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_t * tile_5_1 = tile_5_create(column_0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, false);
+        lv_obj_set_style_pad_column(tile_5_1, 8, 0);
+        lv_obj_set_width(tile_5_1, lv_pct(100));
+        lv_obj_set_height(tile_5_1, 64);
+        lv_obj_t * column_2 = column_create(tile_5_1, 0, 0, 0, 0, 4, 1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_set_width(column_2, 0);
         lv_obj_set_height(column_2, LV_SIZE_CONTENT);
         lv_obj_t * label_9 = label_create(column_2);
         lv_obj_set_height(label_9, 18);
-        lv_label_set_text(label_9, "Fone B");
+        lv_label_bind_text(label_9, &subject_g_subj_bt_nome_2, "%s");
         lv_obj_set_style_text_font(label_9, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_9, lv_color_hex(0xF2F5F7), 0);
 
         lv_obj_t * label_10 = label_create(column_2);
         lv_obj_set_height(label_10, 16);
-        lv_label_set_text(label_10, "Desconectado");
+        lv_label_bind_text(label_10, &subject_g_subj_bt_status_2, "%s");
         lv_obj_set_style_text_font(label_10, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_10, lv_color_hex(0xABB6BF), 0);
 
-        lv_obj_t * tile_2_1 = tile_2_create(card_1, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, false);
-        lv_obj_set_style_pad_column(tile_2_1, 0, 0);
-        lv_obj_set_width(tile_2_1, 88);
-        lv_obj_set_height(tile_2_1, 36);
-        lv_obj_t * label_11 = label_create(tile_2_1);
+        lv_obj_t * card_1 = card_create(tile_5_1);
+        lv_obj_set_flex_flow(card_1, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_flex_main_place(card_1, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_cross_place(card_1, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_track_place(card_1, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_pad_hor(card_1, 4, 0);
+        lv_obj_set_style_pad_ver(card_1, 0, 0);
+        lv_obj_set_style_pad_column(card_1, 0, 0);
+        lv_obj_set_width(card_1, 88);
+        lv_obj_set_height(card_1, 36);
+        lv_obj_set_style_bg_color(card_1, lv_color_hex(0x252D35), 0);
+        lv_obj_set_style_radius(card_1, 4, 0);
+        lv_obj_t * label_11 = label_create(card_1);
         lv_label_set_text(label_11, "Desconectar");
         lv_obj_set_style_text_font(label_11, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_11, lv_color_hex(0xF2F5F7), 0);
 
-        lv_obj_t * column_3 = column_create(column_0, 0, 0, 0, 0, 4, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_set_width(column_3, lv_pct(100));
-        lv_obj_set_height(column_3, LV_SIZE_CONTENT);
-        lv_obj_t * label_12 = label_create(column_3);
+        lv_obj_t * container_0 = container_create(column_0);
+        lv_obj_set_flex_flow(container_0, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_all(container_0, 0, 0);
+        lv_obj_set_style_pad_row(container_0, 4, 0);
+        lv_obj_set_width(container_0, lv_pct(100));
+        lv_obj_set_height(container_0, LV_SIZE_CONTENT);
+        lv_obj_t * label_12 = label_create(container_0);
         lv_obj_set_height(label_12, 16);
         lv_label_set_text(label_12, "Alternância: Manual");
         lv_obj_set_style_text_font(label_12, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_12, lv_color_hex(0xABB6BF), 0);
 
-        lv_obj_t * tile_0 = tile_create(column_3, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, false);
+        lv_obj_t * tile_0 = tile_create(container_0, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, false);
         lv_obj_set_style_pad_column(tile_0, 0, 0);
         lv_obj_set_width(tile_0, lv_pct(100));
         lv_obj_set_height(tile_0, 36);
         lv_obj_t * label_13 = label_create(tile_0);
-        lv_label_set_text(label_13, "Alternar ativo");
+        lv_label_bind_text(label_13, &subject_g_subj_bt_status_alternancia, "%s");
         lv_obj_set_style_text_font(label_13, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_13, lv_color_hex(0xF2F5F7), 0);
-
-        lv_obj_t * label_14 = label_create(column_0);
-        lv_obj_set_height(label_14, 16);
-        lv_label_set_text(label_14, "Exemplo · não é leitura real");
-        lv_obj_set_style_text_font(label_14, font_montserrat_regular_12, 0);
-        lv_obj_set_style_text_color(label_14, lv_color_hex(0xABB6BF), 0);
 
         the_root = lv_obj_0;
     }

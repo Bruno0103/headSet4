@@ -9,6 +9,12 @@ list(
   ${CMAKE_CURRENT_LIST_DIR}/components/base/label/label_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/panel/panel_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/row/row_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/slider/slider_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/cont_slider_toque_b/cont_slider_toque_b_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/cont_slider_toque_c/cont_slider_toque_c_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/cont_slider_toque_d/cont_slider_toque_d_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/cont_slider_toque_e/cont_slider_toque_e_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/cont_slider_toque/cont_slider_toque_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_2/tile_2_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_3/tile_3_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_4/tile_4_gen.c

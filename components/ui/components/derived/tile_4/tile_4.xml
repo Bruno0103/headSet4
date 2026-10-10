@@ -11,7 +11,7 @@
       name="style_base"
       layout="flex"
       flex_flow="row"
-      bg_color="0x67D5E8"
+      bg_color="0xF2F5F7"
       bg_opa="255"
       radius="4"
       border_width="0"

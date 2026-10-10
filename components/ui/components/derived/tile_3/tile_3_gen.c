@@ -44,7 +44,7 @@ lv_obj_t * tile_3_create(lv_obj_t * parent, lv_flex_align_t main_align, lv_flex_
 
         lv_style_set_layout(&style_base, LV_LAYOUT_FLEX);
         lv_style_set_flex_flow(&style_base, LV_FLEX_FLOW_ROW);
-        lv_style_set_bg_color(&style_base, lv_color_hex(0x252D35));
+        lv_style_set_bg_color(&style_base, lv_color_hex(0x67D5E8));
         lv_style_set_bg_opa(&style_base, 255);
         lv_style_set_radius(&style_base, 4);
         lv_style_set_border_width(&style_base, 0);

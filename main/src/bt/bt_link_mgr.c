@@ -97,6 +97,7 @@ typedef struct {
     int              battery;
     bool             auto_switch;
     bool             switching;
+    int64_t          switch_start_us;
 
     struct {
         uint8_t bda[ESP_BD_ADDR_LEN];
@@ -473,10 +474,17 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             break;
 
         case SENSOR_EVT_BUTTON_SHORT:
-            /* A única situação em que o comando do botão deve ser bloqueado é durante a troca de dispositivos */
+            /* Se houver troca em andamento mas já passou mais de 2,5 segundos, expira o bloqueio de segurança */
             if (s_ctx.switching) {
-                ESP_LOGW(TAG, "Troca de dispositivos em andamento: comando do botao ignorado temporariamente");
-                break;
+                int64_t elapsed_ms = (esp_timer_get_time() - s_ctx.switch_start_us) / 1000;
+                if (elapsed_ms < 2500) {
+                    ESP_LOGW(TAG, "Troca de dispositivos em andamento (%lld ms): aguarde conclusao", (long long)elapsed_ms);
+                    break;
+                } else {
+                    ESP_LOGW(TAG, "Timeout na desconexao anterior (%lld ms); forcando comutacao de slot pelo botao", (long long)elapsed_ms);
+                    s_ctx.switching = false;
+                    s_ctx.link.profiles = 0; /* Descarta estado fantasma do link anterior */
+                }
             }
 
             /* Se estava em pareamento no slot anterior, cancela e comuta para o outro slot */
@@ -493,10 +501,13 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             post_slot_changed();
             stop_connect_timer();
 
-            /* Se havia um dispositivo conectado de outro slot, sinaliza switching até que ele desconecte totalmente */
+            /* Se havia um dispositivo conectado de outro slot, sinaliza switching e salva timestamp */
             if (s_ctx.link.profiles && !is_sel_bda(s_ctx.link.bda)) {
                 s_ctx.switching = true;
+                s_ctx.switch_start_us = esp_timer_get_time();
                 ESP_LOGI(TAG, "Iniciando comutacao de slot: desconectando dispositivo anterior...");
+            } else {
+                s_ctx.switching = false;
             }
             apply_state();
             break;
@@ -625,6 +636,9 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
                 stop_connect_timer();
                 if (s_ctx.link.profiles && !is_sel_bda(s_ctx.link.bda)) {
                     s_ctx.switching = true;
+                    s_ctx.switch_start_us = esp_timer_get_time();
+                } else {
+                    s_ctx.switching = false;
                 }
                 apply_state();
             }

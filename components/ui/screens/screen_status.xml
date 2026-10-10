@@ -23,7 +23,7 @@
       <row gap="4" cross_align="center" grow="1" width="0" height="content">
         <label text="BT" style_text_font="font_montserrat_regular_12" style_text_color="0x67D5E8" />
         <label
-          text="Conectado"
+          bind_text="subject_g_subj_bt_active_slot"
           style_text_font="font_montserrat_regular_12"
           style_text_color="0x67D5E8" />
       </row>
@@ -33,7 +33,8 @@
           style_text_font="font_montserrat_regular_12"
           style_text_color="0xABB6BF" />
         <label
-          text="82%"
+          bind_text="subject_subj_battery_percent"
+          bind_text-fmt="%d%%"
           style_text_font="font_montserrat_regular_12"
           style_text_color="0xF2F5F7" />
       </row>
@@ -101,7 +102,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="Normal · 82%"
+            bind_text="subject_subj_battery_percent"
+            bind_text-fmt="%d%%"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -114,7 +116,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="3980 mV"
+            bind_text="subject_g_subj_bateria_tensao_mv"
+            bind_text-fmt="%d mV"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -127,7 +130,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="Conectado"
+            bind_text="subject_g_subj_bt_status_1"
+            bind_text-fmt="%s"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -140,7 +144,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="Desconectado"
+            bind_text="subject_g_subj_bt_status_2"
+            bind_text-fmt="%s"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -153,7 +158,7 @@
           <label
             width="0"
             flex_grow="1"
-            text="Manual"
+            bind_text="subject_g_subj_bt_alternancia_ativa"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -166,7 +171,7 @@
           <label
             width="0"
             flex_grow="1"
-            text="Ligado"
+            bind_text="subject_g_subj_display_ligado"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -179,7 +184,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="70% · 30 s"
+            bind_text="subject_g_subj_display_brilho"
+            bind_text-fmt="%d%%"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -192,7 +198,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="Pronto · 90°"
+            bind_text="subject_g_subj_orelhas_status_texto"
+            bind_text-fmt="%s"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -205,7 +212,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="Pronto · 60%"
+            bind_text="subject_g_subj_vibracall_status_texto"
+            bind_text-fmt="%s"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />
@@ -218,7 +226,8 @@
           <label
             width="0"
             flex_grow="1"
-            text="Pronto · 80"
+            bind_text="subject_g_subj_proximidade_status_texto"
+            bind_text-fmt="%s"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xF2F5F7"
             style_text_align="right" />

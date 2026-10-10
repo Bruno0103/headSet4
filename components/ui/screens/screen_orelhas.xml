@@ -23,7 +23,7 @@
       <row gap="4" cross_align="center" grow="1" width="0" height="content">
         <label text="BT" style_text_font="font_montserrat_regular_12" style_text_color="0x67D5E8" />
         <label
-          text="Conectado"
+          bind_text="subject_g_subj_bt_active_slot"
           style_text_font="font_montserrat_regular_12"
           style_text_color="0x67D5E8" />
       </row>
@@ -33,7 +33,8 @@
           style_text_font="font_montserrat_regular_12"
           style_text_color="0xABB6BF" />
         <label
-          text="82%"
+          bind_text="subject_subj_battery_percent"
+          bind_text-fmt="%d%%"
           style_text_font="font_montserrat_regular_12"
           style_text_color="0xF2F5F7" />
       </row>
@@ -95,7 +96,8 @@
           style_text_font="font_montserrat_regular_12"
           style_text_color="0xABB6BF" />
         <label
-          text="Pronto"
+          bind_text="subject_g_subj_orelhas_status_texto"
+          bind_text-fmt="%s"
           style_text_font="font_montserrat_regular_14"
           style_text_color="0xF2F5F7" />
       </row>
@@ -147,17 +149,14 @@
             style_text_color="0xF2F5F7" />
           <label
             height="18"
-            text="90°"
+            bind_text="subject_g_subj_orelhas_angulo_maximo"
+            bind_text-fmt="%d°"
             style_text_font="font_montserrat_regular_14"
             style_text_color="0x67D5E8" />
         </container>
-        <column pad_top="10" pad_bottom="10" width="100%" height="32">
-          <tile_3 style_pad_column="0" width="100%" height="12">
-            <tile_4 style_pad_column="0" width="102" height="12" />
-            <tile_5 style_pad_column="0" width="12" height="12" />
-            <row grow="1" width="0" height="12" />
-          </tile_3>
-        </column>
+        <cont_slider_toque value="subject_g_subj_orelhas_angulo_maximo" />
+        <!-- lv_slider: no distinct indicator child — indicator inherits the <slider> base accent color -->
+        <!-- lv_slider: no knob layer found (named "knob", an ellipse, or a small square handle) — knob inherits the <slider> base color -->
         <container
           flex_flow="row"
           style_pad_all="0"
@@ -173,22 +172,11 @@
             style_text_color="0xABB6BF" />
           <label
             height="16"
-            text="180°"
+            text="90°"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
         </container>
       </container>
-      <label
-        width="100%"
-        text="Servos · faixa ilustrativa.&#10;Limites a confirmar."
-        style_text_font="font_montserrat_regular_12"
-        style_text_line_space="4"
-        style_text_color="0xABB6BF" />
-      <label
-        height="16"
-        text="Exemplo · não é leitura real"
-        style_text_font="font_montserrat_regular_12"
-        style_text_color="0xABB6BF" />
     </column>
   </view>
 </screen>

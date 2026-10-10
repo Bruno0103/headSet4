@@ -1,158 +1,186 @@
 {
   "version": 1,
-  "exportedAt": "2026-10-10T07:05:39.786Z",
+  "exportedAt": "2026-10-10T10:06:58.634Z",
   "files": {
     ".lvgl-flow/screens/screen_main.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_main_gif.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_apps.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_galeria_imagens.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_galeria_gifs.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_settings.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_display.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_bluetooth.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_orelhas.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_vibracall.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_proximidade.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     ".lvgl-flow/screens/screen_status.json": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_main.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_main_gif.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_apps.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_galeria_imagens.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_galeria_gifs.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_settings.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_display.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_bluetooth.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_orelhas.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_vibracall.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_proximidade.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "screens/screen_status.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    "components/cont_slider_toque_e/cont_slider_toque_e.xml": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    "components/cont_slider_toque_d/cont_slider_toque_d.xml": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    "components/cont_slider_toque/cont_slider_toque.xml": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    "components/cont_slider_toque_b/cont_slider_toque_b.xml": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    "components/cont_slider_toque_c/cont_slider_toque_c.xml": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/derived/tile/tile.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/derived/tile_2/tile_2.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/derived/tile_3/tile_3.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/derived/tile_4/tile_4.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/derived/tile_5/tile_5.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/container/container.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/button_subtle/button_subtle.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/panel/panel.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/card/card.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/button/button.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/row/row.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/column/column.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "components/base/label/label.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    "components/base/slider/slider.xml": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     },
     "globals.xml": {
       "owner": "tool",
-      "exportedAt": "2026-10-10T07:05:39.786Z"
+      "exportedAt": "2026-10-10T10:06:58.634Z"
+    },
+    ".lvgl-flow/widget-names.json": {
+      "owner": "tool",
+      "exportedAt": "2026-10-10T10:06:58.634Z"
     }
   }
 }

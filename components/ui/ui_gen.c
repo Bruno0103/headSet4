@@ -79,6 +79,25 @@ lv_style_t style_screen_base_global;
  * Subjects
  *----------------*/
 
+lv_subject_t subject_g_subj_bateria_tensao_mv;
+lv_subject_t subject_g_subj_bt_active_slot;
+lv_subject_t subject_g_subj_bt_alternancia_ativa;
+lv_subject_t subject_g_subj_bt_nome_1;
+lv_subject_t subject_g_subj_bt_nome_2;
+lv_subject_t subject_g_subj_bt_status_1;
+lv_subject_t subject_g_subj_bt_status_2;
+lv_subject_t subject_g_subj_bt_status_alternancia;
+lv_subject_t subject_g_subj_display_brilho;
+lv_subject_t subject_g_subj_display_ligado;
+lv_subject_t subject_g_subj_display_timeout_segundos;
+lv_subject_t subject_g_subj_orelhas_angulo_maximo;
+lv_subject_t subject_g_subj_orelhas_status_texto;
+lv_subject_t subject_g_subj_proximidade_sensibilidade;
+lv_subject_t subject_g_subj_proximidade_status_texto;
+lv_subject_t subject_g_subj_vibracall_intensidade;
+lv_subject_t subject_g_subj_vibracall_status_texto;
+lv_subject_t subject_subj_battery_percent;
+
 /**********************
  *      MACROS
  **********************/
@@ -176,6 +195,102 @@ void ui_init_gen(const char * asset_path)
     /*----------------
      * Subjects
      *----------------*/
+    lv_subject_init_int(&subject_g_subj_bateria_tensao_mv, 3980);
+    static char subject_g_subj_bt_active_slot_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_active_slot_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_active_slot,
+                           subject_g_subj_bt_active_slot_buf,
+                           subject_g_subj_bt_active_slot_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Conectado"
+                          );
+    static char subject_g_subj_bt_alternancia_ativa_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_alternancia_ativa_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_alternancia_ativa,
+                           subject_g_subj_bt_alternancia_ativa_buf,
+                           subject_g_subj_bt_alternancia_ativa_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Manual"
+                          );
+    static char subject_g_subj_bt_nome_1_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_nome_1_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_nome_1,
+                           subject_g_subj_bt_nome_1_buf,
+                           subject_g_subj_bt_nome_1_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Fone A"
+                          );
+    static char subject_g_subj_bt_nome_2_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_nome_2_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_nome_2,
+                           subject_g_subj_bt_nome_2_buf,
+                           subject_g_subj_bt_nome_2_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Fone B"
+                          );
+    static char subject_g_subj_bt_status_1_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_status_1_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_status_1,
+                           subject_g_subj_bt_status_1_buf,
+                           subject_g_subj_bt_status_1_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Conectado"
+                          );
+    static char subject_g_subj_bt_status_2_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_status_2_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_status_2,
+                           subject_g_subj_bt_status_2_buf,
+                           subject_g_subj_bt_status_2_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Desconectado"
+                          );
+    static char subject_g_subj_bt_status_alternancia_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_bt_status_alternancia_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_bt_status_alternancia,
+                           subject_g_subj_bt_status_alternancia_buf,
+                           subject_g_subj_bt_status_alternancia_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Alternar ativo"
+                          );
+    lv_subject_init_int(&subject_g_subj_display_brilho, 70);
+    static char subject_g_subj_display_ligado_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_display_ligado_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_display_ligado,
+                           subject_g_subj_display_ligado_buf,
+                           subject_g_subj_display_ligado_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Ligado"
+                          );
+    lv_subject_init_int(&subject_g_subj_display_timeout_segundos, 70);
+    lv_subject_init_int(&subject_g_subj_orelhas_angulo_maximo, 90);
+    static char subject_g_subj_orelhas_status_texto_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_orelhas_status_texto_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_orelhas_status_texto,
+                           subject_g_subj_orelhas_status_texto_buf,
+                           subject_g_subj_orelhas_status_texto_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Pronto"
+                          );
+    lv_subject_init_int(&subject_g_subj_proximidade_sensibilidade, 80);
+    static char subject_g_subj_proximidade_status_texto_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_proximidade_status_texto_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_proximidade_status_texto,
+                           subject_g_subj_proximidade_status_texto_buf,
+                           subject_g_subj_proximidade_status_texto_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Pronto"
+                          );
+    lv_subject_init_int(&subject_g_subj_vibracall_intensidade, 60);
+    static char subject_g_subj_vibracall_status_texto_buf[UI_SUBJECT_STRING_LENGTH];
+    static char subject_g_subj_vibracall_status_texto_prev_buf[UI_SUBJECT_STRING_LENGTH];
+    lv_subject_init_string(&subject_g_subj_vibracall_status_texto,
+                           subject_g_subj_vibracall_status_texto_buf,
+                           subject_g_subj_vibracall_status_texto_prev_buf,
+                           UI_SUBJECT_STRING_LENGTH,
+                           "Pronto"
+                          );
+    lv_subject_init_int(&subject_subj_battery_percent, 82);
+
     /*----------------
      * Translations
      *----------------*/
@@ -204,6 +319,24 @@ void ui_init_gen(const char * asset_path)
     lv_xml_register_font(NULL, "font_montserrat_regular_24", font_montserrat_regular_24);
 
     /* Register subjects */
+    lv_xml_register_subject(NULL, "subject_g_subj_bateria_tensao_mv", &subject_g_subj_bateria_tensao_mv);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_active_slot", &subject_g_subj_bt_active_slot);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_alternancia_ativa", &subject_g_subj_bt_alternancia_ativa);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_nome_1", &subject_g_subj_bt_nome_1);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_nome_2", &subject_g_subj_bt_nome_2);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_status_1", &subject_g_subj_bt_status_1);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_status_2", &subject_g_subj_bt_status_2);
+    lv_xml_register_subject(NULL, "subject_g_subj_bt_status_alternancia", &subject_g_subj_bt_status_alternancia);
+    lv_xml_register_subject(NULL, "subject_g_subj_display_brilho", &subject_g_subj_display_brilho);
+    lv_xml_register_subject(NULL, "subject_g_subj_display_ligado", &subject_g_subj_display_ligado);
+    lv_xml_register_subject(NULL, "subject_g_subj_display_timeout_segundos", &subject_g_subj_display_timeout_segundos);
+    lv_xml_register_subject(NULL, "subject_g_subj_orelhas_angulo_maximo", &subject_g_subj_orelhas_angulo_maximo);
+    lv_xml_register_subject(NULL, "subject_g_subj_orelhas_status_texto", &subject_g_subj_orelhas_status_texto);
+    lv_xml_register_subject(NULL, "subject_g_subj_proximidade_sensibilidade", &subject_g_subj_proximidade_sensibilidade);
+    lv_xml_register_subject(NULL, "subject_g_subj_proximidade_status_texto", &subject_g_subj_proximidade_status_texto);
+    lv_xml_register_subject(NULL, "subject_g_subj_vibracall_intensidade", &subject_g_subj_vibracall_intensidade);
+    lv_xml_register_subject(NULL, "subject_g_subj_vibracall_status_texto", &subject_g_subj_vibracall_status_texto);
+    lv_xml_register_subject(NULL, "subject_subj_battery_percent", &subject_subj_battery_percent);
 
     /* Register callbacks */
 #endif

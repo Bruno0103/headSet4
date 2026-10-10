@@ -49,8 +49,6 @@ lv_obj_t * tile_2_create(lv_obj_t * parent, lv_flex_align_t main_align, lv_flex_
         lv_style_set_radius(&style_base, 4);
         lv_style_set_border_width(&style_base, 0);
         lv_style_set_pad_all(&style_base, 0);
-        lv_style_set_pad_left(&style_base, 4);
-        lv_style_set_pad_right(&style_base, 4);
         lv_style_set_pad_row(&style_base, 0);
         lv_style_set_pad_column(&style_base, 0);
 

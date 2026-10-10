@@ -127,6 +127,25 @@ extern lv_font_t * font_montserrat_regular_24;
  * Subjects
  *----------------*/
 
+extern lv_subject_t subject_g_subj_bateria_tensao_mv;
+extern lv_subject_t subject_g_subj_bt_active_slot;
+extern lv_subject_t subject_g_subj_bt_alternancia_ativa;
+extern lv_subject_t subject_g_subj_bt_nome_1;
+extern lv_subject_t subject_g_subj_bt_nome_2;
+extern lv_subject_t subject_g_subj_bt_status_1;
+extern lv_subject_t subject_g_subj_bt_status_2;
+extern lv_subject_t subject_g_subj_bt_status_alternancia;
+extern lv_subject_t subject_g_subj_display_brilho;
+extern lv_subject_t subject_g_subj_display_ligado;
+extern lv_subject_t subject_g_subj_display_timeout_segundos;
+extern lv_subject_t subject_g_subj_orelhas_angulo_maximo;
+extern lv_subject_t subject_g_subj_orelhas_status_texto;
+extern lv_subject_t subject_g_subj_proximidade_sensibilidade;
+extern lv_subject_t subject_g_subj_proximidade_status_texto;
+extern lv_subject_t subject_g_subj_vibracall_intensidade;
+extern lv_subject_t subject_g_subj_vibracall_status_texto;
+extern lv_subject_t subject_subj_battery_percent;
+
 /**********************
  * GLOBAL PROTOTYPES
  **********************/
@@ -158,6 +177,12 @@ void ui_init_gen(const char * asset_path);
 #include "components/base/label/label_gen.h"
 #include "components/base/panel/panel_gen.h"
 #include "components/base/row/row_gen.h"
+#include "components/base/slider/slider_gen.h"
+#include "components/cont_slider_toque_b/cont_slider_toque_b_gen.h"
+#include "components/cont_slider_toque_c/cont_slider_toque_c_gen.h"
+#include "components/cont_slider_toque_d/cont_slider_toque_d_gen.h"
+#include "components/cont_slider_toque_e/cont_slider_toque_e_gen.h"
+#include "components/cont_slider_toque/cont_slider_toque_gen.h"
 #include "components/derived/tile_2/tile_2_gen.h"
 #include "components/derived/tile_3/tile_3_gen.h"
 #include "components/derived/tile_4/tile_4_gen.h"

@@ -67,7 +67,7 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_color(label_0, lv_color_hex(0x67D5E8), 0);
 
         lv_obj_t * label_1 = label_create(row_0);
-        lv_label_set_text(label_1, "Conectado");
+        lv_label_bind_text(label_1, &subject_g_subj_bt_active_slot, NULL);
         lv_obj_set_style_text_font(label_1, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_1, lv_color_hex(0x67D5E8), 0);
 
@@ -80,7 +80,7 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_color(label_2, lv_color_hex(0xABB6BF), 0);
 
         lv_obj_t * label_3 = label_create(row_1);
-        lv_label_set_text(label_3, "82%");
+        lv_label_bind_text(label_3, &subject_subj_battery_percent, "%d%%");
         lv_obj_set_style_text_font(label_3, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_3, lv_color_hex(0xF2F5F7), 0);
 
@@ -128,7 +128,7 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_color(label_6, lv_color_hex(0xABB6BF), 0);
 
         lv_obj_t * label_7 = label_create(row_3);
-        lv_label_set_text(label_7, "Pronto");
+        lv_label_bind_text(label_7, &subject_g_subj_proximidade_status_texto, "%s");
         lv_obj_set_style_text_font(label_7, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_7, lv_color_hex(0xF2F5F7), 0);
 
@@ -155,20 +155,13 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_font(label_9, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_9, lv_color_hex(0xF2F5F7), 0);
 
-        lv_obj_t * container_0 = container_create(column_0);
-        lv_obj_set_flex_flow(container_0, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_style_pad_hor(container_0, 0, 0);
-        lv_obj_set_style_pad_ver(container_0, 4, 0);
-        lv_obj_set_style_pad_row(container_0, 8, 0);
-        lv_obj_set_width(container_0, lv_pct(100));
-        lv_obj_set_height(container_0, LV_SIZE_CONTENT);
-        lv_obj_t * container_1 = container_create(container_0);
-        lv_obj_set_flex_flow(container_1, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_pad_all(container_1, 0, 0);
-        lv_obj_set_style_pad_column(container_1, 8, 0);
-        lv_obj_set_width(container_1, lv_pct(100));
-        lv_obj_set_height(container_1, LV_SIZE_CONTENT);
-        lv_obj_t * label_10 = label_create(container_1);
+        lv_obj_t * column_1 = column_create(column_0, 0, 0, 4, 4, 8, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_width(column_1, lv_pct(100));
+        lv_obj_set_height(column_1, LV_SIZE_CONTENT);
+        lv_obj_t * row_5 = row_create(column_1, 0, 0, 0, 0, 8, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_width(row_5, lv_pct(100));
+        lv_obj_set_height(row_5, LV_SIZE_CONTENT);
+        lv_obj_t * label_10 = label_create(row_5);
         lv_obj_set_width(label_10, 0);
         lv_obj_set_height(label_10, 18);
         lv_obj_set_flex_grow(label_10, 1);
@@ -176,40 +169,18 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_font(label_10, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_10, lv_color_hex(0xF2F5F7), 0);
 
-        lv_obj_t * label_11 = label_create(container_1);
+        lv_obj_t * label_11 = label_create(row_5);
         lv_obj_set_height(label_11, 18);
-        lv_label_set_text(label_11, "80");
+        lv_label_bind_text(label_11, &subject_g_subj_proximidade_sensibilidade, "%d");
         lv_obj_set_style_text_font(label_11, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_11, lv_color_hex(0x67D5E8), 0);
 
-        lv_obj_t * column_1 = column_create(container_0, 0, 0, 10, 10, 0, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_set_width(column_1, lv_pct(100));
-        lv_obj_set_height(column_1, 32);
-        lv_obj_t * tile_3_0 = tile_3_create(column_1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, false);
-        lv_obj_set_style_pad_column(tile_3_0, 0, 0);
-        lv_obj_set_width(tile_3_0, lv_pct(100));
-        lv_obj_set_height(tile_3_0, 12);
-        lv_obj_t * tile_4_0 = tile_4_create(tile_3_0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, false);
-        lv_obj_set_style_pad_column(tile_4_0, 0, 0);
-        lv_obj_set_width(tile_4_0, 75);
-        lv_obj_set_height(tile_4_0, 12);
+        cont_slider_toque_c_create(column_1, &subject_g_subj_proximidade_sensibilidade);
 
-        lv_obj_t * tile_5_0 = tile_5_create(tile_3_0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, false);
-        lv_obj_set_style_pad_column(tile_5_0, 0, 0);
-        lv_obj_set_width(tile_5_0, 12);
-        lv_obj_set_height(tile_5_0, 12);
-
-        lv_obj_t * row_5 = row_create(tile_3_0, 0, 0, 0, 0, 0, 1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_set_width(row_5, 0);
-        lv_obj_set_height(row_5, 12);
-
-        lv_obj_t * container_2 = container_create(container_0);
-        lv_obj_set_flex_flow(container_2, LV_FLEX_FLOW_ROW);
-        lv_obj_set_style_pad_all(container_2, 0, 0);
-        lv_obj_set_style_pad_column(container_2, 8, 0);
-        lv_obj_set_width(container_2, lv_pct(100));
-        lv_obj_set_height(container_2, LV_SIZE_CONTENT);
-        lv_obj_t * label_12 = label_create(container_2);
+        lv_obj_t * row_6 = row_create(column_1, 0, 0, 0, 0, 8, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_width(row_6, lv_pct(100));
+        lv_obj_set_height(row_6, LV_SIZE_CONTENT);
+        lv_obj_t * label_12 = label_create(row_6);
         lv_obj_set_width(label_12, 0);
         lv_obj_set_height(label_12, 16);
         lv_obj_set_flex_grow(label_12, 1);
@@ -217,7 +188,7 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_font(label_12, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_12, lv_color_hex(0xABB6BF), 0);
 
-        lv_obj_t * label_13 = label_create(container_2);
+        lv_obj_t * label_13 = label_create(row_6);
         lv_obj_set_height(label_13, 16);
         lv_label_set_text(label_13, "200");
         lv_obj_set_style_text_font(label_13, font_montserrat_regular_12, 0);
@@ -229,12 +200,6 @@ lv_obj_t * screen_proximidade_create(void)
         lv_obj_set_style_text_font(label_14, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_line_space(label_14, 4, 0);
         lv_obj_set_style_text_color(label_14, lv_color_hex(0xABB6BF), 0);
-
-        lv_obj_t * label_15 = label_create(column_0);
-        lv_obj_set_height(label_15, 16);
-        lv_label_set_text(label_15, "Exemplo · não é leitura real");
-        lv_obj_set_style_text_font(label_15, font_montserrat_regular_12, 0);
-        lv_obj_set_style_text_color(label_15, lv_color_hex(0xABB6BF), 0);
 
         the_root = lv_obj_0;
     }

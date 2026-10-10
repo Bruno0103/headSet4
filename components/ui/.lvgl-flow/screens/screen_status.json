@@ -610,7 +610,12 @@
                 "textDecorationSkipInk": null,
                 "hyperlink": null,
                 "openTypeFeatures": {},
-                "leadingTrim": "NONE"
+                "leadingTrim": "NONE",
+                "annotations": {
+                  "widgetType": "lv_label",
+                  "isDynamic": true,
+                  "dataBinding": "subject_g_subj_bt_active_slot"
+                }
               }
             ]
           },
@@ -978,7 +983,13 @@
                 "textDecorationSkipInk": null,
                 "hyperlink": null,
                 "openTypeFeatures": {},
-                "leadingTrim": "NONE"
+                "leadingTrim": "NONE",
+                "annotations": {
+                  "widgetType": "lv_label",
+                  "isDynamic": true,
+                  "dataBinding": "subject_subj_battery_percent",
+                  "dataFormat": "%d%%"
+                }
               }
             ]
           }
@@ -2216,7 +2227,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_subj_battery_percent",
+                      "dataFormat": "%d%%"
+                    }
                   }
                 ]
               },
@@ -2584,7 +2601,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_bateria_tensao_mv",
+                      "dataFormat": "%d mV"
+                    }
                   }
                 ]
               },
@@ -2952,7 +2975,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_bt_status_1",
+                      "dataFormat": "%s"
+                    }
                   }
                 ]
               },
@@ -3320,7 +3349,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_bt_status_2",
+                      "dataFormat": "%s"
+                    }
                   }
                 ]
               },
@@ -3688,7 +3723,12 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_bt_alternancia_ativa"
+                    }
                   }
                 ]
               },
@@ -4056,7 +4096,12 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_display_ligado"
+                    }
                   }
                 ]
               },
@@ -4424,7 +4469,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_display_brilho",
+                      "dataFormat": "%d%%"
+                    }
                   }
                 ]
               },
@@ -4792,7 +4843,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_orelhas_status_texto",
+                      "dataFormat": "%s"
+                    }
                   }
                 ]
               },
@@ -5160,7 +5217,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_vibracall_status_texto",
+                      "dataFormat": "%s"
+                    }
                   }
                 ]
               },
@@ -5528,7 +5591,13 @@
                     "textDecorationSkipInk": null,
                     "hyperlink": null,
                     "openTypeFeatures": {},
-                    "leadingTrim": "NONE"
+                    "leadingTrim": "NONE",
+                    "annotations": {
+                      "widgetType": "lv_label",
+                      "isDynamic": true,
+                      "dataBinding": "subject_g_subj_proximidade_status_texto",
+                      "dataFormat": "%s"
+                    }
                   }
                 ]
               },

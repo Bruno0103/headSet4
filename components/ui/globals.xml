@@ -42,6 +42,29 @@
   </consts>
 
   <subjects>
+    <!-- ───────────────── <lvgl-figma-flow begin="subjects"/> ──────────────────
+         Regenerated on each export. Add your own entries outside the fence. -->
+
+    <int name="subject_g_subj_bateria_tensao_mv" value="3980" />
+    <string name="subject_g_subj_bt_active_slot" value="Conectado" />
+    <string name="subject_g_subj_bt_alternancia_ativa" value="Manual" />
+    <string name="subject_g_subj_bt_nome_1" value="Fone A" />
+    <string name="subject_g_subj_bt_nome_2" value="Fone B" />
+    <string name="subject_g_subj_bt_status_1" value="Conectado" />
+    <string name="subject_g_subj_bt_status_2" value="Desconectado" />
+    <string name="subject_g_subj_bt_status_alternancia" value="Alternar ativo" />
+    <int name="subject_g_subj_display_brilho" value="70" />
+    <string name="subject_g_subj_display_ligado" value="Ligado" />
+    <int name="subject_g_subj_display_timeout_segundos" value="70" />
+    <int name="subject_g_subj_orelhas_angulo_maximo" value="90" />
+    <string name="subject_g_subj_orelhas_status_texto" value="Pronto" />
+    <int name="subject_g_subj_proximidade_sensibilidade" value="80" />
+    <string name="subject_g_subj_proximidade_status_texto" value="Pronto" />
+    <int name="subject_g_subj_vibracall_intensidade" value="60" />
+    <string name="subject_g_subj_vibracall_status_texto" value="Pronto" />
+    <int name="subject_subj_battery_percent" value="82" />
+
+    <!-- ────────────────── <lvgl-figma-flow end="subjects"/> ─────────────────── -->
     <!-- Add <int>, <string>, or <float> subjects here -->
   </subjects>
 
@@ -79,7 +102,7 @@
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Regular.ttf"
-      range="0x20-0x7F, 0xA0-0xFF" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x2000-0x206F" />
     <bin
       name="font_montserrat_regular_20"
       size="20"

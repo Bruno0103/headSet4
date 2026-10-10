@@ -114,9 +114,11 @@ esp_err_t board_button_init(void)
         return err;
     }
 
-    if (xTaskCreatePinnedToCore(button_task, "btn", 3072, NULL, 4, NULL, 0) != pdPASS) {
+    /* Core 0: Prioridade 7 para preemptar tasks de controle/fundo e enfileirar
+     * o evento do botão imediatamente assim que detectado. */
+    if (xTaskCreatePinnedToCore(button_task, "btn", 3072, NULL, 7, NULL, 0) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "Botao no GPIO%d pronto", (int)BOARD_BUTTON_SWITCH_GPIO);
+    ESP_LOGI(TAG, "Botao no GPIO%d pronto (Core 0, prioridade 7)", (int)BOARD_BUTTON_SWITCH_GPIO);
     return ESP_OK;
 }

@@ -67,7 +67,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_set_style_text_color(label_0, lv_color_hex(0x67D5E8), 0);
 
         lv_obj_t * label_1 = label_create(row_0);
-        lv_label_set_text(label_1, "Conectado");
+        lv_label_bind_text(label_1, &subject_g_subj_bt_active_slot, NULL);
         lv_obj_set_style_text_font(label_1, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_1, lv_color_hex(0x67D5E8), 0);
 
@@ -80,7 +80,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_set_style_text_color(label_2, lv_color_hex(0xABB6BF), 0);
 
         lv_obj_t * label_3 = label_create(row_1);
-        lv_label_set_text(label_3, "82%");
+        lv_label_bind_text(label_3, &subject_subj_battery_percent, "%d%%");
         lv_obj_set_style_text_font(label_3, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_3, lv_color_hex(0xF2F5F7), 0);
 
@@ -137,7 +137,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_8 = label_create(row_3);
         lv_obj_set_width(label_8, 0);
         lv_obj_set_flex_grow(label_8, 1);
-        lv_label_set_text(label_8, "Normal · 82%");
+        lv_label_bind_text(label_8, &subject_subj_battery_percent, "%d%%");
         lv_obj_set_style_text_font(label_8, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_8, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_8, LV_TEXT_ALIGN_RIGHT, 0);
@@ -153,7 +153,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_10 = label_create(row_4);
         lv_obj_set_width(label_10, 0);
         lv_obj_set_flex_grow(label_10, 1);
-        lv_label_set_text(label_10, "3980 mV");
+        lv_label_bind_text(label_10, &subject_g_subj_bateria_tensao_mv, "%d mV");
         lv_obj_set_style_text_font(label_10, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_10, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_10, LV_TEXT_ALIGN_RIGHT, 0);
@@ -169,7 +169,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_12 = label_create(row_5);
         lv_obj_set_width(label_12, 0);
         lv_obj_set_flex_grow(label_12, 1);
-        lv_label_set_text(label_12, "Conectado");
+        lv_label_bind_text(label_12, &subject_g_subj_bt_status_1, "%s");
         lv_obj_set_style_text_font(label_12, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_12, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_12, LV_TEXT_ALIGN_RIGHT, 0);
@@ -185,7 +185,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_14 = label_create(row_6);
         lv_obj_set_width(label_14, 0);
         lv_obj_set_flex_grow(label_14, 1);
-        lv_label_set_text(label_14, "Desconectado");
+        lv_label_bind_text(label_14, &subject_g_subj_bt_status_2, "%s");
         lv_obj_set_style_text_font(label_14, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_14, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_14, LV_TEXT_ALIGN_RIGHT, 0);
@@ -201,7 +201,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_16 = label_create(row_7);
         lv_obj_set_width(label_16, 0);
         lv_obj_set_flex_grow(label_16, 1);
-        lv_label_set_text(label_16, "Manual");
+        lv_label_bind_text(label_16, &subject_g_subj_bt_alternancia_ativa, NULL);
         lv_obj_set_style_text_font(label_16, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_16, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_16, LV_TEXT_ALIGN_RIGHT, 0);
@@ -217,7 +217,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_18 = label_create(row_8);
         lv_obj_set_width(label_18, 0);
         lv_obj_set_flex_grow(label_18, 1);
-        lv_label_set_text(label_18, "Ligado");
+        lv_label_bind_text(label_18, &subject_g_subj_display_ligado, NULL);
         lv_obj_set_style_text_font(label_18, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_18, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_18, LV_TEXT_ALIGN_RIGHT, 0);
@@ -233,7 +233,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_20 = label_create(row_9);
         lv_obj_set_width(label_20, 0);
         lv_obj_set_flex_grow(label_20, 1);
-        lv_label_set_text(label_20, "70% · 30 s");
+        lv_label_bind_text(label_20, &subject_g_subj_display_brilho, "%d%%");
         lv_obj_set_style_text_font(label_20, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_20, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_20, LV_TEXT_ALIGN_RIGHT, 0);
@@ -249,7 +249,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_22 = label_create(row_10);
         lv_obj_set_width(label_22, 0);
         lv_obj_set_flex_grow(label_22, 1);
-        lv_label_set_text(label_22, "Pronto · 90°");
+        lv_label_bind_text(label_22, &subject_g_subj_orelhas_status_texto, "%s");
         lv_obj_set_style_text_font(label_22, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_22, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_22, LV_TEXT_ALIGN_RIGHT, 0);
@@ -265,7 +265,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_24 = label_create(row_11);
         lv_obj_set_width(label_24, 0);
         lv_obj_set_flex_grow(label_24, 1);
-        lv_label_set_text(label_24, "Pronto · 60%");
+        lv_label_bind_text(label_24, &subject_g_subj_vibracall_status_texto, "%s");
         lv_obj_set_style_text_font(label_24, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_24, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_24, LV_TEXT_ALIGN_RIGHT, 0);
@@ -281,7 +281,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_t * label_26 = label_create(row_12);
         lv_obj_set_width(label_26, 0);
         lv_obj_set_flex_grow(label_26, 1);
-        lv_label_set_text(label_26, "Pronto · 80");
+        lv_label_bind_text(label_26, &subject_g_subj_proximidade_status_texto, "%s");
         lv_obj_set_style_text_font(label_26, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_26, lv_color_hex(0xF2F5F7), 0);
         lv_obj_set_style_text_align(label_26, LV_TEXT_ALIGN_RIGHT, 0);

@@ -67,7 +67,7 @@ lv_obj_t * screen_apps_create(void)
         lv_obj_set_style_text_color(label_0, lv_color_hex(0x67D5E8), 0);
 
         lv_obj_t * label_1 = label_create(row_0);
-        lv_label_set_text(label_1, "Conectado");
+        lv_label_bind_text(label_1, &subject_g_subj_bt_active_slot, NULL);
         lv_obj_set_style_text_font(label_1, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_1, lv_color_hex(0x67D5E8), 0);
 
@@ -80,7 +80,7 @@ lv_obj_t * screen_apps_create(void)
         lv_obj_set_style_text_color(label_2, lv_color_hex(0xABB6BF), 0);
 
         lv_obj_t * label_3 = label_create(row_1);
-        lv_label_set_text(label_3, "82%");
+        lv_label_bind_text(label_3, &subject_subj_battery_percent, "%d%%");
         lv_obj_set_style_text_font(label_3, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_3, lv_color_hex(0xF2F5F7), 0);
 
@@ -221,13 +221,6 @@ lv_obj_t * screen_apps_create(void)
         lv_obj_set_style_text_color(label_14, lv_color_hex(0xABB6BF), 0);
 
         lv_obj_add_screen_create_event(card_2, LV_EVENT_CLICKED, screen_settings_create, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 300, 0);
-
-        lv_obj_t * label_15 = label_create(column_0);
-        lv_obj_set_width(label_15, lv_pct(100));
-        lv_label_set_text(label_15, "Recursos de mídia ainda\nnão fornecidos.");
-        lv_obj_set_style_text_font(label_15, font_montserrat_regular_12, 0);
-        lv_obj_set_style_text_line_space(label_15, 4, 0);
-        lv_obj_set_style_text_color(label_15, lv_color_hex(0xABB6BF), 0);
 
         the_root = lv_obj_0;
     }

@@ -142,15 +142,15 @@ static void pump_tone_only(void)
 
 /* ---------------- bombeamento (rodam dentro da task, com s_lock) ---------------- */
 
-static void pump_music(void)
+static bool pump_music(void)
 {
     if (s_prebuffering) {
         size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
         if (fill < MUSIC_PREFILL) {
-            if (s_tone_active) { pump_tone_only(); return; }
+            if (s_tone_active) { pump_tone_only(); return true; }
             /* Se ainda não atingiu o prefill, sai da função sem bloquear com o lock retido.
              * A temporização de descanso é feita pelo laço principal da audio_task. */
-            return;
+            return false;
         }
         s_prebuffering = false;
     }
@@ -183,21 +183,23 @@ static void pump_music(void)
                 i2s_channel_write(s_tx, d, n, &w, 100);
             }
         }
+        return true;
     } else {                                    /* underrun: toca silencio e reenche o colchao */
         s_prebuffering = true;
-        if (s_tone_active) { pump_tone_only(); return; }
+        if (s_tone_active) { pump_tone_only(); return true; }
         static const int16_t silence[256];
         i2s_channel_write(s_tx, silence, sizeof silence, &w, 100);
+        return false;
     }
 }
 
-static void pump_call(void)
+static bool pump_call(void)
 {
     int16_t in[CALL_FRAMES * 2], out[CALL_FRAMES * 2], mono[CALL_FRAMES];
     size_t rd = 0, wr = 0;
 
     /* uplink: microfones (L+R)/2 -> limpeza -> buffer do HFP */
-    if (i2s_channel_read(s_rx, in, sizeof in, &rd, 100) != ESP_OK) return;
+    if (i2s_channel_read(s_rx, in, sizeof in, &rd, 100) != ESP_OK) return false;
     size_t frames = rd / 4;
     for (size_t i = 0; i < frames; i++) mono[i] = (int16_t)((in[2 * i] + in[2 * i + 1]) / 2);
     voice_nr_process(mono, frames);
@@ -214,6 +216,7 @@ static void pump_call(void)
     }
     if (s_tone_active) tone_mix_stereo(out, frames);
     i2s_channel_write(s_tx, out, frames * 4, &wr, 100);
+    return true;
 }
 
 static void stop_locked(bool power_down);
@@ -223,21 +226,28 @@ static void audio_task(void *arg)
     for (;;) {
         xSemaphoreTake(s_lock, portMAX_DELAY);
         audio_io_mode_t m = s_mode;
-        if (m == AUDIO_IO_MUSIC)     pump_music();
-        else if (m == AUDIO_IO_CALL) pump_call();
+        bool transferred = false;
+        if (m == AUDIO_IO_MUSIC)     transferred = pump_music();
+        else if (m == AUDIO_IO_CALL) transferred = pump_call();
         if (s_tone_active && s_tone_idx >= s_tone_len) {   /* efeito terminou */
             s_tone_active = false;
-            if (s_tone_owns) stop_locked(true);
+            if (s_tone_owns) {
+                stop_locked(true);
+                m = s_mode;
+            }
         }
+        bool needs_delay = (m == AUDIO_IO_IDLE || s_reconfig_req || s_prebuffering || !transferred);
         xSemaphoreGive(s_lock);
 
-        if (m == AUDIO_IO_IDLE || s_reconfig_req || s_prebuffering) {
-            vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 2));
+        if (needs_delay) {
+            /* Quando em IDLE, descanso de 20ms.
+             * Quando em prebuffering ou sem dados no buffer (underrun), descanso de 5ms.
+             * Isso garante que a task IDLE1 (CPU 1, prioridade 0) resete o watchdog sem travar a CPU. */
+            vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 5));
         } else {
-            /* Em streaming ativo (MUSIC ou CALL), a sincronização e temporização do loop
-             * são governadas nativamente pelo bloqueio do DMA (i2s_channel_write com timeout)
-             * e pelo recebimento do Ringbuffer (xRingbufferReceiveUpTo). Inserir vTaskDelay(1)
-             * incondicional a cada iteração causava jitter e subamostragem audível. */
+            /* Em streaming ativo (com buffer preenchido e áudio sendo escrito continuamente via DMA I2S),
+             * o timing é ditado naturalmente pelo backpressure do hardware I2S.
+             * Cedemos a CPU de forma cooperativa para outras tasks do mesmo nível. */
             taskYIELD();
         }
     }

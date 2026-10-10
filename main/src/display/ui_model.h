@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define UI_MODEL_STR_MAX_LEN 48
+#define UI_MODEL_STR_MAX_LEN 64
 
 /* ============================================================================
  * ESTRUTURA DO MODELO REATIVO DE DADOS
@@ -75,13 +75,54 @@ typedef struct {
 
 /* ============================================================================
  * DECLARAÇÃO DOS SUBJECTS PÚBLICOS DO LVGL 9 (Para binding e observers)
- * ============================================================================ */
+ * ============================================================================
+ * Nomes padronizados para criação no LVGL Flow / globals.xml e consumo no código C.
+ */
 
-extern lv_subject_t g_subj_battery_percent;
-extern lv_subject_t g_subj_battery_mv;
-extern lv_subject_t g_subj_bt_active_slot;
-extern lv_subject_t g_subj_display_brightness;
-extern lv_subject_t g_subj_prox_worn;
+/* --- Bateria --- */
+extern lv_subject_t g_subj_bateria_status_texto;      /* Tipo: string (%s) */
+extern lv_subject_t g_subj_bateria_porcentagem;         /* Tipo: int (%d) */
+extern lv_subject_t g_subj_bateria_tensao_mv;           /* Tipo: int (%d) */
+
+/* --- Bluetooth --- */
+extern lv_subject_t g_subj_bt_nome_1;                   /* Tipo: string (%s) */
+extern lv_subject_t g_subj_bt_status_1;                 /* Tipo: string (%s) */
+extern lv_subject_t g_subj_bt_nome_2;                   /* Tipo: string (%s) */
+extern lv_subject_t g_subj_bt_status_2;                 /* Tipo: string (%s) */
+extern lv_subject_t g_subj_bt_active_slot;              /* Tipo: int (%d, 0 ou 1) */
+extern lv_subject_t g_subj_bt_status_alternancia;       /* Tipo: string (%s) */
+extern lv_subject_t g_subj_bt_alternancia_ativa;        /* Tipo: int (%d, 0 ou 1) */
+
+/* --- Proximidade (Sensor APDS-9930) --- */
+extern lv_subject_t g_subj_proximidade_status_texto;    /* Tipo: string (%s) */
+extern lv_subject_t g_subj_proximidade_ativo;           /* Tipo: int (%d, 0 ou 1) */
+extern lv_subject_t g_subj_proximidade_sensibilidade;   /* Tipo: int (%d) */
+extern lv_subject_t g_subj_prox_worn;                   /* Tipo: int (%d, 0 ou 1) */
+
+/* --- Vibracall --- */
+extern lv_subject_t g_subj_vibracall_status_texto;      /* Tipo: string (%s) */
+extern lv_subject_t g_subj_vibracall_ativo;             /* Tipo: int (%d, 0 ou 1) */
+extern lv_subject_t g_subj_vibracall_intensidade;       /* Tipo: int (%d, 0 a 100) */
+
+/* --- Orelhas (Servomotores) --- */
+extern lv_subject_t g_subj_orelhas_status_texto;        /* Tipo: string (%s) */
+extern lv_subject_t g_subj_orelhas_ativo;               /* Tipo: int (%d, 0 ou 1) */
+extern lv_subject_t g_subj_orelhas_angulo_maximo;       /* Tipo: int (%d, 0 a 180) */
+
+/* --- Display & Backlight --- */
+extern lv_subject_t g_subj_display_ligado;              /* Tipo: int (%d, 0 ou 1) */
+extern lv_subject_t g_subj_display_brilho;              /* Tipo: int (%d, 0 a 100) */
+extern lv_subject_t g_subj_display_timeout_segundos;    /* Tipo: int (%d) */
+
+/* --- Áudio --- */
+extern lv_subject_t g_subj_audio_volume;                /* Tipo: int (%d, 0 a 100) */
+extern lv_subject_t g_subj_audio_muted;                 /* Tipo: int (%d, 0 ou 1) */
+extern lv_subject_t g_subj_audio_eq_preset;             /* Tipo: int (%d) */
+
+/* Aliases de retrocompatibilidade para código existente */
+#define g_subj_battery_percent g_subj_bateria_porcentagem
+#define g_subj_battery_mv g_subj_bateria_tensao_mv
+#define g_subj_display_brightness g_subj_display_brilho
 
 /* ============================================================================
  * INTERFACE PÚBLICA DO UI MODEL

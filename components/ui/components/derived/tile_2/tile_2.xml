@@ -16,8 +16,6 @@
       radius="4"
       border_width="0"
       pad_all="0"
-      pad_left="4"
-      pad_right="4"
       pad_row="0"
       pad_column="0" />
   </styles>

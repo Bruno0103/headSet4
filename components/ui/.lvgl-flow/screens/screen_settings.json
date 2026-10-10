@@ -610,7 +610,12 @@
                 "textDecorationSkipInk": null,
                 "hyperlink": null,
                 "openTypeFeatures": {},
-                "leadingTrim": "NONE"
+                "leadingTrim": "NONE",
+                "annotations": {
+                  "widgetType": "lv_label",
+                  "isDynamic": true,
+                  "dataBinding": "subject_g_subj_bt_active_slot"
+                }
               }
             ]
           },
@@ -978,7 +983,13 @@
                 "textDecorationSkipInk": null,
                 "hyperlink": null,
                 "openTypeFeatures": {},
-                "leadingTrim": "NONE"
+                "leadingTrim": "NONE",
+                "annotations": {
+                  "widgetType": "lv_label",
+                  "isDynamic": true,
+                  "dataBinding": "subject_subj_battery_percent",
+                  "dataFormat": "%d%%"
+                }
               }
             ]
           }
