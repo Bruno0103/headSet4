@@ -28,6 +28,7 @@
 #include "esp_adc/adc_cali_scheme.h"
 
 #include "headset_events.h"
+#include "hs_events.h"
 #include "pinout.h"
 
 static const char *TAG = "BATTERY";
@@ -343,6 +344,14 @@ void battery_task(void *pvParameters)
                 ESP_LOGI(TAG, "[BATERIA] Publicando evento HEADSET_EVT_BATTERY: %u%% (%u mV)",
                          percent, battery_voltage_mv);
                 headset_event_post(HEADSET_EVT_BATTERY, &ev, sizeof(ev));
+
+                /* Publica no barramento central hs_events (SENSOR_EVT) */
+                sensor_battery_evt_t s_ev = {
+                    .percent = percent,
+                    .millivolts = (uint16_t)battery_voltage_mv,
+                    .is_charging = false,
+                };
+                hs_event_post(SENSOR_EVT, SENSOR_EVT_BATTERY, &s_ev, sizeof(s_ev));
             }
         }
 

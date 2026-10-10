@@ -8,6 +8,8 @@
 
 #include "board_i2c.h"
 #include "headset_events.h"
+#include "hs_events.h"
+#include "settings.h"
 #include "pinout.h"
 
 /* Bit de comando do APDS-9930: 0x80 | (0x20 = auto-incremento) | registrador */
@@ -163,6 +165,9 @@ static void publish(bool worn)
     s_worn = worn;
     ESP_LOGW(TAG, "Fone %s", worn ? "COLOCADO na cabeca" : "RETIRADO da cabeca");
     headset_event_post(worn ? HEADSET_EVT_WORN : HEADSET_EVT_REMOVED, NULL, 0);
+
+    /* Publica no barramento central hs_events */
+    hs_event_post(SENSOR_EVT, worn ? SENSOR_EVT_WORN : SENSOR_EVT_REMOVED, NULL, 0);
 }
 
 /* Le o ID e programa so o bloco de proximidade (PON | PEN). Pode ser repetida a qualquer momento. */
@@ -186,9 +191,14 @@ static esp_err_t apds_configure(uint8_t *id)
 
 static void apds_task(void *arg)
 {
-    (void)arg;
-    const int on_delta  = CONFIG_HEADSET_APDS_ON_THRESHOLD;
-    const int off_delta = CONFIG_HEADSET_APDS_OFF_THRESHOLD;
+    /* Carrega limiares do actor settings se persistidos, mantendo Kconfig como fallback */
+    uint16_t cfg_th_on = CONFIG_HEADSET_APDS_ON_THRESHOLD;
+    uint16_t cfg_th_off = CONFIG_HEADSET_APDS_OFF_THRESHOLD;
+    settings_get_u16(SETTINGS_KEY_SENS_THRESH_ON, &cfg_th_on, CONFIG_HEADSET_APDS_ON_THRESHOLD);
+    settings_get_u16(SETTINGS_KEY_SENS_THRESH_OFF, &cfg_th_off, CONFIG_HEADSET_APDS_OFF_THRESHOLD);
+
+    const int on_delta  = (int)cfg_th_on;
+    const int off_delta = (int)cfg_th_off;
     const int need      = (CONFIG_HEADSET_APDS_DEBOUNCE_MS + CONFIG_HEADSET_APDS_POLL_MS - 1) /
                           CONFIG_HEADSET_APDS_POLL_MS;
 
