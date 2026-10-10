@@ -148,7 +148,8 @@ static void pump_music(void)
         size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
         if (fill < MUSIC_PREFILL) {
             if (s_tone_active) { pump_tone_only(); return; }
-            vTaskDelay(pdMS_TO_TICKS(5));
+            /* Se ainda não atingiu o prefill, sai da função sem bloquear com o lock retido.
+             * A temporização de descanso é feita pelo laço principal da audio_task. */
             return;
         }
         s_prebuffering = false;
@@ -230,7 +231,7 @@ static void audio_task(void *arg)
         }
         xSemaphoreGive(s_lock);
 
-        if (m == AUDIO_IO_IDLE || s_reconfig_req) {
+        if (m == AUDIO_IO_IDLE || s_reconfig_req || s_prebuffering) {
             vTaskDelay(pdMS_TO_TICKS(m == AUDIO_IO_IDLE ? 20 : 2));
         } else {
             /* Em streaming ativo (MUSIC ou CALL), a sincronização e temporização do loop

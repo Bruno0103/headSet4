@@ -86,3 +86,8 @@ agents/
 
 # Documentação e guias de suporte aos agentes
 docs/
+
+preview-build
+build
+.cache.json
+

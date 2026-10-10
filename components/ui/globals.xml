@@ -7,6 +7,31 @@
     <!-- ────────────────── <lvgl-figma-flow begin="consts"/> ───────────────────
          Regenerated on each export. Add your own entries outside the fence. -->
 
+    <string name="const_bateria_status_texto_global" value="85% (3.95 V)" />
+    <int name="const_bateria_porcentagem_global" value="85" />
+    <int name="const_bateria_tensao_mv_global" value="3950" />
+    <string name="const_bluetooth_nome_dispositivo_1_global" value="dispositivo_1" />
+    <string name="const_bluetooth_status_dispositivo_1_global" value="Desconectado" />
+    <int name="const_bluetooth_desconectar_1_global" value="0" />
+    <string name="const_bluetooth_nome_dispositivo_2_global" value="dispositivo_2" />
+    <string name="const_bluetooth_status_dispositivo_2_global" value="Desconectado" />
+    <int name="const_bluetooth_desconectar_2_global" value="0" />
+    <string name="const_bluetooth_status_alternancia_global" value="Ativo (Dispositivo 1)" />
+    <int name="const_bluetooth_alternancia_ativa_global" value="1" />
+    <string name="const_proximidade_status_texto_global" value="Fone no ouvido" />
+    <int name="const_proximidade_ativo_global" value="1" />
+    <int name="const_proximidade_sensibilidade_global" value="100" />
+    <string name="const_vibracall_status_texto_global" value="Ativo (Inativo)" />
+    <int name="const_vibracall_ativo_global" value="1" />
+    <int name="const_vibracall_intensidade_global" value="70" />
+    <string name="const_orelhas_status_texto_global" value="Ativo (Expressivo)" />
+    <int name="const_orelhas_ativo_global" value="1" />
+    <int name="const_orelhas_angulo_maximo_global" value="120" />
+    <int name="const_display_ligado_global" value="1" />
+    <int name="const_display_brilho_global" value="80" />
+    <int name="const_display_timeout_segundos_global" value="30" />
+    <string name="const_display_imagem_principal_nome_global" value="img_padrao_01" />
+    <string name="const_display_gif_principal_nome_global" value="gif_idle_01" />
     <color name="const_baselib_accent_global" value="0x70609C" />
     <color name="const_baselib_accent_text_global" value="0xFFFFFF" />
     <int name="const_baselib_radius_global" value="8" />
