@@ -60,6 +60,9 @@ extern "C" {
 #define SETTINGS_KEY_SENS_THRESH_OFF "sens_th_off"
 #define SETTINGS_KEY_HAPTIC_INTENS   "vib_intens"
 #define SETTINGS_KEY_EARS_ANGLE      "ears_angle"
+#define SETTINGS_KEY_FP_KEYS         "fp_keys"
+#define SETTINGS_KEY_PEER_NAME_SLOT0 "name_slot0"
+#define SETTINGS_KEY_PEER_NAME_SLOT1 "name_slot1"
 
 /* ============================================================================
  * INICIALIZAÇÃO E CICLO DE VIDA DO ACTOR
@@ -195,6 +198,26 @@ esp_err_t settings_get_u32(const char *key, uint32_t *out_val, uint32_t default_
  * @return esp_err_t ESP_OK se lido com sucesso, erro caso contrário.
  */
 esp_err_t settings_get_blob(const char *key, void *out_blob, size_t len);
+
+/**
+ * @brief Lê um blob de dados binários de maior capacidade (ex: chaves Fast Pair até 128 bytes).
+ *
+ * @param key Chave identificadora.
+ * @param[out] out_blob Buffer para recepção dos bytes.
+ * @param[in,out] len Ponteiro contendo a capacidade do buffer na entrada e o tamanho real lido na saída.
+ * @return esp_err_t ESP_OK em caso de sucesso.
+ */
+esp_err_t settings_get_large_blob(const char *key, void *out_blob, size_t *len);
+
+/**
+ * @brief Grava um blob de dados binários de maior capacidade (ex: chaves Fast Pair até 128 bytes).
+ *
+ * @param key Chave identificadora.
+ * @param blob Ponteiro para os dados a serem gravados (ou NULL com len=0 para apagar).
+ * @param len Tamanho em bytes.
+ * @return esp_err_t ESP_OK em caso de sucesso.
+ */
+esp_err_t settings_set_large_blob(const char *key, const void *blob, size_t len);
 
 #ifdef __cplusplus
 }

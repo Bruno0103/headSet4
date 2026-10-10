@@ -44,6 +44,40 @@ static void sfx_task(void *arg)
     }
 }
 
+#include "hs_events.h"
+#include "headset_events.h"
+
+static void sfx_event_handler(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
+{
+    (void)handler_args;
+    (void)event_data;
+
+    if (base == SENSOR_EVT) {
+        if (id == SENSOR_EVT_WORN) {
+            sfx_play(SFX_WORN);
+        } else if (id == SENSOR_EVT_REMOVED) {
+            sfx_play(SFX_REMOVED);
+        }
+    } else if (base == BT_EVT) {
+        if (id == BT_EVT_LINK_UP) {
+            sfx_play(SFX_CONNECTED);
+        } else if (id == BT_EVT_LINK_DOWN) {
+            sfx_play(SFX_DISCONNECTED);
+        }
+    } else if (base == HEADSET_EVENT) {
+        /* Shim de compatibilidade com o loop legado */
+        if (id == HEADSET_EVT_WORN) {
+            sfx_play(SFX_WORN);
+        } else if (id == HEADSET_EVT_REMOVED) {
+            sfx_play(SFX_REMOVED);
+        } else if (id == HEADSET_EVT_LINK_UP) {
+            sfx_play(SFX_CONNECTED);
+        } else if (id == HEADSET_EVT_LINK_DOWN) {
+            sfx_play(SFX_DISCONNECTED);
+        }
+    }
+}
+
 void sfx_play(sfx_id_t id)
 {
     if (s_q) xQueueSend(s_q, &id, 0);
@@ -54,5 +88,18 @@ esp_err_t sfx_init(void)
     s_q = xQueueCreate(4, sizeof(sfx_id_t));
     ESP_RETURN_ON_FALSE(s_q, ESP_ERR_NO_MEM, TAG, "fila");
     ESP_RETURN_ON_FALSE(xTaskCreate(sfx_task, "sfx", 3072, NULL, 3, NULL) == pdPASS, ESP_ERR_NO_MEM, TAG, "task");
+
+    /* Assinatura no barramento hs_events */
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_WORN, sfx_event_handler, NULL);
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_REMOVED, sfx_event_handler, NULL);
+    hs_event_register(BT_EVT, BT_EVT_LINK_UP, sfx_event_handler, NULL);
+    hs_event_register(BT_EVT, BT_EVT_LINK_DOWN, sfx_event_handler, NULL);
+
+    /* Assinatura no loop legado headset_events para compatibilidade temporária */
+    headset_event_register(HEADSET_EVT_WORN, sfx_event_handler, NULL);
+    headset_event_register(HEADSET_EVT_REMOVED, sfx_event_handler, NULL);
+    headset_event_register(HEADSET_EVT_LINK_UP, sfx_event_handler, NULL);
+    headset_event_register(HEADSET_EVT_LINK_DOWN, sfx_event_handler, NULL);
+
     return ESP_OK;
 }

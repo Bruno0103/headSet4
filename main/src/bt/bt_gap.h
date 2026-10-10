@@ -27,8 +27,8 @@ typedef enum {
 typedef struct {
     /** Pedido de confirmacao SSP (BtAppTask). passkey = numero de 6 digitos. */
     bt_gap_cfm_decision_t (*on_ssp_confirm)(const uint8_t *bda, uint32_t passkey);
-    /** Autenticacao concluida (sucesso ou falha). */
-    void (*on_auth_complete)(const uint8_t *bda, bool success);
+    /** Autenticacao concluida (sucesso ou falha) com nome do dispositivo. */
+    void (*on_auth_complete)(const uint8_t *bda, bool success, const char *device_name);
     /** Enlace ACL aberto/fechado (reason = codigo HCI, so valido ao fechar). */
     void (*on_acl)(const uint8_t *bda, bool connected, uint8_t reason);
 } bt_gap_cbs_t;

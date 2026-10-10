@@ -30,17 +30,13 @@
 #define LCD_GPIO_SCLK 18 /* LCD SCK  + T_CLK */
 #define LCD_GPIO_MOSI 23 /* LCD SDI  + T_DIN */
 #define LCD_GPIO_MISO 19 /* SOMENTE T_DO. NAO ligar LCD SDO nem SD_MISO */
-#define LCD_GPIO_CS                                                            \
-  5 /* CS do LCD (VSPI CS0 nativo; strapping, tem pull-up externo no modulo)   \
-     */
+#define LCD_GPIO_CS 5 /* CS do LCD (VSPI CS0 nativo; strapping, tem pull-up externo no modulo) */
 #define LCD_GPIO_DC 27 /* DC/RS */
 #define LCD_GPIO_RST 4 /* RST do LCD */
-#define LCD_GPIO_BL                                                            \
-  13 /* Backlight (via transistor/MOSFET se o modulo nao tiver) */
+#define LCD_GPIO_BL 13 /* Backlight (via transistor/MOSFET se o modulo nao tiver) */
 
-#define TOUCH_GPIO_CS 26 /* T_CS */
-#define TOUCH_GPIO_IRQ                                                         \
-  39 /* T_IRQ: entrada pura; o modulo ja tem pull-up. Nao usado (polling) */
+#define TOUCH_GPIO_CS 22 /* T_CS */
+#define TOUCH_GPIO_IRQ (-1) /* T_IRQ: entrada pura; o modulo ja tem pull-up. Nao usado (polling) */
 
 /* Checklist de fiacao do touch (causa mais comum de touch morto):
  *  - LCD SDO, SD_CS, SD_MISO, SD_MOSI, SD_SCK: SEM LIGACAO.
@@ -53,7 +49,7 @@
  * I2C0 - WM8960 (0x1A) + APDS-9930 (0x39). Pull-ups ja existem no breakout.
  * ========================================================================== */
 #define BOARD_I2C_SDA 21
-#define BOARD_I2C_SCL 22
+#define BOARD_I2C_SCL 26
 #define BOARD_I2C_HZ 100000
 
 /* ============================================================================
@@ -72,9 +68,7 @@
  * Bateria
  * ========================================================================== */
 #define BAT_ADC_PIN GPIO_NUM_34 /* ADC1_CH6 */
-#define BAT_CTRL_PIN                                                           \
-  GPIO_NUM_14 /* habilita o divisor via MOSFET (pino emite sinal curto no      \
-                 boot: inofensivo) */
+#define BAT_CTRL_PIN GPIO_NUM_14 /* habilita o divisor via MOSFET (pino emite sinal curto no boot: inofensivo) */
 
 /* ============================================================================
  * Botao de troca de dispositivo / pareamento (GPIO2 -> GND, pull-up interno).
@@ -89,8 +83,7 @@
  * O driver usa PON/PEN por registrador quando CONFIG_HEADSET_APDS_DUTY_CYCLE=y.
  * ========================================================================== */
 #define BOARD_APDS9930_I2C_ADDR 0x39
-#define BOARD_APDS9930_PWR_GPIO (-1) /* -1 = sem controle de energia por GPIO  \
-                                      */
+#define BOARD_APDS9930_PWR_GPIO (-1) /* -1 = sem controle de energia por GPIO */
 
 /* ============================================================================
  * Reserva

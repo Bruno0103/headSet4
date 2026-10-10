@@ -99,4 +99,4 @@ Este documento consolida inconsistências, riscos elétricos e discrepâncias en
 |---|---|---|---|---|
 | **#1** | Codec WM8960 | GPIO0 vs Unused | ⚠️ Risco de áudio mudo / curto de clock | Validar no esquemático se o breakout tem oscilador próprio de 24MHz |
 | **#2** | Sensor APDS-9930 | GPIO15 (Strapping / VDD) | ⚠️ Risco de boot fail / pico de corrente | Decidir se VDD fica direto em 3.3V com sleep via I2C |
-| **#3** | Display / Touch SPI | GPIO19 (MISO) vs GPIO26 (CS) | 📝 Erro de documentação no código | Corrigir texto do comentário em `display.c` |
+| **#3** | Display / Touch SPI | GPIO19 (MISO) vs GPIO26 (CS) | ✅ Resolvido em `display.c` | Comentário corrigido para indicar GPIO19 (T_DO) |

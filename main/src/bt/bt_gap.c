@@ -70,7 +70,7 @@ static void gap_evt_hdl(uint16_t ev, void *p)
                      ESP_BD_ADDR_HEX(prm->auth_cmpl.bda));
         }
         if (s_cbs.on_auth_complete) {
-            s_cbs.on_auth_complete(prm->auth_cmpl.bda, ok);
+            s_cbs.on_auth_complete(prm->auth_cmpl.bda, ok, (const char *)prm->auth_cmpl.device_name);
         }
         break;
     }

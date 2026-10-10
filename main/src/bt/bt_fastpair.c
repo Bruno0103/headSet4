@@ -13,7 +13,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "nvs.h"
+#include "settings.h"
 #include "psa/crypto.h"
 #include "sdkconfig.h"
 
@@ -30,9 +30,6 @@ static const char *TAG = "bt_fp";
 #define FP_MAX_WRITE        80           /* 16 (cifrado) + 64 (chave publica do Seeker) */
 
 #define KBP_FLAG_INITIATE_BONDING  0x40  /* bit 1 numerado a partir do MSB */
-
-#define NVS_NS   "fastpair"
-#define NVS_KEYS "keys"
 
 /* UUID base FE2C12xx-8366-4814-8EB0-01DE32100BEA, little-endian, xx = byte baixo / alto */
 #define FP_UUID128(lo, hi) { 0xEA, 0x0B, 0x10, 0x32, 0xDE, 0x01, 0xB0, 0x8E, 0x14, 0x48, 0x66, 0x83, lo, hi, 0x2C, 0xFE }
@@ -57,6 +54,8 @@ typedef struct {
 static bool    s_enabled;
 static uint8_t s_model_id[3];
 static psa_key_id_t s_as_key;
+
+static void ensure_crypto_task(void);
 
 static SemaphoreHandle_t s_mtx;
 static QueueHandle_t     s_jobs;
@@ -231,36 +230,25 @@ static esp_err_t load_antispoof_key(void)
     return ESP_OK;
 }
 
-/* ======================= chaves de conta (NVS) ======================= */
+/* ======================= chaves de conta (Actor settings) ======================= */
 
 static void keys_load(void)
 {
-    nvs_handle_t h;
     s_nkeys = 0;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) {
-        return;
-    }
-    size_t len = sizeof s_keys;
-    if (nvs_get_blob(h, NVS_KEYS, s_keys, &len) == ESP_OK && len % 16 == 0) {
+    size_t len = sizeof(s_keys);
+    esp_err_t err = settings_get_large_blob(SETTINGS_KEY_FP_KEYS, s_keys, &len);
+    if (err == ESP_OK && len % 16 == 0) {
         s_nkeys = (int)(len / 16);
     }
-    nvs_close(h);
-    ESP_LOGI(TAG, "%d chave(s) de conta carregada(s)", s_nkeys);
+    ESP_LOGI(TAG, "%d chave(s) de conta carregada(s) via actor settings", s_nkeys);
 }
 
 static void keys_save_locked(void)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err == ESP_OK) {
-        err = s_nkeys ? nvs_set_blob(h, NVS_KEYS, s_keys, (size_t)s_nkeys * 16) : nvs_erase_key(h, NVS_KEYS);
-        if (err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND) {
-            err = nvs_commit(h);
-        }
-        nvs_close(h);
-    }
+    size_t len = (size_t)s_nkeys * 16;
+    esp_err_t err = settings_set_large_blob(SETTINGS_KEY_FP_KEYS, s_nkeys ? s_keys : NULL, len);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Falha ao gravar chaves de conta: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Falha ao gravar chaves de conta via actor settings: %s", esp_err_to_name(err));
     }
 }
 
@@ -421,6 +409,10 @@ bool bt_fastpair_session_active(void)
 void bt_fastpair_on_pairing_mode(bool active)
 {
     s_pairing = active;
+    if (active && s_enabled) {
+        /* Garante que a task criptográfica com 8 KB de stack esteja acordada para responder rapidamente ao Seeker */
+        ensure_crypto_task();
+    }
 }
 
 bt_gap_cfm_decision_t bt_fastpair_ssp_confirm(const uint8_t *bda, uint32_t passkey)
@@ -533,7 +525,15 @@ static void handle_kbp(const fp_job_t *j)
         uint8_t seeker[6];
         memcpy(seeker, plain + 8, 6);
         ESP_LOGI(TAG, "Seeker pediu que o Provider inicie o bonding: " ESP_BD_ADDR_STR, ESP_BD_ADDR_HEX(seeker));
-        bt_a2dp_connect(seeker);
+        struct hs_actor *act = bt_link_actor_get();
+        if (act) {
+            bt_cmd_connect_t cmd;
+            cmd.slot = 0;
+            memcpy(cmd.bda, seeker, 6);
+            hs_actor_send(act, BT_CMD_CONNECT, &cmd, sizeof(cmd), 0);
+        } else {
+            bt_a2dp_connect(seeker);
+        }
     }
     memset(key, 0, sizeof key);
 }
@@ -599,19 +599,50 @@ static void handle_account_key(const fp_job_t *j)
     memset(plain, 0, sizeof plain);
 }
 
+static TaskHandle_t s_fp_task_handle = NULL;
+#define FP_CRYPTO_IDLE_TIMEOUT_MS 15000
+
 static void fp_task(void *arg)
 {
     fp_job_t job;
+    ESP_LOGI(TAG, "Task fp_crypto sob demanda iniciada (8 KB de stack alocados)");
     for (;;) {
-        if (xQueueReceive(s_jobs, &job, portMAX_DELAY) != pdTRUE) {
+        /* Aguarda jobs com timeout; se ocioso e fora de pareamento/sessão, encerra para liberar 8 KB de stack */
+        if (xQueueReceive(s_jobs, &job, pdMS_TO_TICKS(FP_CRYPTO_IDLE_TIMEOUT_MS)) != pdTRUE) {
+            LOCK();
+            bool busy = s_pairing || s_sess.active;
+            if (!busy) {
+                s_fp_task_handle = NULL;
+                UNLOCK();
+                ESP_LOGI(TAG, "Task fp_crypto ociosa: encerrando sob demanda (-8 KB liberados)");
+                vTaskDelete(NULL);
+                return;
+            }
+            UNLOCK();
             continue;
         }
+
         switch (job.op) {
         case JOB_KBP:         handle_kbp(&job); break;
         case JOB_PASSKEY:     handle_passkey(&job); break;
         case JOB_ACCOUNT_KEY: handle_account_key(&job); break;
         }
     }
+}
+
+/**
+ * @brief Garante que a task fp_crypto esteja rodando sob demanda.
+ */
+static void ensure_crypto_task(void)
+{
+    LOCK();
+    if (s_fp_task_handle == NULL) {
+        BaseType_t ok = xTaskCreatePinnedToCore(fp_task, "fp_crypto", 8192, NULL, 3, &s_fp_task_handle, 0);
+        if (ok != pdPASS) {
+            ESP_LOGE(TAG, "Falha ao instanciar task fp_crypto sob demanda");
+        }
+    }
+    UNLOCK();
 }
 
 static void enqueue_write(uint16_t handle, const uint8_t *data, uint16_t len)
@@ -630,6 +661,9 @@ static void enqueue_write(uint16_t handle, const uint8_t *data, uint16_t len)
         return;
     }
     memcpy(job.data, data, len);
+
+    ensure_crypto_task();
+
     if (xQueueSend(s_jobs, &job, 0) != pdTRUE) {
         ESP_LOGW(TAG, "Fila de jobs cheia; escrita descartada");
     }
@@ -837,9 +871,8 @@ esp_err_t bt_fastpair_init(void)
     ESP_RETURN_ON_ERROR(load_antispoof_key(), TAG, "chave Anti-Spoofing");
     keys_load();
 
-    /* ECDH + SHA/AES precisam de stack; roda fora da task do Bluedroid */
-    BaseType_t ok = xTaskCreatePinnedToCore(fp_task, "fp_crypto", 8192, NULL, 3, NULL, 0);
-    ESP_RETURN_ON_FALSE(ok == pdPASS, ESP_ERR_NO_MEM, TAG, "task fp_crypto");
+    /* A task fp_crypto (8 KB de stack) passa a ser criada sob demanda em ensure_crypto_task()
+     * durante o pareamento ou recebimento de escritas GATT e encerra por inatividade, economizando RAM */
 
     build_db();
     s_enabled = true;

@@ -133,10 +133,9 @@ static esp_err_t display_hw_init(lv_display_t *disp) {
                       TAG, "spi bus");
 
   /*
-   * Habilita pull-up interno no pino MISO (T_DO).
-   * No GPIO 26 o ESP32 possui resistor de pull-up interno de ~45k,
-   * evitando que a linha flutue para nível indeterminado quando o chip XPT2046
-   * entra em modo tri-state entre transmissões SPI.
+   * Habilita pull-up interno no pino MISO (T_DO, GPIO19).
+   * Evita que a linha flutue quando o XPT2046 entra em tri-state
+   * entre transmissões SPI.
    */
   gpio_set_pull_mode(LCD_GPIO_MISO, GPIO_PULLUP_ONLY);
 

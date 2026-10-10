@@ -582,3 +582,51 @@ esp_err_t settings_get_blob(const char *key, void *out_blob, size_t len)
     }
     return err;
 }
+
+esp_err_t settings_get_large_blob(const char *key, void *out_blob, size_t *len)
+{
+    if (!out_blob || !key || !len || *len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!s_settings.nvs_open_ok) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return nvs_get_blob(s_settings.nvs_h, key, out_blob, len);
+}
+
+esp_err_t settings_set_large_blob(const char *key, const void *blob, size_t len)
+{
+    if (!key) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!s_settings.nvs_open_ok) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err;
+    if (blob && len > 0) {
+        err = nvs_set_blob(s_settings.nvs_h, key, blob, len);
+    } else {
+        err = nvs_erase_key(s_settings.nvs_h, key);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            err = ESP_OK;
+        }
+    }
+
+    if (err == ESP_OK) {
+        settings_schedule_debounce(&s_settings);
+
+        /* Notifica alteração de configuração no barramento central */
+        cfg_changed_evt_t evt;
+        memset(&evt, 0, sizeof(evt));
+        strncpy(evt.key, key, sizeof(evt.key) - 1);
+        evt.type = (uint8_t)SETTINGS_TYPE_BLOB;
+        evt.value_u8 = 0;
+        hs_event_post(CFG_EVT, CFG_EVT_SETTING_CHANGED, &evt, sizeof(evt));
+    }
+
+    return err;
+}

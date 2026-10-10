@@ -39,6 +39,12 @@ void bt_link_mgr_set_account_ref(uint8_t ref);
 uint8_t bt_link_mgr_get_volume(void);
 void    bt_link_mgr_set_volume(uint8_t volume);
 
+/**
+ * @brief Retorna a instância do Actor bt_link (Core 0, prioridade 6).
+ */
+struct hs_actor *bt_link_actor_get(void);
+
 #ifdef __cplusplus
 }
 #endif
+

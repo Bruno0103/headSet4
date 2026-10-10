@@ -5,7 +5,7 @@
 
 #include "pinout.h"
 
-#define LCD_SPI_NUM         SPI2_HOST
+#define LCD_SPI_NUM         SPI3_HOST
 #define LCD_H_RES           240
 #define LCD_V_RES           320
 #define LCD_PIXEL_CLK_HZ    (40 * 1000 * 1000)
