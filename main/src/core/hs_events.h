@@ -117,9 +117,10 @@ typedef enum {
  * @brief Conexão ou desconexão de link Bluetooth.
  */
 typedef struct {
-    uint8_t           slot;      /**< Índice do slot no link manager (0 ou 1). */
-    esp_bd_addr_t     bda;       /**< Endereço Bluetooth do dispositivo remoto (6 bytes). */
-    bt_profile_mask_t profile;   /**< Perfil envolvido no evento. */
+    uint8_t           slot;          /**< Índice do slot no link manager (0 ou 1). */
+    esp_bd_addr_t     bda;           /**< Endereço Bluetooth do dispositivo remoto (6 bytes). */
+    bt_profile_mask_t profile;       /**< Perfil envolvido no evento. */
+    bool              is_voluntary;  /**< true se desconexão voluntária/normal, false se queda de sinal/timeout. */
 } bt_link_evt_t;
 
 /**

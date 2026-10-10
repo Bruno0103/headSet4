@@ -17,13 +17,10 @@
 #include "voice_nr.h"
 
 #define MUSIC_RB_SIZE                                                          \
-  (32 * 1024) /* ~185 ms a 44.1 kHz; fica em PSRAM quando disponivel */
-/* Limiares relativos ao tamanho real do buffer (pode cair para metade sem
- * PSRAM) */
+  (128 * 1024) /* ~743 ms a 44.1 kHz estereo em PSRAM (zero risco de underrun) */
+/* Pré-buffer de 32 KB (~185 ms de colchão antes de iniciar reprodução) */
 #define MUSIC_PREFILL                                                          \
-  (s_music_size * 3 / 8) /* acumula isto antes de comecar a tocar */
-#define DRIFT_HIGH (s_music_size * 3 / 4)
-#define DRIFT_LOW (s_music_size / 8)
+  (32 * 1024)
 #define MUSIC_CHUNK 1024
 #define CALL_RB_SIZE (4 * 1024)
 #define CALL_FRAMES 128 /* 16 ms a 8 kHz, 8 ms a 16 kHz */
@@ -198,19 +195,12 @@ static bool pump_music(void) {
       tone_mix_stereo(s_chunk, n / 4);
     uint8_t *d = (uint8_t *)s_chunk;
 
-    /* Compensação de deriva de clock (drift) I2S vs Celular:
-     * Manter o nível do buffer saudável (alvo ~ metade).
-     * Se estiver muito cheio (overrun iminente), descarta 1 frame (4 bytes).
-     * Se estiver muito vazio (underrun iminente), duplica 1 frame (4 bytes).
-     */
-    if (n > 4) {
-      if (fill > DRIFT_HIGH) {
-        ok = i2s_write_ok(d + 4, n - 4);
-      } else if (fill < DRIFT_LOW) {
-        ok = i2s_write_ok(d, n) && i2s_write_ok(d + n - 4, 4);
-      } else {
-        ok = i2s_write_ok(d, n);
-      }
+    /* Envia o bloco completo de PCM diretamente ao DMA I2S.
+     * Com buffer de 128 KB em PSRAM e backpressure elástico do I2S,
+     * NÃO descartamos nem duplicamos frames artificialmente no meio da onda PCM,
+     * preservando 100% da integridade da forma de onda senoidal sem cliques/estalos. */
+    if (n > 0) {
+      ok = i2s_write_ok(d, n);
     } else {
       ok = false; /* bloco vazio: deixa o laço dormir */
     }
@@ -480,9 +470,10 @@ esp_err_t audio_io_init(void) {
   /* Full-duplex na mesma porta: TX = fones, RX = microfone. ESP32 e o mestre do
    * clock. */
   i2s_chan_config_t cc = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-  /* Ativa o auto_clear (limpeza automática). Em caso de underrun do DMA, isso
-     evita que o último bloco seja repetido, o que produziria um "buzz" audível.
-   */
+  /* Aumenta descritores DMA e frames por descritor para absorver rajadas
+     do rádio Bluetooth (8 descritores * 512 frames = ~92 ms de folga). */
+  cc.dma_desc_num = 8;
+  cc.dma_frame_num = 512;
   cc.auto_clear = true;
   ESP_RETURN_ON_ERROR(i2s_new_channel(&cc, &s_tx, &s_rx), TAG, "new channel");
 

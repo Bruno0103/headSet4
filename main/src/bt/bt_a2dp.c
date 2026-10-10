@@ -100,6 +100,7 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
                 bt_streaming_evt_t st = { .slot = 0, .streaming = false };
                 hs_event_post(BT_EVT, BT_EVT_STREAMING, &st, sizeof(st));
             }
+            ev.is_voluntary = (a2d->conn_stat.disc_rsn == ESP_A2D_DISC_RSN_NORMAL);
             hs_event_post(BT_EVT, BT_EVT_LINK_DOWN, &ev, sizeof(ev));
         }
         break;

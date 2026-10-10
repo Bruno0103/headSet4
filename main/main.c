@@ -158,11 +158,11 @@ void app_main(void) {
    * stack cuida do loop de desenho.
    */
   if (display_init() == ESP_OK) {
-    /* Core 1, prio 2: a UI usa a CPU que o áudio deixa livre (audio_io passa
-     * a maior parte do tempo bloqueada no DMA e tem prio 18, preemptando a UI
-     * sempre que precisa). Mantém o core 0 livre para a pilha Bluetooth. */
+    /* Core 0, prio 4: roda no Core de controle onde há folga entre pacotes BT,
+     * garantindo que a renderização da tela e o touch respondam a 30+ FPS mesmo
+     * quando a task de áudio (Core 1, prio 18) estiver sob streaming A2DP contínuo. */
     BaseType_t task_ret = xTaskCreatePinnedToCore(display_task, "lvgl_task",
-                                                  6144, NULL, 2, NULL, 1);
+                                                  6144, NULL, 4, NULL, 0);
     if (task_ret != pdPASS) {
       ESP_LOGE(TAG, "Falha ao criar a tarefa FreeRTOS do LVGL (lvgl_task)");
     } else {

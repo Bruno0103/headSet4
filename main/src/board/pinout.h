@@ -71,10 +71,10 @@
 #define BAT_CTRL_PIN GPIO_NUM_14 /* habilita o divisor via MOSFET (pino emite sinal curto no boot: inofensivo) */
 
 /* ============================================================================
- * Botao de troca de dispositivo / pareamento (GPIO2 -> GND, pull-up interno).
- * Baixo no boot so importa se o GPIO0 tambem estiver baixo.
+ * Botao de troca de dispositivo / pareamento: Botão BOOT on-board (GPIO0 -> GND).
+ * Possui pull-up externo de 10k e capacitor na placa ESP32 DevKit/WROVER.
  * ========================================================================== */
-#define BOARD_BUTTON_SWITCH_GPIO GPIO_NUM_2
+#define BOARD_BUTTON_SWITCH_GPIO GPIO_NUM_0
 
 /* ============================================================================
  * APDS-9930 (I2C compartilhado)

@@ -97,6 +97,7 @@ typedef struct {
     int              battery;
     bool             auto_switch;
     bool             switching;
+    bool             manual_disconnect;
     int64_t          switch_start_us;
 
     struct {
@@ -288,7 +289,11 @@ static void apply_state(void)
         return;
     }
     if (!s_ctx.link.profiles) {
-        schedule_connect();
+        if (s_ctx.manual_disconnect) {
+            ESP_LOGI(TAG, "Reconexao automatica suprimida: dispositivo foi desconectado voluntariamente.");
+        } else {
+            schedule_connect();
+        }
     }
 }
 
@@ -496,6 +501,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             atomic_store(&s_atomic_sel, s_ctx.sel);
             atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
             s_ctx.attempts = 0;
+            s_ctx.manual_disconnect = false; /* Intenção explícita do usuário de comutar/conectar */
             nvs_save();
             ESP_LOGI(TAG, "Slot selecionado via botao: %d (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
             post_slot_changed();
@@ -574,6 +580,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             }
             s_ctx.link.profiles |= ev->profile;
             s_ctx.attempts = 0;
+            s_ctx.manual_disconnect = false;
             if (s_connect_tmr) esp_timer_stop(s_connect_tmr);
             ESP_LOGI(TAG, "Link ativo com " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_ctx.link.bda), s_ctx.link.profiles);
             post_slot_changed();
@@ -593,7 +600,18 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             const bt_link_evt_t *ev = (const bt_link_evt_t *)ev_msg->payload;
             if (s_ctx.link.profiles && memcmp(s_ctx.link.bda, ev->bda, ESP_BD_ADDR_LEN) == 0) {
                 s_ctx.link.profiles &= ~ev->profile;
-                ESP_LOGI(TAG, "Perfil 0x%X caiu (restam 0x%X)", ev->profile, s_ctx.link.profiles);
+                if (ev->is_voluntary) {
+                    if (s_ctx.switching) {
+                        /* Desconexão foi solicitada pelo headset para comutar de slot: NÃO marcar manual_disconnect */
+                        s_ctx.manual_disconnect = false;
+                        ESP_LOGI(TAG, "Desconexao do slot anterior concluida durante comutacao (switching=true, manual_disconnect=false)");
+                    } else {
+                        /* Desconexão voluntária feita pelo próprio smartphone */
+                        s_ctx.manual_disconnect = true;
+                        ESP_LOGI(TAG, "Desconexao voluntaria recebida do smartphone (manual_disconnect=true)");
+                    }
+                }
+                ESP_LOGI(TAG, "Perfil 0x%X caiu (restam 0x%X, voluntario=%d)", ev->profile, s_ctx.link.profiles, ev->is_voluntary);
                 if (!s_ctx.link.profiles) {
                     if (s_complete_tmr) esp_timer_stop(s_complete_tmr);
                     s_ctx.switching = false;
