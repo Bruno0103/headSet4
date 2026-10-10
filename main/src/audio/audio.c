@@ -385,11 +385,13 @@ esp_err_t audio_init(void)
     }
 #endif
 
-    /* 4. Configuração e criação do Actor Audio conforme AGENTS.md §4.2 (Core 1, Prio 10, Fixo) */
+    /* 4. Configuração e criação do Actor Audio (Core 1, Fixo).
+     * Prio 8 (era 10): o controle NÃO pode preemptar o plano de dados
+     * (audio_io, prio 18), senão comandos de volume/EQ causam micro-cortes. */
     const hs_actor_cfg_t actor_cfg = {
         .name      = "act_audio",
         .stack     = 4096,
-        .prio      = 10,
+        .prio      = 8,
         .core      = 1,
         .queue_len = 16,
         .idle_ms   = 0, /* Fixo: permanece ativo */

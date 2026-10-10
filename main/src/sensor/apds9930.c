@@ -140,8 +140,11 @@ static esp_err_t sample_proximity(uint16_t *out)
         for (int i = 0; i < MEDIAN_SAMPLES && err == ESP_OK; i++) {
             err = read_proximity(&s[i]);
             if (i < MEDIAN_SAMPLES - 1) {
-                // Intervalo mínimo entre ciclos internos do conversor óptico
-                vTaskDelay(pdMS_TO_TICKS(6));
+                // Intervalo mínimo entre ciclos internos do conversor óptico.
+                // Com CONFIG_FREERTOS_HZ=100, pdMS_TO_TICKS(6)==0 (não esperava);
+                // forçamos no mínimo 1 tick para realmente ceder a CPU.
+                TickType_t d = pdMS_TO_TICKS(6);
+                vTaskDelay(d > 0 ? d : 1);
             }
         }
         
