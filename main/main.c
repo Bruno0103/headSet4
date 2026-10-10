@@ -12,7 +12,6 @@
 #include "board_button.h"
 #include "bt_core.h"
 #include "display.h"
-#include "headset_events.h"
 #include "hs_events.h"
 #include "settings.h"
 #include "sfx.h"
@@ -106,7 +105,6 @@ void app_main(void)
     ESP_ERROR_CHECK(nvs_init());
     ESP_ERROR_CHECK(hs_events_init());
     ESP_ERROR_CHECK(settings_init());
-    ESP_ERROR_CHECK(headset_events_init());
 
     /* Codec/I2S antes do Bluetooth: o stack ja pode entregar PCM assim que conectar */
     ESP_ERROR_CHECK(audio_init());

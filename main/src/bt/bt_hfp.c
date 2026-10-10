@@ -16,7 +16,7 @@
 #include "audio_data.h"
 #include "bt_a2dp.h"
 #include "bt_link_mgr.h"
-#include "headset_events.h"
+#include "hs_events.h"
 
 static const char *TAG = "bt_hfp";
 
@@ -59,10 +59,13 @@ static void hf_evt_hdl(uint16_t event, void *p)
             s_slc_up = up;
             s_xapl_sent = false;
             s_last_level = -1;
-            headset_link_evt_t ev = { .profile = HEADSET_PROFILE_HFP };
-            memcpy(ev.bda, hf->conn_stat.remote_bda, sizeof ev.bda);
+            bt_link_evt_t ev = {
+                .slot = 0,
+                .profile = BT_PROFILE_HFP,
+            };
+            memcpy(ev.bda, hf->conn_stat.remote_bda, sizeof(ev.bda));
             ESP_LOGI(TAG, "HFP %s", up ? "conectado (SLC)" : "desconectado");
-            headset_event_post(up ? HEADSET_EVT_LINK_UP : HEADSET_EVT_LINK_DOWN, &ev, sizeof ev);
+            hs_event_post(BT_EVT, up ? BT_EVT_LINK_UP : BT_EVT_LINK_DOWN, &ev, sizeof(ev));
         }
         break;
 

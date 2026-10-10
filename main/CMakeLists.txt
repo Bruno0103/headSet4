@@ -1,6 +1,5 @@
 idf_component_register(
     SRCS "main.c"
-         "src/core/headset_events.c"
          "src/core/hs_events.c"
          "src/core/hs_actor.c"
          "src/core/settings.c"

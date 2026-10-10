@@ -7,7 +7,6 @@
 #include "freertos/task.h"
 
 #include "board_i2c.h"
-#include "headset_events.h"
 #include "hs_events.h"
 #include "settings.h"
 #include "pinout.h"
@@ -164,7 +163,6 @@ static void publish(bool worn)
 {
     s_worn = worn;
     ESP_LOGW(TAG, "Fone %s", worn ? "COLOCADO na cabeca" : "RETIRADO da cabeca");
-    headset_event_post(worn ? HEADSET_EVT_WORN : HEADSET_EVT_REMOVED, NULL, 0);
 
     /* Publica no barramento central hs_events */
     hs_event_post(SENSOR_EVT, worn ? SENSOR_EVT_WORN : SENSOR_EVT_REMOVED, NULL, 0);

@@ -9,7 +9,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-#include "headset_events.h"
+#include "hs_events.h"
 #include "pinout.h"
 
 #define DEBOUNCE_MS        25
@@ -61,16 +61,24 @@ static void button_task(void *arg)
                 pressed = false;
                 int64_t held_ms = (esp_timer_get_time() - t_press_us) / 1000;
                 if (!long_fired && held_ms < SHORT_PRESS_MAX_MS) {
-                    ESP_LOGI(TAG, "Clique curto (%lld ms) -> BUTTON_SWITCH", (long long)held_ms);
-                    headset_event_post(HEADSET_EVT_BUTTON_SWITCH, NULL, 0);
+                    ESP_LOGI(TAG, "Clique curto (%lld ms) -> BUTTON_SHORT", (long long)held_ms);
+                    sensor_button_evt_t btn_ev = {
+                        .button_id = 0,
+                        .duration_ms = (uint16_t)held_ms,
+                    };
+                    hs_event_post(SENSOR_EVT, SENSOR_EVT_BUTTON_SHORT, &btn_ev, sizeof(btn_ev));
                 } else if (!long_fired) {
                     ESP_LOGI(TAG, "Pressao de %lld ms ignorada (entre clique e pressao longa)", (long long)held_ms);
                 }
             }
         } else if (pressed && !long_fired) {
             long_fired = true;
-            ESP_LOGI(TAG, "Pressao longa -> BUTTON_PAIRING");
-            headset_event_post(HEADSET_EVT_BUTTON_PAIRING, NULL, 0);
+            ESP_LOGI(TAG, "Pressao longa -> BUTTON_LONG");
+            sensor_button_evt_t btn_ev = {
+                .button_id = 0,
+                .duration_ms = LONG_PRESS_MS,
+            };
+            hs_event_post(SENSOR_EVT, SENSOR_EVT_BUTTON_LONG, &btn_ev, sizeof(btn_ev));
         }
     }
 }

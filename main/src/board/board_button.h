@@ -1,9 +1,9 @@
 /**
  * @file board_button.h
- * @brief Botao da placa: GPIO + ISR -> fila -> debounce -> eventos HEADSET_EVENT.
+ * @brief Botao da placa: GPIO + ISR -> fila -> debounce -> eventos SENSOR_EVT.
  *
- *   clique curto (< 1,5 s)  -> HEADSET_EVT_BUTTON_SWITCH
- *   pressao longa (>= 3 s)  -> HEADSET_EVT_BUTTON_PAIRING (disparado ao atingir 3 s)
+ *   clique curto (< 1,5 s)  -> SENSOR_EVT_BUTTON_SHORT
+ *   pressao longa (>= 3 s)  -> SENSOR_EVT_BUTTON_LONG (disparado ao atingir 3 s)
  */
 #pragma once
 
@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-/** Requer headset_events_init() previo. */
+/** Requer hs_events_init() previo. */
 esp_err_t board_button_init(void);
 
 #ifdef __cplusplus

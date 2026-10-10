@@ -5,7 +5,7 @@
  * Cada slot tem estado SLEEP/ACTIVE. Somente o slot selecionado pode estar ACTIVE, e so
  * com o fone na cabeca. Fone retirado -> Classic desligado + BLE lento (SLEEP); recolocado
  * -> Classic volta e reconecta com backoff. Decide a politica de SSP (so aceita em pareamento).
- * Tudo e orientado a eventos do HEADSET_EVENT; nenhum driver chama o BT diretamente.
+ * Tudo e orientado a eventos do barramento central (SENSOR_EVT / BT_EVT); nenhum driver chama o BT diretamente.
  */
 #pragma once
 

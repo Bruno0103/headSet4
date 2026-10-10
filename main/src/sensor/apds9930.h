@@ -17,7 +17,7 @@ extern "C" {
 
 /**
  * Inicializa o sensor no barramento compartilhado e inicia a task de leitura.
- * Requer board_i2c_init() e headset_events_init(). Se o sensor nao responder,
+ * Requer board_i2c_init() e hs_events_init(). Se o sensor nao responder,
  * publica WORN (assume fone em uso, para o BT funcionar sem o sensor) e
  * retorna o erro.
  */

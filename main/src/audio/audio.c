@@ -71,7 +71,7 @@ static void post_mode_changed(audio_mode_t mode, uint32_t sample_rate)
         .mode        = mode,
         .sample_rate = sample_rate,
     };
-    esp_err_t err = esp_event_post(AUDIO_EVT, AUDIO_EVT_MODE_CHANGED, &evt, sizeof(evt), pdMS_TO_TICKS(10));
+    esp_err_t err = hs_event_post(AUDIO_EVT, AUDIO_EVT_MODE_CHANGED, &evt, sizeof(evt));
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Falha ao postar AUDIO_EVT_MODE_CHANGED: %s", esp_err_to_name(err));
     }
@@ -86,7 +86,7 @@ static void post_volume_changed(uint8_t vol_pct, bool muted)
         .volume_percent = vol_pct,
         .muted          = muted,
     };
-    esp_err_t err = esp_event_post(AUDIO_EVT, AUDIO_EVT_VOLUME_CHANGED, &evt, sizeof(evt), pdMS_TO_TICKS(10));
+    esp_err_t err = hs_event_post(AUDIO_EVT, AUDIO_EVT_VOLUME_CHANGED, &evt, sizeof(evt));
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Falha ao postar AUDIO_EVT_VOLUME_CHANGED: %s", esp_err_to_name(err));
     }
@@ -105,7 +105,7 @@ static void post_eq_changed(uint8_t preset_id, const int8_t gains_db[5])
     } else {
         memset(evt.gains_db, 0, sizeof(evt.gains_db));
     }
-    esp_err_t err = esp_event_post(AUDIO_EVT, AUDIO_EVT_EQ_CHANGED, &evt, sizeof(evt), pdMS_TO_TICKS(10));
+    esp_err_t err = hs_event_post(AUDIO_EVT, AUDIO_EVT_EQ_CHANGED, &evt, sizeof(evt));
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Falha ao postar AUDIO_EVT_EQ_CHANGED: %s", esp_err_to_name(err));
     }

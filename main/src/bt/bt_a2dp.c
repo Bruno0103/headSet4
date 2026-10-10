@@ -9,7 +9,7 @@
 
 #include "audio.h"
 #include "audio_data.h"
-#include "headset_events.h"
+#include "hs_events.h"
 
 static esp_bd_addr_t s_remote;
 static bool s_has_remote;
@@ -76,14 +76,17 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
                  s_a2d_conn_state_str[a2d->conn_stat.state], bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
 
         /* Quem decide o que fazer com o link e o bt_link_mgr: aqui so se publica o fato. */
-        headset_link_evt_t ev = { .profile = HEADSET_PROFILE_A2DP };
-        memcpy(ev.bda, bda, sizeof ev.bda);
+        bt_link_evt_t ev = {
+            .slot = 0,
+            .profile = BT_PROFILE_A2DP,
+        };
+        memcpy(ev.bda, bda, sizeof(ev.bda));
 
         if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED)
         {
             memcpy(s_remote, bda, sizeof s_remote);
             s_has_remote = true;
-            headset_event_post(HEADSET_EVT_LINK_UP, &ev, sizeof ev);
+            hs_event_post(BT_EVT, BT_EVT_LINK_UP, &ev, sizeof(ev));
         }
         else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED)
         {
@@ -94,10 +97,10 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
                 s_streaming = false;
                 /* Envia comando assíncrono para o Actor Audio parar a reprodução */
                 audio_cmd_stop_send(0xFF);
-                headset_streaming_evt_t st = { .streaming = false };
-                headset_event_post(HEADSET_EVT_STREAMING, &st, sizeof st);
+                bt_streaming_evt_t st = { .slot = 0, .streaming = false };
+                hs_event_post(BT_EVT, BT_EVT_STREAMING, &st, sizeof(st));
             }
-            headset_event_post(HEADSET_EVT_LINK_DOWN, &ev, sizeof ev);
+            hs_event_post(BT_EVT, BT_EVT_LINK_DOWN, &ev, sizeof(ev));
         }
         break;
     }
@@ -117,8 +120,8 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
             /* Envia comando AUDIO_CMD_STOP para o Actor Audio */
             audio_cmd_stop_send(1);
         }
-        headset_streaming_evt_t st = { .streaming = s_streaming };
-        headset_event_post(HEADSET_EVT_STREAMING, &st, sizeof st);
+        bt_streaming_evt_t st = { .slot = 0, .streaming = s_streaming };
+        hs_event_post(BT_EVT, BT_EVT_STREAMING, &st, sizeof(st));
         break;
     }
 

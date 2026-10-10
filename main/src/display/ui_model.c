@@ -20,7 +20,6 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "hs_events.h"
-#include "headset_events.h"
 #include "settings.h"
 
 static const char *TAG = "ui_model";
@@ -360,44 +359,11 @@ static void on_audio_event(void *handler_args, esp_event_base_t base, int32_t id
     }
 }
 
-/* Shim legado HEADSET_EVENT para baterias ou eventos antigos */
-static void on_headset_event_legacy(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
-{
-    (void)handler_args; (void)base;
-    if (id == HEADSET_EVT_BATTERY && event_data) {
-        headset_battery_evt_t *ev = (headset_battery_evt_t *)event_data;
-        ui_model_update_msg_t msg = {
-            .type = UI_UPDATE_BATTERY,
-            .payload.battery = {
-                .percent = (uint8_t)ev->percent,
-                .mv = (uint16_t)ev->millivolts,
-                .charging = false,
-            }
-        };
-        ui_model_post_update(&msg);
-    } else if (id == HEADSET_EVT_WORN) {
-        ui_model_update_msg_t msg = {
-            .type = UI_UPDATE_PROX_STATE,
-            .payload.prox_state = { .worn = true }
-        };
-        ui_model_post_update(&msg);
-    } else if (id == HEADSET_EVT_REMOVED) {
-        ui_model_update_msg_t msg = {
-            .type = UI_UPDATE_PROX_STATE,
-            .payload.prox_state = { .worn = false }
-        };
-        ui_model_post_update(&msg);
-    }
-}
-
 esp_err_t ui_model_register_events(void)
 {
-    esp_event_handler_register(SENSOR_EVT, ESP_EVENT_ANY_ID, on_sensor_event, NULL);
-    esp_event_handler_register(BT_EVT, ESP_EVENT_ANY_ID, on_bt_event, NULL);
-    esp_event_handler_register(AUDIO_EVT, ESP_EVENT_ANY_ID, on_audio_event, NULL);
-    headset_event_register(HEADSET_EVT_BATTERY, on_headset_event_legacy, NULL);
-    headset_event_register(HEADSET_EVT_WORN, on_headset_event_legacy, NULL);
-    headset_event_register(HEADSET_EVT_REMOVED, on_headset_event_legacy, NULL);
+    hs_event_register(SENSOR_EVT, ESP_EVENT_ANY_ID, on_sensor_event, NULL);
+    hs_event_register(BT_EVT, ESP_EVENT_ANY_ID, on_bt_event, NULL);
+    hs_event_register(AUDIO_EVT, ESP_EVENT_ANY_ID, on_audio_event, NULL);
 
     ESP_LOGI(TAG, "UI Model inscrito nos eventos do sistema (SENSOR_EVT, BT_EVT, AUDIO_EVT)");
     return ESP_OK;

@@ -161,10 +161,11 @@ flowchart TD
 
 ---
 
-### Passo 9: Exclusão do Legado e Endurecimento (Clean-up Final)
+### Passo 9: Exclusão do Legado e Endurecimento (Clean-up Final) (Concluído)
 **Objetivo:** Remover permanentemente os canais e arquivos antigos.
 - **Tarefas:**
-  1. Deletar os shims de compatibilidade `main/src/core/headset_events.h` e `main/src/core/headset_events.c`.
-  2. Substituir todas as referências residuais de `HEADSET_EVENT` pelas bases oficiais (`SENSOR_EVT`, `BT_EVT`, `AUDIO_EVT`, `CFG_EVT`).
-  3. Executar script de auditoria estática de conformidade e soak test.
+  1. [x] Deletar os shims de compatibilidade `main/src/core/headset_events.h` e `main/src/core/headset_events.c`.
+  2. [x] Substituir todas as referências residuais de `HEADSET_EVENT` pelas bases oficiais (`SENSOR_EVT`, `BT_EVT`, `AUDIO_EVT`, `CFG_EVT`).
+  3. [x] Executar script de auditoria estática de conformidade e soak test (0 referências a HEADSET_EVENT, build verde).
+  4. [x] Consolidar arquitetura final em `docs/ARCHITECTURE.md`.
 

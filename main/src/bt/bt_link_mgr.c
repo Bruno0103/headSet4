@@ -29,12 +29,12 @@
 #include "freertos/task.h"
 #include "settings.h"
 
+#include "apds9930.h"
 #include "bt_a2dp.h"
 #include "bt_ble.h"
 #include "bt_fastpair.h"
 #include "bt_gap.h"
 #include "bt_hfp.h"
-#include "headset_events.h"
 #include "hs_actor.h"
 #include "hs_cmds.h"
 #include "hs_events.h"
@@ -64,7 +64,7 @@ enum {
     BT_INTERNAL_CMD_PAIR_TIMER,
     BT_INTERNAL_CMD_VOLUME_SAVE_TIMER,
     BT_INTERNAL_CMD_GAP_AUTH_COMPLETE,
-    BT_INTERNAL_CMD_HEADSET_EVENT,
+    BT_INTERNAL_CMD_EVENT,
     BT_INTERNAL_CMD_SET_ACCOUNT_REF,
     BT_INTERNAL_CMD_SET_VOLUME,
     BT_INTERNAL_CMD_GET_VOLUME,
@@ -73,9 +73,10 @@ enum {
 
 /* Payload interno para eventos do barramento repassados ao ator */
 typedef struct {
-    headset_event_id_t id;
-    uint8_t            len;
-    uint8_t            payload[40];
+    esp_event_base_t base;
+    int32_t          id;
+    uint8_t          len;
+    uint8_t          payload[40];
 } bt_internal_evt_msg_t;
 
 /* Payload interno para autenticação GAP */
@@ -196,10 +197,10 @@ static void drop_link(void)
         return;
     }
     ESP_LOGI(TAG, "Desconectando " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_ctx.link.bda), s_ctx.link.profiles);
-    if (s_ctx.link.profiles & HEADSET_PROFILE_HFP) {
+    if (s_ctx.link.profiles & BT_PROFILE_HFP) {
         bt_hfp_disconnect(s_ctx.link.bda);
     }
-    if (s_ctx.link.profiles & HEADSET_PROFILE_A2DP) {
+    if (s_ctx.link.profiles & BT_PROFILE_A2DP) {
         bt_a2dp_disconnect(s_ctx.link.bda);
     }
 }
@@ -287,8 +288,8 @@ static void stop_pairing(const char *why)
     atomic_store(&s_atomic_pairing, false);
 
     if (s_pair_tmr) esp_timer_stop(s_pair_tmr);
-    headset_pairing_evt_t ev = { .active = false };
-    headset_event_post(HEADSET_EVT_PAIRING_MODE, &ev, sizeof(ev));
+    bt_pairing_evt_t ev = { .active = false, .timeout_sec = 0 };
+    hs_event_post(BT_EVT, BT_EVT_PAIRING_MODE, &ev, sizeof(ev));
     bt_fastpair_on_pairing_mode(false);
     apply_state();
 }
@@ -305,8 +306,8 @@ static void start_pairing(void)
     drop_link();
 
     if (s_pair_tmr) esp_timer_start_once(s_pair_tmr, (uint64_t)PAIRING_WINDOW_MS * 1000);
-    headset_pairing_evt_t ev = { .active = true };
-    headset_event_post(HEADSET_EVT_PAIRING_MODE, &ev, sizeof(ev));
+    bt_pairing_evt_t ev = { .active = true, .timeout_sec = PAIRING_WINDOW_MS / 1000 };
+    hs_event_post(BT_EVT, BT_EVT_PAIRING_MODE, &ev, sizeof(ev));
     bt_fastpair_on_pairing_mode(true);
     apply_state();
 }
@@ -347,36 +348,49 @@ static void volume_timer_cb(void *arg)
  * TRATAMENTO DE EVENTOS DO BARRAMENTO (DESPACHO PARA O ATOR)
  * ============================================================================ */
 
-static void on_headset_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+static void on_bus_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     /* Handler do esp_event NUNCA bloqueia: empacota e enfileira no Actor bt_link */
     if (!s_bt_actor) {
         return;
     }
     bt_internal_evt_msg_t msg = {
-        .id = (headset_event_id_t)id,
+        .base = base,
+        .id = id,
         .len = 0,
     };
     if (data != NULL) {
-        switch (id) {
-        case HEADSET_EVT_LINK_UP:
-        case HEADSET_EVT_LINK_DOWN:
-            memcpy(msg.payload, data, sizeof(headset_link_evt_t));
-            msg.len = sizeof(headset_link_evt_t);
-            break;
-        case HEADSET_EVT_STREAMING:
-            memcpy(msg.payload, data, sizeof(headset_streaming_evt_t));
-            msg.len = sizeof(headset_streaming_evt_t);
-            break;
-        case HEADSET_EVT_BATTERY:
-            memcpy(msg.payload, data, sizeof(headset_battery_evt_t));
-            msg.len = sizeof(headset_battery_evt_t);
-            break;
-        default:
-            break;
+        if (base == BT_EVT) {
+            switch (id) {
+            case BT_EVT_LINK_UP:
+            case BT_EVT_LINK_DOWN:
+                memcpy(msg.payload, data, sizeof(bt_link_evt_t));
+                msg.len = sizeof(bt_link_evt_t);
+                break;
+            case BT_EVT_STREAMING:
+                memcpy(msg.payload, data, sizeof(bt_streaming_evt_t));
+                msg.len = sizeof(bt_streaming_evt_t);
+                break;
+            default:
+                break;
+            }
+        } else if (base == SENSOR_EVT) {
+            switch (id) {
+            case SENSOR_EVT_BUTTON_SHORT:
+            case SENSOR_EVT_BUTTON_LONG:
+                memcpy(msg.payload, data, sizeof(sensor_button_evt_t));
+                msg.len = sizeof(sensor_button_evt_t);
+                break;
+            case SENSOR_EVT_BATTERY:
+                memcpy(msg.payload, data, sizeof(sensor_battery_evt_t));
+                msg.len = sizeof(sensor_battery_evt_t);
+                break;
+            default:
+                break;
+            }
         }
     }
-    hs_actor_send(s_bt_actor, BT_INTERNAL_CMD_HEADSET_EVENT, &msg, sizeof(msg), 0);
+    hs_actor_send(s_bt_actor, BT_INTERNAL_CMD_EVENT, &msg, sizeof(msg), 0);
 }
 
 /* ============================================================================
@@ -421,128 +435,135 @@ static void on_acl(const uint8_t *bda, bool connected, uint8_t reason)
  * LÓGICA DE PROCESSAMENTO DE MENSAGENS DO ACTOR BT_LINK (RUNS NO CORE 0, PRIO 6)
  * ============================================================================ */
 
-static void handle_headset_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
+static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
 {
-    switch (ev_msg->id) {
-    case HEADSET_EVT_WORN:
-        ESP_LOGI(TAG, "Fone colocado");
-        s_ctx.worn = true;
-        s_ctx.attempts = 0;
-        apply_state();
-        break;
+    if (ev_msg->base == SENSOR_EVT) {
+        switch (ev_msg->id) {
+        case SENSOR_EVT_WORN:
+            ESP_LOGI(TAG, "Fone colocado");
+            s_ctx.worn = true;
+            s_ctx.attempts = 0;
+            apply_state();
+            break;
 
-    case HEADSET_EVT_REMOVED:
-        ESP_LOGI(TAG, "Fone retirado");
-        s_ctx.worn = false;
-        apply_state();
-        break;
+        case SENSOR_EVT_REMOVED:
+            ESP_LOGI(TAG, "Fone retirado");
+            s_ctx.worn = false;
+            apply_state();
+            break;
 
-    case HEADSET_EVT_BUTTON_SWITCH:
-        if (s_ctx.pairing) {
-            stop_pairing("botao");
+        case SENSOR_EVT_BUTTON_SHORT:
+            if (s_ctx.pairing) {
+                stop_pairing("botao");
+                break;
+            }
+            s_ctx.sel = (s_ctx.sel + 1) % BT_LINK_NUM_SLOTS;
+            atomic_store(&s_atomic_sel, s_ctx.sel);
+            atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
+            s_ctx.attempts = 0;
+            nvs_save();
+            ESP_LOGI(TAG, "Slot selecionado: %d (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
+            stop_connect_timer();
+            apply_state();
+            break;
+
+        case SENSOR_EVT_BUTTON_LONG:
+            if (s_ctx.pairing) {
+                stop_pairing("botao");
+            } else {
+                start_pairing();
+            }
+            break;
+
+        case SENSOR_EVT_BATTERY: {
+            const sensor_battery_evt_t *ev = (const sensor_battery_evt_t *)ev_msg->payload;
+            s_ctx.battery = ev->percent;
+            if (s_ctx.link.profiles & BT_PROFILE_HFP) {
+                bt_hfp_report_battery(ev->percent);
+            }
             break;
         }
-        s_ctx.sel = (s_ctx.sel + 1) % BT_LINK_NUM_SLOTS;
-        atomic_store(&s_atomic_sel, s_ctx.sel);
-        atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
-        s_ctx.attempts = 0;
-        nvs_save();
-        ESP_LOGI(TAG, "Slot selecionado: %d (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
-        stop_connect_timer();
-        apply_state();
-        break;
 
-    case HEADSET_EVT_BUTTON_PAIRING:
-        if (s_ctx.pairing) {
-            stop_pairing("botao");
-        } else {
-            start_pairing();
+        default:
+            break;
         }
-        break;
+    } else if (ev_msg->base == BT_EVT) {
+        switch (ev_msg->id) {
+        case BT_EVT_LINK_UP: {
+            const bt_link_evt_t *ev = (const bt_link_evt_t *)ev_msg->payload;
+            if (!is_sel_bda(ev->bda)) {
+                /* Se o recurso de auto-switch estiver ativado e o dispositivo pertencer ao outro slot válido, comuta */
+                int alt_slot = -1;
+                for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
+                    if (i != s_ctx.sel && s_ctx.slot[i].valid && memcmp(s_ctx.slot[i].bda, ev->bda, ESP_BD_ADDR_LEN) == 0) {
+                        alt_slot = i;
+                        break;
+                    }
+                }
 
-    case HEADSET_EVT_LINK_UP: {
-        const headset_link_evt_t *ev = (const headset_link_evt_t *)ev_msg->payload;
-        if (!is_sel_bda(ev->bda)) {
-            /* Se o recurso de auto-switch estiver ativado e o dispositivo pertencer ao outro slot válido, comuta */
-            int alt_slot = -1;
-            for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
-                if (i != s_ctx.sel && s_ctx.slot[i].valid && memcmp(s_ctx.slot[i].bda, ev->bda, ESP_BD_ADDR_LEN) == 0) {
-                    alt_slot = i;
+                if (s_ctx.auto_switch && alt_slot >= 0) {
+                    ESP_LOGI(TAG, "Auto-switch: alternando automaticamente para slot %d por atividade de " ESP_BD_ADDR_STR,
+                             alt_slot, ESP_BD_ADDR_HEX(ev->bda));
+                    s_ctx.sel = alt_slot;
+                    atomic_store(&s_atomic_sel, s_ctx.sel);
+                    atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
+                    s_ctx.attempts = 0;
+                    nvs_save();
+                    stop_connect_timer();
+                } else {
+                    ESP_LOGW(TAG, "Perfil 0x%X de " ESP_BD_ADDR_STR " recusado (nao e o slot selecionado)", ev->profile,
+                             ESP_BD_ADDR_HEX(ev->bda));
+                    if (ev->profile & BT_PROFILE_HFP) {
+                        bt_hfp_disconnect((uint8_t *)ev->bda);
+                    }
+                    if (ev->profile & BT_PROFILE_A2DP) {
+                        bt_a2dp_disconnect((uint8_t *)ev->bda);
+                    }
                     break;
                 }
             }
-
-            if (s_ctx.auto_switch && alt_slot >= 0) {
-                ESP_LOGI(TAG, "Auto-switch: alternando automaticamente para slot %d por atividade de " ESP_BD_ADDR_STR,
-                         alt_slot, ESP_BD_ADDR_HEX(ev->bda));
-                s_ctx.sel = alt_slot;
-                atomic_store(&s_atomic_sel, s_ctx.sel);
-                atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
-                s_ctx.attempts = 0;
-                nvs_save();
-                stop_connect_timer();
-            } else {
-                ESP_LOGW(TAG, "Perfil 0x%X de " ESP_BD_ADDR_STR " recusado (nao e o slot selecionado)", ev->profile,
-                         ESP_BD_ADDR_HEX(ev->bda));
-                if (ev->profile & HEADSET_PROFILE_HFP) {
-                    bt_hfp_disconnect((uint8_t *)ev->bda);
-                }
-                if (ev->profile & HEADSET_PROFILE_A2DP) {
-                    bt_a2dp_disconnect((uint8_t *)ev->bda);
-                }
-                break;
-            }
-        }
-        if (!s_ctx.link.profiles) {
-            memcpy(s_ctx.link.bda, ev->bda, ESP_BD_ADDR_LEN);
-            s_ctx.link.complete_tried = false;
-        }
-        s_ctx.link.profiles |= ev->profile;
-        s_ctx.attempts = 0;
-        if (s_connect_tmr) esp_timer_stop(s_connect_tmr);
-        ESP_LOGI(TAG, "Link ativo com " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_ctx.link.bda), s_ctx.link.profiles);
-        if ((ev->profile & HEADSET_PROFILE_HFP) && s_ctx.battery >= 0) {
-            bt_hfp_report_battery((uint8_t)s_ctx.battery);
-        }
-        if (s_ctx.link.profiles != (HEADSET_PROFILE_A2DP | HEADSET_PROFILE_HFP) && !s_ctx.link.complete_tried) {
-            if (s_complete_tmr) {
-                esp_timer_stop(s_complete_tmr);
-                esp_timer_start_once(s_complete_tmr, (uint64_t)COMPLETE_DELAY_MS * 1000);
-            }
-        }
-        break;
-    }
-
-    case HEADSET_EVT_LINK_DOWN: {
-        const headset_link_evt_t *ev = (const headset_link_evt_t *)ev_msg->payload;
-        if (s_ctx.link.profiles && memcmp(s_ctx.link.bda, ev->bda, ESP_BD_ADDR_LEN) == 0) {
-            s_ctx.link.profiles &= ~ev->profile;
-            ESP_LOGI(TAG, "Perfil 0x%X caiu (restam 0x%X)", ev->profile, s_ctx.link.profiles);
             if (!s_ctx.link.profiles) {
-                if (s_complete_tmr) esp_timer_stop(s_complete_tmr);
-                apply_state();
+                memcpy(s_ctx.link.bda, ev->bda, ESP_BD_ADDR_LEN);
+                s_ctx.link.complete_tried = false;
             }
+            s_ctx.link.profiles |= ev->profile;
+            s_ctx.attempts = 0;
+            if (s_connect_tmr) esp_timer_stop(s_connect_tmr);
+            ESP_LOGI(TAG, "Link ativo com " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_ctx.link.bda), s_ctx.link.profiles);
+            if ((ev->profile & BT_PROFILE_HFP) && s_ctx.battery >= 0) {
+                bt_hfp_report_battery((uint8_t)s_ctx.battery);
+            }
+            if (s_ctx.link.profiles != (BT_PROFILE_A2DP | BT_PROFILE_HFP) && !s_ctx.link.complete_tried) {
+                if (s_complete_tmr) {
+                    esp_timer_stop(s_complete_tmr);
+                    esp_timer_start_once(s_complete_tmr, (uint64_t)COMPLETE_DELAY_MS * 1000);
+                }
+            }
+            break;
         }
-        break;
-    }
 
-    case HEADSET_EVT_STREAMING: {
-        const headset_streaming_evt_t *ev = (const headset_streaming_evt_t *)ev_msg->payload;
-        bt_ble_set_streaming(ev->streaming);
-        break;
-    }
-
-    case HEADSET_EVT_BATTERY: {
-        const headset_battery_evt_t *ev = (const headset_battery_evt_t *)ev_msg->payload;
-        s_ctx.battery = ev->percent;
-        if (s_ctx.link.profiles & HEADSET_PROFILE_HFP) {
-            bt_hfp_report_battery(ev->percent);
+        case BT_EVT_LINK_DOWN: {
+            const bt_link_evt_t *ev = (const bt_link_evt_t *)ev_msg->payload;
+            if (s_ctx.link.profiles && memcmp(s_ctx.link.bda, ev->bda, ESP_BD_ADDR_LEN) == 0) {
+                s_ctx.link.profiles &= ~ev->profile;
+                ESP_LOGI(TAG, "Perfil 0x%X caiu (restam 0x%X)", ev->profile, s_ctx.link.profiles);
+                if (!s_ctx.link.profiles) {
+                    if (s_complete_tmr) esp_timer_stop(s_complete_tmr);
+                    apply_state();
+                }
+            }
+            break;
         }
-        break;
-    }
 
-    default:
-        break;
+        case BT_EVT_STREAMING: {
+            const bt_streaming_evt_t *ev = (const bt_streaming_evt_t *)ev_msg->payload;
+            bt_ble_set_streaming(ev->streaming);
+            break;
+        }
+
+        default:
+            break;
+        }
     }
 }
 
@@ -630,9 +651,9 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
     case BT_INTERNAL_CMD_COMPLETE_TIMER: {
         if (s_ctx.link.profiles && !s_ctx.link.complete_tried) {
             s_ctx.link.complete_tried = true;
-            if (!(s_ctx.link.profiles & HEADSET_PROFILE_A2DP)) {
+            if (!(s_ctx.link.profiles & BT_PROFILE_A2DP)) {
                 bt_a2dp_connect(s_ctx.link.bda);
-            } else if (!(s_ctx.link.profiles & HEADSET_PROFILE_HFP)) {
+            } else if (!(s_ctx.link.profiles & BT_PROFILE_HFP)) {
                 bt_hfp_connect(s_ctx.link.bda);
             }
         }
@@ -691,9 +712,9 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
         break;
     }
 
-    case BT_INTERNAL_CMD_HEADSET_EVENT: {
+    case BT_INTERNAL_CMD_EVENT: {
         if (msg->len >= sizeof(bt_internal_evt_msg_t)) {
-            handle_headset_evt_in_actor((const bt_internal_evt_msg_t *)msg->data);
+            handle_bus_evt_in_actor((const bt_internal_evt_msg_t *)msg->data);
         }
         break;
     }
@@ -840,18 +861,17 @@ esp_err_t bt_link_mgr_start(void)
     bt_gap_register_cbs(&cbs);
 
     /* 5. Registro de eventos do barramento central */
-    static const headset_event_id_t ids[] = {
-        HEADSET_EVT_WORN, HEADSET_EVT_REMOVED, HEADSET_EVT_BUTTON_SWITCH, HEADSET_EVT_BUTTON_PAIRING,
-        HEADSET_EVT_LINK_UP, HEADSET_EVT_LINK_DOWN, HEADSET_EVT_STREAMING, HEADSET_EVT_BATTERY,
-    };
-    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); i++) {
-        ESP_RETURN_ON_ERROR(headset_event_register(ids[i], on_headset_event, NULL), TAG, "assinatura de evento");
-    }
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_WORN, on_bus_event, NULL);
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_REMOVED, on_bus_event, NULL);
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_BUTTON_SHORT, on_bus_event, NULL);
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_BUTTON_LONG, on_bus_event, NULL);
+    hs_event_register(SENSOR_EVT, SENSOR_EVT_BATTERY, on_bus_event, NULL);
 
-    bool worn;
-    if (headset_events_get_worn(&worn)) {
-        s_ctx.worn = worn;
-    }
+    hs_event_register(BT_EVT, BT_EVT_LINK_UP, on_bus_event, NULL);
+    hs_event_register(BT_EVT, BT_EVT_LINK_DOWN, on_bus_event, NULL);
+    hs_event_register(BT_EVT, BT_EVT_STREAMING, on_bus_event, NULL);
+
+    s_ctx.worn = apds9930_is_worn();
 
     /* 6. Aplica o estado inicial */
     apply_state();

@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-/** Requer headset_events_init() e audio_init() previos. Retorna apos subir a pilha;
+/** Requer hs_events_init() e audio_init() previos. Retorna apos subir a pilha;
  *  os modulos sao iniciados de forma assincrona na task BtAppTask. */
 esp_err_t bt_core_init(void);
 
