@@ -25,7 +25,7 @@
 
 static const char *TAG = "ui_model";
 
-#define UI_UPDATE_QUEUE_LEN 24
+#define UI_UPDATE_QUEUE_LEN 48
 
 static QueueHandle_t s_ui_update_queue = NULL;
 static SemaphoreHandle_t s_model_mutex = NULL;
@@ -487,11 +487,27 @@ void ui_model_get_snapshot(ui_model_data_t *out_data)
 esp_err_t ui_model_post_update(const ui_model_update_msg_t *msg)
 {
     if (!s_ui_update_queue || !msg) return ESP_ERR_INVALID_STATE;
-    if (xQueueSend(s_ui_update_queue, msg, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "Fila de atualizacao da UI cheia, mensagem descartada");
-        return ESP_ERR_NO_MEM;
+
+    /* Tenta o envio não-bloqueante convencional */
+    if (xQueueSend(s_ui_update_queue, msg, 0) == pdTRUE) {
+        return ESP_OK;
     }
-    return ESP_OK;
+
+    /*
+     * Se a fila estiver cheia:
+     * Para mensagens de configuração de sliders contínuos (brilho, vibracall, orelhas, etc.),
+     * descartar a mensagem intermediária mais antiga ou coalescer na fila evita perda do estado final.
+     * Tentamos descartar uma mensagem pendente da fila para dar lugar à mensagem mais recente.
+     */
+    ui_model_update_msg_t dummy;
+    if (xQueueReceive(s_ui_update_queue, &dummy, 0) == pdTRUE) {
+        if (xQueueSend(s_ui_update_queue, msg, 0) == pdTRUE) {
+            return ESP_OK;
+        }
+    }
+
+    ESP_LOGW(TAG, "Fila de atualizacao da UI cheia, mensagem tipo %d descartada", msg->type);
+    return ESP_ERR_NO_MEM;
 }
 
 /* ============================================================================
@@ -502,12 +518,17 @@ static void on_sensor_event(void *handler_args, esp_event_base_t base, int32_t i
 {
     (void)handler_args; (void)base;
     if (id == SENSOR_EVT_WORN) {
+        /* Se proximidade estiver desativada pelo usuário, não sobrescreve com evento físico */
+        if (!s_model.prox_enabled) return;
+
         ui_model_update_msg_t msg = {
             .type = UI_UPDATE_PROX_STATE,
             .payload.prox_state = { .worn = true }
         };
         ui_model_post_update(&msg);
     } else if (id == SENSOR_EVT_REMOVED) {
+        if (!s_model.prox_enabled) return;
+
         ui_model_update_msg_t msg = {
             .type = UI_UPDATE_PROX_STATE,
             .payload.prox_state = { .worn = false }
@@ -650,14 +671,17 @@ static void on_cfg_event(void *handler_args, esp_event_base_t base, int32_t id, 
             };
             ui_model_post_update(&msg);
         } else if (strcmp(ev->key, SETTINGS_KEY_SENS_PROX_EN) == 0) {
-            ui_model_update_msg_t msg = {
-                .type = UI_UPDATE_PROX_CONFIG,
-                .payload.prox_cfg = {
-                    .enabled = (ev->value_u8 != 0),
-                    .sensitivity = s_model.prox_sensitivity,
-                }
-            };
-            ui_model_post_update(&msg);
+            bool new_en = (ev->value_u8 != 0);
+            if (s_model.prox_enabled != new_en) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_PROX_CONFIG,
+                    .payload.prox_cfg = {
+                        .enabled = new_en,
+                        .sensitivity = s_model.prox_sensitivity,
+                    }
+                };
+                ui_model_post_update(&msg);
+            }
         }
     }
 }

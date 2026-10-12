@@ -136,9 +136,9 @@ void ui_bridge_bt_get_status_alternancia(char *out_status, size_t max_len)
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
     if (!snap.bt_auto_switch) {
-        snprintf(out_status, max_len, "Fixado no Slot %u", (unsigned int)(snap.bt_active_slot + 1));
+        snprintf(out_status, max_len, "Manual (Slot %u)", (unsigned int)(snap.bt_active_slot + 1));
     } else {
-        snprintf(out_status, max_len, "Alternancia Ativa (Disp %u)", (unsigned int)(snap.bt_active_slot + 1));
+        snprintf(out_status, max_len, "Ativo (Dispositivo %u)", (unsigned int)(snap.bt_active_slot + 1));
     }
 }
 
@@ -172,7 +172,7 @@ void ui_bridge_proximidade_get_status(char *out_status, size_t max_len)
     ui_model_get_snapshot(&snap);
 
     if (!snap.prox_enabled) {
-        snprintf(out_status, max_len, "Desativado (Modo forcado)");
+        snprintf(out_status, max_len, "Desativado");
     } else if (snap.prox_worn) {
         snprintf(out_status, max_len, "Fone na cabeca");
     } else {
@@ -184,11 +184,17 @@ bool ui_bridge_proximidade_set_ativar(bool enable)
 {
     settings_set_u8(SETTINGS_KEY_SENS_PROX_EN, enable ? 1 : 0);
 
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+
+    ESP_LOGI(TAG, "Configurando sensor de proximidade: %s (sensibilidade mantida: %u)", 
+             enable ? "ATIVAR" : "DESATIVAR", (unsigned int)snap.prox_sensitivity);
+
     ui_model_update_msg_t msg = {
         .type = UI_UPDATE_PROX_CONFIG,
         .payload.prox_cfg = {
             .enabled = enable,
-            .sensitivity = 80
+            .sensitivity = snap.prox_sensitivity /* Mantém a sensibilidade atual do snapshot */
         }
     };
     ui_model_post_update(&msg);
@@ -311,8 +317,12 @@ void ui_bridge_orelhas_get_status(char *out_status, size_t max_len)
 
 bool ui_bridge_orelhas_set_ativar(bool enable)
 {
+    /* Salva o estado de habilitado no modelo e no settings se houver chave correspondente */
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
+
+    ESP_LOGI(TAG, "Configurando orelhas: %s (angulo max: %u deg)", 
+             enable ? "ATIVAR" : "DESATIVAR", (unsigned int)snap.orelhas_max_angle);
 
     ui_model_update_msg_t msg = {
         .type = UI_UPDATE_ORELHAS_CONFIG,
