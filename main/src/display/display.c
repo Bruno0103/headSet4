@@ -263,6 +263,13 @@ static esp_err_t display_hw_init(lv_display_t *disp) {
  * ============================================================================
  */
 
+/* Armazena último valor enviado aos settings para evitar saturação durante arrasto */
+static int s_last_sent_bright = -1;
+static int s_last_sent_timeout = -1;
+static int s_last_sent_prox_sens = -1;
+static int s_last_sent_vib_intens = -1;
+static int s_last_sent_ears_angle = -1;
+
 /**
  * @brief Observadores de alteração dos sliders da UI.
  *
@@ -270,16 +277,17 @@ static esp_err_t display_hw_init(lv_display_t *disp) {
  * correspondente e dispara o callback registrado abaixo.
  * 
  * Regra de não-bloqueio e prevenção de loops:
- * - Apenas enviamos a alteração se o valor numérico for diferente do já registrado no modelo.
+ * - Apenas enviamos a alteração se o valor for diferente do último gravado.
+ * - Para valores analógicos contínuos de sensibilidade (0 a 1023), aplica-se um passo mínimo de 8
+ *   para evitar disparos a cada micropasso de toque resistivo.
  * - Gravamos de forma assíncrona nas configurações através de settings_set_u8/u16 (Actor Settings com debounce).
- * - NÃO reenviamos mensagens redundantes para a fila de UI (ui_model_post_update),
- *   evitando saturar a fila FreeRTOS ou gerar repinturas cíclicas/congelamentos.
  */
 static void on_subject_brightness_changed(lv_observer_t *observer, lv_subject_t *subject) {
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 100) return;
-  if (val == ui_bridge_display_get_brilho()) return;
+  if (val == s_last_sent_bright) return;
+  s_last_sent_bright = val;
 
   ESP_LOGI(TAG, "Slider Brilho alterado pelo usuario: %d%%", val);
   settings_set_u8(SETTINGS_KEY_DISP_BRIGHT, (uint8_t)val);
@@ -289,7 +297,8 @@ static void on_subject_timeout_changed(lv_observer_t *observer, lv_subject_t *su
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 3600) return;
-  if (val == ui_bridge_display_get_tempo_tela()) return;
+  if (val == s_last_sent_timeout) return;
+  s_last_sent_timeout = val;
 
   ESP_LOGI(TAG, "Slider Tempo de Tela alterado pelo usuario: %d s", val);
   settings_set_u16(SETTINGS_KEY_DISP_TIMEOUT, (uint16_t)val);
@@ -299,7 +308,8 @@ static void on_subject_prox_sensitivity_changed(lv_observer_t *observer, lv_subj
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 1023) return;
-  if (val == ui_bridge_proximidade_get_distancia_sensibilidade()) return;
+  if (s_last_sent_prox_sens >= 0 && abs(val - s_last_sent_prox_sens) < 8) return;
+  s_last_sent_prox_sens = val;
 
   ESP_LOGI(TAG, "Slider Sensibilidade Proximidade alterado pelo usuario: %d", val);
   settings_set_u16(SETTINGS_KEY_SENS_THRESH_ON, (uint16_t)val);
@@ -309,7 +319,8 @@ static void on_subject_vibracall_intensity_changed(lv_observer_t *observer, lv_s
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 100) return;
-  if (val == ui_bridge_vibracall_get_intensidade()) return;
+  if (val == s_last_sent_vib_intens) return;
+  s_last_sent_vib_intens = val;
 
   ESP_LOGI(TAG, "Slider Intensidade Vibracall alterado pelo usuario: %d%%", val);
   settings_set_u8(SETTINGS_KEY_HAPTIC_INTENS, (uint8_t)val);
@@ -319,7 +330,8 @@ static void on_subject_ears_angle_changed(lv_observer_t *observer, lv_subject_t 
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 180) return;
-  if (val == ui_bridge_orelhas_get_angulo_maximo()) return;
+  if (val == s_last_sent_ears_angle) return;
+  s_last_sent_ears_angle = val;
 
   ESP_LOGI(TAG, "Slider Angulo Orelhas alterado pelo usuario: %d deg", val);
   settings_set_u8(SETTINGS_KEY_EARS_ANGLE, (uint8_t)val);
@@ -401,9 +413,10 @@ static void bind_action_buttons_recursive(lv_obj_t *parent, int *bt_disconnect_c
           if (strcmp(txt, "Desconectar") == 0) {
             const char *action = (*bt_disconnect_count == 0) ? "BT_DISCONNECT_1" : "BT_DISCONNECT_2";
             (*bt_disconnect_count)++;
-            /* Remove clique do label para que todo clique toque no container/tile */
             lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
+            /* Remove callback existente com essa função para evitar acúmulo a cada troca de tela */
+            lv_obj_remove_event_cb(child, on_action_button_clicked);
             lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)action);
             ESP_LOGI(TAG, "Mapeado botao 'Desconectar' -> %s", action);
           } else if (strcmp(txt, "Ativar") == 0) {
@@ -415,6 +428,7 @@ static void bind_action_buttons_recursive(lv_obj_t *parent, int *bt_disconnect_c
 
             lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_event_cb(child, on_action_button_clicked);
             lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)action);
             ESP_LOGI(TAG, "Mapeado botao 'Ativar' (tela %s) -> %s", prefix, action);
           } else if (strcmp(txt, "Desativar") == 0) {
@@ -426,21 +440,28 @@ static void bind_action_buttons_recursive(lv_obj_t *parent, int *bt_disconnect_c
 
             lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_event_cb(child, on_action_button_clicked);
             lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)action);
             ESP_LOGI(TAG, "Mapeado botao 'Desativar' (tela %s) -> %s", prefix, action);
           } else if (strstr(txt, "Alternância") != NULL || strstr(txt, "Alternancia") != NULL ||
                      strstr(txt, "Manual") != NULL || strstr(txt, "Automático") != NULL ||
-                     strstr(txt, "Dispositivo") != NULL || strstr(txt, "Ativo (") != NULL) {
+                     strstr(txt, "Dispositivo") != NULL || strstr(txt, "Ativo (") != NULL ||
+                     strstr(txt, "Slot") != NULL) {
             /*
              * Botão de Alternância de Dispositivos Bluetooth:
              * Em screen_bluetooth_gen.c, há container_0 com label_12 ("Alternância: Manual")
-             * e tile_0 que contém label_13 bindado a g_subj_bt_status_alternancia ("Ativo (Dispositivo 1)" ou "Manual (Slot 1)").
-             * Mapeamos o tile_0 diretamente como botão clicável!
+             * e tile_0 que contém label_13 bindado a g_subj_bt_status_alternancia.
+             * Tornamos o child (tile_0 ou container_0) E o grandchild clicáveis!
              */
             const char *prefix = get_screen_action_prefix(child);
             if (strcmp(prefix, "BT") == 0 || strcmp(prefix, "DISP") == 0) {
-              lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
+              /* Remove e adiciona nos dois níveis para garantir captura do toque */
+              lv_obj_add_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
+              lv_obj_remove_event_cb(grandchild, on_action_button_clicked);
+              lv_obj_add_event_cb(grandchild, on_action_button_clicked, LV_EVENT_CLICKED, (void *)"BT_TOGGLE_AUTOSWITCH");
+
               lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
+              lv_obj_remove_event_cb(child, on_action_button_clicked);
               lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)"BT_TOGGLE_AUTOSWITCH");
               ESP_LOGI(TAG, "Mapeado botao de Alternancia Bluetooth (txt: '%s') -> BT_TOGGLE_AUTOSWITCH", txt);
             }

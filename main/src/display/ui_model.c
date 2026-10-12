@@ -626,50 +626,63 @@ static void on_cfg_event(void *handler_args, esp_event_base_t base, int32_t id, 
     if (id == CFG_EVT_SETTING_CHANGED && event_data) {
         cfg_changed_evt_t *ev = (cfg_changed_evt_t *)event_data;
         if (strcmp(ev->key, SETTINGS_KEY_DISP_BRIGHT) == 0) {
-            ui_model_update_msg_t msg = {
-                .type = UI_UPDATE_DISPLAY_CONFIG,
-                .payload.display_cfg = {
-                    .on = (ev->value_u8 > 0),
-                    .brightness = ev->value_u8,
-                    .timeout_sec = s_model.display_timeout_sec,
-                    .img_idx = s_model.display_selected_img_idx,
-                    .gif_idx = s_model.display_selected_gif_idx,
-                }
-            };
-            ui_model_post_update(&msg);
+            /* Só posta na fila se houver diferença real, quebrando qualquer ciclo com sliders */
+            if (s_model.display_brightness != ev->value_u8) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_DISPLAY_CONFIG,
+                    .payload.display_cfg = {
+                        .on = (ev->value_u8 > 0),
+                        .brightness = ev->value_u8,
+                        .timeout_sec = s_model.display_timeout_sec,
+                        .img_idx = s_model.display_selected_img_idx,
+                        .gif_idx = s_model.display_selected_gif_idx,
+                    }
+                };
+                ui_model_post_update(&msg);
+            }
         } else if (strcmp(ev->key, SETTINGS_KEY_BT_AUTOSWITCH) == 0) {
-            ui_model_update_msg_t msg = {
-                .type = UI_UPDATE_BT_AUTO_SWITCH,
-                .payload.bt_auto_sw = { .auto_switch = (ev->value_u8 != 0) }
-            };
-            ui_model_post_update(&msg);
+            bool new_sw = (ev->value_u8 != 0);
+            if (s_model.bt_auto_switch != new_sw) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_BT_AUTO_SWITCH,
+                    .payload.bt_auto_sw = { .auto_switch = new_sw }
+                };
+                ui_model_post_update(&msg);
+            }
         } else if (strcmp(ev->key, SETTINGS_KEY_HAPTIC_ENABLE) == 0) {
-            ui_model_update_msg_t msg = {
-                .type = UI_UPDATE_VIBRACALL_CONFIG,
-                .payload.vib_cfg = {
-                    .enabled = (ev->value_u8 != 0),
-                    .intensity = s_model.vibracall_intensity,
-                }
-            };
-            ui_model_post_update(&msg);
+            bool new_en = (ev->value_u8 != 0);
+            if (s_model.vibracall_enabled != new_en) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_VIBRACALL_CONFIG,
+                    .payload.vib_cfg = {
+                        .enabled = new_en,
+                        .intensity = s_model.vibracall_intensity,
+                    }
+                };
+                ui_model_post_update(&msg);
+            }
         } else if (strcmp(ev->key, SETTINGS_KEY_HAPTIC_INTENS) == 0) {
-            ui_model_update_msg_t msg = {
-                .type = UI_UPDATE_VIBRACALL_CONFIG,
-                .payload.vib_cfg = {
-                    .enabled = s_model.vibracall_enabled,
-                    .intensity = ev->value_u8,
-                }
-            };
-            ui_model_post_update(&msg);
+            if (s_model.vibracall_intensity != ev->value_u8) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_VIBRACALL_CONFIG,
+                    .payload.vib_cfg = {
+                        .enabled = s_model.vibracall_enabled,
+                        .intensity = ev->value_u8,
+                    }
+                };
+                ui_model_post_update(&msg);
+            }
         } else if (strcmp(ev->key, SETTINGS_KEY_EARS_ANGLE) == 0) {
-            ui_model_update_msg_t msg = {
-                .type = UI_UPDATE_ORELHAS_CONFIG,
-                .payload.orelhas_cfg = {
-                    .enabled = s_model.orelhas_enabled,
-                    .max_angle = ev->value_u8,
-                }
-            };
-            ui_model_post_update(&msg);
+            if (s_model.orelhas_max_angle != ev->value_u8) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_ORELHAS_CONFIG,
+                    .payload.orelhas_cfg = {
+                        .enabled = s_model.orelhas_enabled,
+                        .max_angle = ev->value_u8,
+                    }
+                };
+                ui_model_post_update(&msg);
+            }
         } else if (strcmp(ev->key, SETTINGS_KEY_SENS_PROX_EN) == 0) {
             bool new_en = (ev->value_u8 != 0);
             if (s_model.prox_enabled != new_en) {
