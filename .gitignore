@@ -87,6 +87,18 @@ agents/*
 # Documentação e guias de suporte aos agentes
 docs/*
 docs
+docs/ARCHITECTURE.md
+docs/AGENTES.md
+docs/CONFIG.md
+docs/GUIDE_DE_ROTEIRO.md
+docs/MANUAL_DE_IMPLEMENTACAO.md
+docs/PROMPT_BASE.md
+docs/REGRAS_DE_CODIFICACAO.md
+docs/ROTEIRO_MASTER.md
+docs/SCRIPT_DE_SETUP.md
+docs/TECNOLOGIAS.md
+docs/brainstorming.md   
+
 preview-build
 build
 .cache.json
