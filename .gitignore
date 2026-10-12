@@ -81,12 +81,12 @@ Desktop.ini
 # Agentes de IA e Automação (Antigravity / Assistentes)
 # ==============================================================================
 # Diretório de skills e definições dos agentes locais
-.agents/
-agents/
+.agents/*
+agents/*
 
 # Documentação e guias de suporte aos agentes
-docs/
-
+docs/*
+docs
 preview-build
 build
 .cache.json
