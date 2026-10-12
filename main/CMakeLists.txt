@@ -26,6 +26,7 @@ idf_component_register(
          "src/audio/wm8960.c"
          "src/sensor/apds9930.c"
          "src/sensor/battery.c"
+         "src/actuators/actuators.c"
          "src/display/display.c"
          "src/display/ui_bridge.c"
          "src/display/ui_model.c"
@@ -35,6 +36,7 @@ idf_component_register(
                  "src/bt"
                  "src/audio"
                  "src/sensor"
+                 "src/actuators"
                  "src/display"
     PRIV_REQUIRES
         nvs_flash
@@ -42,6 +44,7 @@ idf_component_register(
         esp_driver_i2s
         esp_driver_gpio
         esp_driver_spi
+        esp_driver_ledc
         esp_lcd
         esp_ringbuf
         esp_adc

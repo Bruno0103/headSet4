@@ -58,9 +58,11 @@ extern "C" {
 #define SETTINGS_KEY_SENS_PROX_EN    "sens_prox_en"
 #define SETTINGS_KEY_SENS_THRESH_ON  "sens_th_on"
 #define SETTINGS_KEY_SENS_THRESH_OFF "sens_th_off"
+#define SETTINGS_KEY_HAPTIC_ENABLE   "vib_en"
 #define SETTINGS_KEY_HAPTIC_INTENS   "vib_intens"
 #define SETTINGS_KEY_EARS_ANGLE      "ears_angle"
 #define SETTINGS_KEY_FP_KEYS         "fp_keys"
+#define SETTINGS_KEY_FP_MODEL_ID     "fp_model_id"
 #define SETTINGS_KEY_PEER_NAME_SLOT0 "name_slot0"
 #define SETTINGS_KEY_PEER_NAME_SLOT1 "name_slot1"
 

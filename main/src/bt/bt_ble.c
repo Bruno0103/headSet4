@@ -99,9 +99,33 @@ static size_t build_adv(uint8_t *buf)
 {
     size_t n = 0;
     if (s_cur == BT_BLE_ADV_PAIRING) {
-        buf[n++] = 2; buf[n++] = 0x01; buf[n++] = 0x02;                       /* Flags: LE General Discoverable */
-        buf[n++] = 2; buf[n++] = 0x0A; buf[n++] = (uint8_t)BT_BLE_ADV_TX_POWER_DBM; /* TX Power */
+        /* Flags BLE: LE General Discoverable Mode */
+        buf[n++] = 2; buf[n++] = 0x01; buf[n++] = 0x02;
+        /* TX Power (+3 dBm) */
+        buf[n++] = 2; buf[n++] = 0x0A; buf[n++] = (uint8_t)BT_BLE_ADV_TX_POWER_DBM;
+
+#if CONFIG_HEADSET_SWIFT_PAIR_ENABLE
+        /* Microsoft Swift Pair Beacon (especificação oficial da Microsoft Hardware Guidelines)
+         * O Windows NÃO faz active scan; exige o beacon no pacote principal de Advertising.
+         * Estrutura do payload:
+         * - Comprimento: 0x06 (6 bytes após este campo)
+         * - Tipo: 0xFF (Manufacturer Specific Data)
+         * - Company ID: 0x0006 (Microsoft Corporation, Little-Endian: 0x06, 0x00)
+         * - Beacon ID: 0x03 (Swift Pair)
+         * - Sub-scenario: 0x01 (BR/EDR Classic usando BLE para descoberta / 0x02 para Dual-Mode)
+         * - RSSI Threshold: configuravel via Kconfig (padrao 0x80)
+         */
+        buf[n++] = 0x06;
+        buf[n++] = 0xFF;
+        buf[n++] = 0x06;
+        buf[n++] = 0x00;
+        buf[n++] = 0x03;
+        buf[n++] = 0x01;
+        buf[n++] = (uint8_t)CONFIG_HEADSET_SWIFT_PAIR_RSSI_THRESHOLD;
+#endif
     }
+
+    /* Provedor adicional (Google Fast Pair: Service Data 0xFE2C + Model ID em PAIRING, Bloom filter em SLEEP/ACTIVE) */
     if (s_provider) {
         n += s_provider(s_cur, buf + n, ADV_MAX_LEN - n);
     }
@@ -110,15 +134,23 @@ static size_t build_adv(uint8_t *buf)
 
 static size_t build_scan_rsp(uint8_t *buf)
 {
+    size_t n = 0;
+    /* Anexa o Nome do Dispositivo no pacote de Scan Response */
     size_t len = strlen(s_name);
-    bool shortened = len > ADV_MAX_LEN - 2;
+    size_t max_name_len = (ADV_MAX_LEN > 2) ? (ADV_MAX_LEN - 2) : 0;
+    bool shortened = len > max_name_len;
     if (shortened) {
-        len = ADV_MAX_LEN - 2;
+        len = max_name_len;
     }
-    buf[0] = (uint8_t)(len + 1);
-    buf[1] = shortened ? 0x08 : 0x09;
-    memcpy(buf + 2, s_name, len);
-    return len + 2;
+
+    if (max_name_len > 0) {
+        buf[n++] = (uint8_t)(len + 1);
+        buf[n++] = shortened ? 0x08 : 0x09; /* 0x08 = Shortened Local Name, 0x09 = Complete Local Name */
+        memcpy(buf + n, s_name, len);
+        n += len;
+    }
+
+    return n;
 }
 
 /* ---- cadeia stop -> config -> start (chamar com s_lock) ---- */

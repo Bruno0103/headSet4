@@ -130,10 +130,10 @@ esp_err_t bt_gap_start(const char *device_name) {
   };
   ESP_RETURN_ON_ERROR(esp_bt_gap_set_cod(cod, ESP_BT_INIT_COD), TAG, "cod");
 
-  /* DisplayYesNo: o Fast Pair exige comparacao numerica (passkey conferida via
-   * GATT). Fora de uma sessao Fast Pair / janela de pareamento o bt_link_mgr
-   * recusa tudo. */
-  esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_IO;
+  /* Modo "Just Works" (NoInputNoOutput): fone de ouvido padrão.
+   * Não solicita PIN nem digitação de passkey no celular ou PC, pareando
+   * diretamente e de forma transparente sem intervenção manual de código. */
+  esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_NONE;
   ESP_RETURN_ON_ERROR(
       esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &iocap, sizeof iocap),
       TAG, "iocap");

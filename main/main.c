@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+#include "actuators.h"
 #include "apds9930.h"
 #include "audio.h"
 #include "battery.h"
@@ -137,6 +138,9 @@ void app_main(void) {
   }
   if (apds9930_start() != ESP_OK) {
     ESP_LOGE(TAG, "Falha ao iniciar o APDS-9930");
+  }
+  if (actuators_init() != ESP_OK) {
+    ESP_LOGE(TAG, "Falha ao iniciar o modulo de atuadores/vibracall");
   }
 
   /* Inicializa o módulo de bateria (hardware, GPIO do MOSFET e ADC1) antes de

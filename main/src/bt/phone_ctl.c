@@ -22,8 +22,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
+#include "actuators.h"
 #include "audio.h"
 #include "bt_ctl_service.h"
+#include "bt_fastpair.h"
 #include "bt_link_mgr.h"
 #include "hs_actor.h"
 #include "hs_cmds.h"
@@ -282,12 +284,81 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             int v = val->valueint;
             settings_set_u8(SETTINGS_KEY_HAPTIC_INTENS, (uint8_t)v);
         }
+        cJSON *en = cJSON_GetObjectItem(root, "enable");
+        if (en && cJSON_IsBool(en)) {
+            settings_set_u8(SETTINGS_KEY_HAPTIC_ENABLE, cJSON_IsTrue(en) ? 1 : 0);
+        }
+    }
+    else if (strcmp(cmd, "trigger_vibrate") == 0 || strcmp(cmd, "notification") == 0) {
+        /* Disparo de vibração por notificação recebida do smartphone ativo */
+        uint16_t dur = 300;
+        uint8_t intens = 0;
+        cJSON *dur_item = cJSON_GetObjectItem(root, "duration_ms");
+        if (dur_item && cJSON_IsNumber(dur_item)) {
+            dur = (uint16_t)dur_item->valueint;
+        }
+        cJSON *int_item = cJSON_GetObjectItem(root, "intensity");
+        if (int_item && cJSON_IsNumber(int_item)) {
+            intens = (uint8_t)int_item->valueint;
+        }
+        ESP_LOGI(TAG, "Notificacao recebida do smartphone ativo! Acionando vibracall (%u ms, %u%%)", dur, intens);
+        actuators_vibrate(dur, intens);
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\",\"vibrated\":true}", cmd);
     }
     else if (strcmp(cmd, "set_ears_angle") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
             int a = val->valueint;
             settings_set_u8(SETTINGS_KEY_EARS_ANGLE, (uint8_t)a);
+        }
+    }
+    /* --- Comandos de Fast Pair (Model ID) --- */
+    else if (strcmp(cmd, "get_model_id") == 0) {
+        uint8_t mid[3] = {0};
+        if (bt_fastpair_get_model_id(mid) == ESP_OK) {
+            snprintf(resp_buf, sizeof(resp_buf),
+                     "{\"status\":\"ok\",\"cmd\":\"get_model_id\",\"model_id\":\"%02X%02X%02X\"}",
+                     mid[0], mid[1], mid[2]);
+        } else {
+            snprintf(resp_buf, sizeof(resp_buf),
+                     "{\"status\":\"error\",\"cmd\":\"get_model_id\",\"reason\":\"fastpair_disabled\"}");
+        }
+    }
+    else if (strcmp(cmd, "set_model_id") == 0) {
+        cJSON *hex_str = cJSON_GetObjectItem(root, "val");
+        if (hex_str && cJSON_IsString(hex_str)) {
+            /* Lê 3 bytes hex do valor informado */
+            const char *s = hex_str->valuestring;
+            if (strncmp(s, "0x", 2) == 0 || strncmp(s, "0X", 2) == 0) {
+                s += 2;
+            }
+            if (strlen(s) == 6) {
+                uint8_t new_id[3] = {0};
+                char byte_str[3] = {0};
+                bool ok = true;
+                for (int i = 0; i < 3; i++) {
+                    byte_str[0] = s[i * 2];
+                    byte_str[1] = s[i * 2 + 1];
+                    char *endp = NULL;
+                    long v = strtol(byte_str, &endp, 16);
+                    if (!endp || *endp != '\0') {
+                        ok = false;
+                        break;
+                    }
+                    new_id[i] = (uint8_t)v;
+                }
+                if (ok && bt_fastpair_set_model_id(new_id) == ESP_OK) {
+                    snprintf(resp_buf, sizeof(resp_buf),
+                             "{\"status\":\"ok\",\"cmd\":\"set_model_id\",\"model_id\":\"%02X%02X%02X\"}",
+                             new_id[0], new_id[1], new_id[2]);
+                } else {
+                    snprintf(resp_buf, sizeof(resp_buf),
+                             "{\"status\":\"error\",\"cmd\":\"set_model_id\",\"reason\":\"invalid_hex\"}");
+                }
+            } else {
+                snprintf(resp_buf, sizeof(resp_buf),
+                         "{\"status\":\"error\",\"cmd\":\"set_model_id\",\"reason\":\"len_not_6\"}");
+            }
         }
     }
     else {

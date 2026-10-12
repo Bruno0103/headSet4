@@ -162,21 +162,70 @@ static int hex_nibble(char c)
     return -1;
 }
 
+/**
+ * @brief Converte uma string hexadecimal em 3 bytes de Model ID.
+ *
+ * Suporta formatos: "0A1B2C", "0x0A1B2C", "0a1b2c", "0A 1B 2C".
+ * Ignora espaços em branco e prefixos "0x" / "0X".
+ *
+ * @param[in] s String contendo o identificador.
+ * @param[out] out Vetor de 3 bytes para receber o resultado.
+ * @return true se exatamente 3 bytes (6 dígitos hex) foram convertidos com sucesso.
+ */
 static bool parse_model_id(const char *s, uint8_t out[3])
 {
-    if (strncmp(s, "0x", 2) == 0) {
-        s += 2;
-    }
-    if (strlen(s) != 6) {
+    if (!s) {
         return false;
     }
-    for (int i = 0; i < 3; i++) {
-        int hi = hex_nibble(s[2 * i]), lo = hex_nibble(s[2 * i + 1]);
-        if (hi < 0 || lo < 0) {
+
+    /* Pula espaços em branco iniciais */
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') {
+        s++;
+    }
+
+    /* Remove prefixo opcional 0x ou 0X */
+    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        s += 2;
+    }
+
+    /* Extrai exatamente 6 nibbles hexadecimais, ignorando espaços entre eles */
+    int nibbles = 0;
+    uint8_t temp[3] = {0};
+
+    while (*s != '\0') {
+        if (*s == ' ' || *s == '\t' || *s == '-' || *s == ':') {
+            s++;
+            continue;
+        }
+
+        int val = hex_nibble(*s);
+        if (val < 0) {
+            ESP_LOGW(TAG, "Caractere hexadecimal invalido '%c' no Model ID", *s);
             return false;
         }
-        out[i] = (uint8_t)(hi << 4 | lo);
+
+        if (nibbles >= 6) {
+            ESP_LOGW(TAG, "Model ID contem mais de 6 digitos hexadecimais (esperado 3 bytes)");
+            return false;
+        }
+
+        int byte_idx = nibbles / 2;
+        if ((nibbles % 2) == 0) {
+            temp[byte_idx] = (uint8_t)(val << 4);
+        } else {
+            temp[byte_idx] |= (uint8_t)val;
+        }
+
+        nibbles++;
+        s++;
     }
+
+    if (nibbles != 6) {
+        ESP_LOGW(TAG, "Model ID incompleto: recebidos %d digitos hex (esperado exatamente 6)", nibbles);
+        return false;
+    }
+
+    memcpy(out, temp, 3);
     return true;
 }
 
@@ -846,15 +895,33 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
 
 esp_err_t bt_fastpair_init(void)
 {
-    const char *model = CONFIG_HEADSET_FASTPAIR_MODEL_ID;
-    if (model[0] == '\0') {
-        ESP_LOGW(TAG, "Fast Pair DESATIVADO: CONFIG_HEADSET_FASTPAIR_MODEL_ID vazio (pareamento so manual)");
+    /* 1. Tenta carregar Model ID salvo no NVS via Actor settings */
+    bool model_loaded = false;
+    uint8_t nvs_model[3] = {0};
+    if (settings_get_blob(SETTINGS_KEY_FP_MODEL_ID, nvs_model, sizeof(nvs_model)) == ESP_OK) {
+        memcpy(s_model_id, nvs_model, 3);
+        model_loaded = true;
+        ESP_LOGI(TAG, "Model ID carregado do NVS (Actor settings): %02X%02X%02X",
+                 s_model_id[0], s_model_id[1], s_model_id[2]);
+    } else {
+        /* Fallback: Lê do Kconfig / sdkconfig */
+        const char *model = CONFIG_HEADSET_FASTPAIR_MODEL_ID;
+        if (model[0] != '\0') {
+            if (parse_model_id(model, s_model_id)) {
+                model_loaded = true;
+                ESP_LOGI(TAG, "Model ID carregado do Kconfig: %02X%02X%02X",
+                         s_model_id[0], s_model_id[1], s_model_id[2]);
+            } else {
+                ESP_LOGE(TAG, "Model ID configurado no Kconfig e invalido: \"%s\"", model);
+            }
+        }
+    }
+
+    if (!model_loaded) {
+        ESP_LOGW(TAG, "Fast Pair DESATIVADO: nenhum Model ID valido no NVS ou Kconfig (pareamento so manual)");
         return ESP_OK;
     }
-    if (!parse_model_id(model, s_model_id)) {
-        ESP_LOGE(TAG, "Model ID invalido \"%s\" (esperado 6 digitos hexa)", model);
-        return ESP_ERR_INVALID_ARG;
-    }
+
     if (CONFIG_HEADSET_FASTPAIR_ANTISPOOF_PRIVATE_KEY_B64[0] == '\0') {
         ESP_LOGE(TAG, "Fast Pair DESATIVADO: chave privada Anti-Spoofing nao configurada");
         return ESP_ERR_INVALID_STATE;
@@ -879,6 +946,42 @@ esp_err_t bt_fastpair_init(void)
     bt_ble_set_adv_provider(adv_provider);
     ESP_RETURN_ON_ERROR(bt_ble_gatts_register(FP_APP_ID, gatts_cb), TAG, "registro GATT");
 
-    ESP_LOGI(TAG, "Fast Pair ativo (Model ID %02X%02X%02X)", s_model_id[0], s_model_id[1], s_model_id[2]);
+    ESP_LOGI(TAG, "Fast Pair ativo com sucesso (Model ID %02X%02X%02X)", s_model_id[0], s_model_id[1], s_model_id[2]);
+    return ESP_OK;
+}
+
+esp_err_t bt_fastpair_get_model_id(uint8_t out[3])
+{
+    if (!out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_enabled) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    LOCK();
+    memcpy(out, s_model_id, 3);
+    UNLOCK();
+    return ESP_OK;
+}
+
+esp_err_t bt_fastpair_set_model_id(const uint8_t id[3])
+{
+    if (!id) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    LOCK();
+    memcpy(s_model_id, id, 3);
+    memcpy(v_model, id, 3);
+    s_enabled = true;
+    UNLOCK();
+
+    /* Persiste no NVS via Actor settings de forma thread-safe */
+    esp_err_t err = settings_set_blob(SETTINGS_KEY_FP_MODEL_ID, id, 3);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Falha ao persistir novo Model ID no settings: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Novo Model ID persistido com sucesso: %02X%02X%02X", id[0], id[1], id[2]);
+    }
+
     return ESP_OK;
 }

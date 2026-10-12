@@ -246,6 +246,8 @@ void ui_bridge_vibracall_get_status(char *out_status, size_t max_len)
 
 bool ui_bridge_vibracall_set_ativar(bool enable)
 {
+    settings_set_u8(SETTINGS_KEY_HAPTIC_ENABLE, enable ? 1 : 0);
+
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
 

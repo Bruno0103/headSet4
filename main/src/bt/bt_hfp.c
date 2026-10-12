@@ -80,13 +80,36 @@ static void hf_evt_hdl(uint16_t event, void *p)
     case ESP_HF_CLIENT_CIND_CALL_SETUP_EVT:
         if (hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_INCOMING) {
             ESP_LOGI(TAG, "Chamada recebendo");
+            bt_call_state_evt_t ev = {
+                .slot = (uint8_t)bt_link_mgr_selected(),
+                .state = BT_CALL_INCOMING,
+            };
+            hs_event_post(BT_EVT, BT_EVT_CALL_STATE, &ev, sizeof(ev));
         } else if (hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_OUTGOING_DIALING || hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_OUTGOING_ALERTING) {
             ESP_LOGI(TAG, "Chamada efetuando");
+            bt_call_state_evt_t ev = {
+                .slot = (uint8_t)bt_link_mgr_selected(),
+                .state = BT_CALL_OUTGOING,
+            };
+            hs_event_post(BT_EVT, BT_EVT_CALL_STATE, &ev, sizeof(ev));
+        } else if (hf->call_setup.status == ESP_HF_CALL_SETUP_STATUS_IDLE) {
+            bt_call_state_evt_t ev = {
+                .slot = (uint8_t)bt_link_mgr_selected(),
+                .state = BT_CALL_IDLE,
+            };
+            hs_event_post(BT_EVT, BT_EVT_CALL_STATE, &ev, sizeof(ev));
         }
         break;
 
     case ESP_HF_CLIENT_RING_IND_EVT:
         ESP_LOGI(TAG, "Tocando...");
+        {
+            bt_call_state_evt_t ev = {
+                .slot = (uint8_t)bt_link_mgr_selected(),
+                .state = BT_CALL_INCOMING,
+            };
+            hs_event_post(BT_EVT, BT_EVT_CALL_STATE, &ev, sizeof(ev));
+        }
         break;
 
     case ESP_HF_CLIENT_CLIP_EVT:

@@ -186,6 +186,32 @@ static void update_string_subjects_internal(void)
         snprintf(s_buf_orelhas_status, sizeof(s_buf_orelhas_status), "Ativo (%u deg)", (unsigned int)s_model.orelhas_max_angle);
     }
     lv_subject_copy_string(&g_subj_orelhas_status_texto, s_buf_orelhas_status);
+
+    /* Sincronização direta com os Subjects gerados pela UI (components/ui/ui_gen.h) */
+    lv_subject_copy_string(&subject_g_subj_bt_nome_1, s_buf_bt_nome_1);
+    lv_subject_copy_string(&subject_g_subj_bt_status_1, s_buf_bt_status_1);
+    lv_subject_copy_string(&subject_g_subj_bt_nome_2, s_buf_bt_nome_2);
+    lv_subject_copy_string(&subject_g_subj_bt_status_2, s_buf_bt_status_2);
+    lv_subject_copy_string(&subject_g_subj_bt_status_alternancia, s_buf_bt_alternancia);
+    lv_subject_copy_string(&subject_g_subj_bt_active_slot, 
+                           (s_model.bt_active_slot == 0) ? s_model.bt_status_slot0 : s_model.bt_status_slot1);
+    lv_subject_copy_string(&subject_g_subj_proximidade_status_texto, s_buf_prox_status);
+    lv_subject_copy_string(&subject_g_subj_vibracall_status_texto, s_buf_vibracall_status);
+    lv_subject_copy_string(&subject_g_subj_orelhas_status_texto, s_buf_orelhas_status);
+    lv_subject_set_int(&subject_subj_battery_percent, s_model.battery_percent);
+    lv_subject_set_int(&subject_g_subj_bateria_tensao_mv, s_model.battery_mv);
+}
+
+void ui_model_sync_ui_gen(void)
+{
+    if (s_model_mutex) xSemaphoreTake(s_model_mutex, portMAX_DELAY);
+    lv_subject_set_int(&subject_g_subj_display_brilho, s_model.display_brightness);
+    lv_subject_set_int(&subject_g_subj_display_timeout_segundos, s_model.display_timeout_sec);
+    lv_subject_set_int(&subject_g_subj_proximidade_sensibilidade, s_model.prox_sensitivity);
+    lv_subject_set_int(&subject_g_subj_vibracall_intensidade, s_model.vibracall_intensity);
+    lv_subject_set_int(&subject_g_subj_orelhas_angulo_maximo, s_model.orelhas_max_angle);
+    update_string_subjects_internal();
+    if (s_model_mutex) xSemaphoreGive(s_model_mutex);
 }
 
 /* ============================================================================
@@ -213,6 +239,9 @@ esp_err_t ui_model_init(void)
     }
     if (settings_get_u16(SETTINGS_KEY_DISP_TIMEOUT, &u16_val, 30) == ESP_OK) {
         s_model.display_timeout_sec = u16_val;
+    }
+    if (settings_get_u8(SETTINGS_KEY_HAPTIC_ENABLE, &u8_val, 1) == ESP_OK) {
+        s_model.vibracall_enabled = (u8_val != 0);
     }
     if (settings_get_u8(SETTINGS_KEY_HAPTIC_INTENS, &u8_val, 80) == ESP_OK) {
         s_model.vibracall_intensity = u8_val;
@@ -377,6 +406,7 @@ void ui_model_drain_updates(void)
                 if (s_subjects_initialized) {
                     lv_subject_set_int(&g_subj_proximidade_ativo, s_model.prox_enabled ? 1 : 0);
                     lv_subject_set_int(&g_subj_proximidade_sensibilidade, s_model.prox_sensitivity);
+                    lv_subject_set_int(&subject_g_subj_proximidade_sensibilidade, s_model.prox_sensitivity);
                 }
                 needs_string_update = true;
                 break;
@@ -392,6 +422,7 @@ void ui_model_drain_updates(void)
                 if (s_subjects_initialized) {
                     lv_subject_set_int(&g_subj_vibracall_ativo, s_model.vibracall_enabled ? 1 : 0);
                     lv_subject_set_int(&g_subj_vibracall_intensidade, s_model.vibracall_intensity);
+                    lv_subject_set_int(&subject_g_subj_vibracall_intensidade, s_model.vibracall_intensity);
                 }
                 needs_string_update = true;
                 break;
@@ -402,6 +433,7 @@ void ui_model_drain_updates(void)
                 if (s_subjects_initialized) {
                     lv_subject_set_int(&g_subj_orelhas_ativo, s_model.orelhas_enabled ? 1 : 0);
                     lv_subject_set_int(&g_subj_orelhas_angulo_maximo, s_model.orelhas_max_angle);
+                    lv_subject_set_int(&subject_g_subj_orelhas_angulo_maximo, s_model.orelhas_max_angle);
                 }
                 needs_string_update = true;
                 break;
@@ -416,6 +448,8 @@ void ui_model_drain_updates(void)
                     lv_subject_set_int(&g_subj_display_ligado, s_model.display_on ? 1 : 0);
                     lv_subject_set_int(&g_subj_display_brilho, s_model.display_brightness);
                     lv_subject_set_int(&g_subj_display_timeout_segundos, s_model.display_timeout_sec);
+                    lv_subject_set_int(&subject_g_subj_display_brilho, s_model.display_brightness);
+                    lv_subject_set_int(&subject_g_subj_display_timeout_segundos, s_model.display_timeout_sec);
                 }
                 break;
 
@@ -586,6 +620,15 @@ static void on_cfg_event(void *handler_args, esp_event_base_t base, int32_t id, 
             ui_model_update_msg_t msg = {
                 .type = UI_UPDATE_BT_AUTO_SWITCH,
                 .payload.bt_auto_sw = { .auto_switch = (ev->value_u8 != 0) }
+            };
+            ui_model_post_update(&msg);
+        } else if (strcmp(ev->key, SETTINGS_KEY_HAPTIC_ENABLE) == 0) {
+            ui_model_update_msg_t msg = {
+                .type = UI_UPDATE_VIBRACALL_CONFIG,
+                .payload.vib_cfg = {
+                    .enabled = (ev->value_u8 != 0),
+                    .intensity = s_model.vibracall_intensity,
+                }
             };
             ui_model_post_update(&msg);
         } else if (strcmp(ev->key, SETTINGS_KEY_HAPTIC_INTENS) == 0) {

@@ -86,10 +86,13 @@
 #define BOARD_APDS9930_PWR_GPIO (-1) /* -1 = sem controle de energia por GPIO */
 
 /* ============================================================================
+ * Atuadores / Vibracall (Motor Háptico)
+ * GPIO 15 aprovado pelo usuário (MTDO strapping com pull-down/livre pós-boot)
+ * ========================================================================== */
+#define BOARD_VIBRACALL_GPIO     15
+
+/* ============================================================================
  * Reserva
- *  Livres/uso restrito: GPIO0 (BOOT, deixar livre), GPIO15 (strapping, so saida
- *  com pull-down externo), GPIO36 (somente entrada).
- *  Todos os pinos de saida "normais" estao ocupados. Para vibracall e servos
- *  use um PCA9685 no I2C ja existente (16 canais PWM, endereco 0x40), em vez
- *  de gastar GPIO.
+ *  Livres/uso restrito: GPIO0 (BOOT, deixar livre), GPIO36 (somente entrada).
+ *  Para servos use um PCA9685 no I2C ja existente (16 canais PWM, endereco 0x40).
  * ========================================================================== */

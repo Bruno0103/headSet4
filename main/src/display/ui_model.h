@@ -145,6 +145,12 @@ esp_err_t ui_model_init(void);
 esp_err_t ui_model_register_events(void);
 
 /**
+ * @brief Força a sincronização imediata dos valores do ui_model para os subjects da UI gerada.
+ * Deve ser chamada após ui_init("").
+ */
+void ui_model_sync_ui_gen(void);
+
+/**
  * @brief Processa e drena todas as atualizações enfileiradas atualizando os subjects.
  * DEVE ser executada exclusivamente dentro do loop da task do LVGL (display_task),
  * antes de invocar lv_timer_handler().

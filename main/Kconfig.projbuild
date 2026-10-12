@@ -2,7 +2,7 @@ menu "Headset"
 
     config HEADSET_DEVICE_NAME
         string "Nome Bluetooth do headset"
-        default "HeadSet4"
+        default "Headphones"
 
     config HEADSET_FACTORY_RESET_ON_BOOT
         bool "Apagar particao NVS a cada boot (Factory Reset)"
@@ -49,19 +49,41 @@ menu "Headset"
 
     menu "Google Fast Pair"
         config HEADSET_FASTPAIR_MODEL_ID
-            string "Model ID (3 bytes em hexa, ex.: 0A1B2C) - do Google Nearby Console"
+            string "Model ID (3 bytes em hexa, ex.: 209865) - do Google Nearby Console"
             default ""
             help
+                Identificador de 3 bytes (ex: 209865) registrado no Google Nearby Console.
                 Deixe vazio para DESATIVAR o Fast Pair (o headset segue com pareamento
                 Classic manual). A imagem do pop-up e configurada no console, nao aqui.
+                Configure no sdkconfig local ou grave via NVS.
 
         config HEADSET_FASTPAIR_ANTISPOOF_PRIVATE_KEY_B64
             string "Anti-Spoofing PRIVATE key (Base64, 32 bytes) - do Nearby Console"
             default ""
             help
-                Segredo do produto. Fica no sdkconfig local (ignorado pelo git): NAO
-                versione este valor. Para producao, mova-o para uma particao NVS
-                criptografada / eFuse.
+                Segredo do produto (32 bytes em Base64, secp256r1) para ECDH Anti-Spoofing.
+                Fica EXCLUSIVAMENTE no sdkconfig local (ignorado pelo git) ou gravado via NVS.
+                NUNCA versione este valor no repositório Git.
+    endmenu
+
+    menu "Microsoft Swift Pair"
+        config HEADSET_SWIFT_PAIR_ENABLE
+            bool "Habilitar Microsoft Swift Pair no Advertising principal"
+            default y
+            help
+                Emite o payload do Microsoft Swift Pair (Company ID 0x0006) no pacote
+                de Advertising principal (ADV_IND) durante a janela de pareamento (PAIRING).
+                Permite que o Windows 10/11 exiba a notificacao automatica (toast popup)
+                para emparelhamento rapido em conjunto com o Google Fast Pair.
+
+        config HEADSET_SWIFT_PAIR_RSSI_THRESHOLD
+            hex "RSSI threshold byte (padrao 0x80 para deteccao sem filtro estrito)"
+            range 0x00 0xFF
+            default 0x80
+            depends on HEADSET_SWIFT_PAIR_ENABLE
+            help
+                Valor de RSSI threshold conforme especificacao da Microsoft Swift Pair Beacon.
+                0x80 e o padrao recomendado pela Microsoft para aceitar pareamento sem restricoes severas de RSSI.
     endmenu
 
     menu "Display e Touch Screen"

@@ -37,6 +37,23 @@ void bt_fastpair_on_pairing_mode(bool active);
 /** Remove todas as chaves de conta (factory reset do Fast Pair). */
 esp_err_t bt_fastpair_clear_account_keys(void);
 
+/**
+ * @brief Obtém o Model ID atual de 3 bytes (cópia thread-safe).
+ *
+ * @param[out] out Buffer de destino com pelo menos 3 bytes.
+ * @return esp_err_t ESP_OK em caso de sucesso ou ESP_ERR_INVALID_STATE se desativado.
+ */
+esp_err_t bt_fastpair_get_model_id(uint8_t out[3]);
+
+/**
+ * @brief Atualiza dinamicamente o Model ID (3 bytes), persiste no NVS (Actor settings)
+ * e atualiza a característica GATT e payload de advertising.
+ *
+ * @param[in] id Buffer com os 3 bytes do novo Model ID.
+ * @return esp_err_t ESP_OK em caso de sucesso.
+ */
+esp_err_t bt_fastpair_set_model_id(const uint8_t id[3]);
+
 #ifdef __cplusplus
 }
 #endif

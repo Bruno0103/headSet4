@@ -102,30 +102,44 @@
           style_text_color="0xF2F5F7" />
       </row>
       <row gap="8" width="100%" height="content">
-        <tile
-          main_align="center"
-          cross_align="center"
+        <button
+          flex_flow="row"
+          style_flex_main_place="center"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
           style_pad_column="0"
           width="0"
           height="36"
-          flex_grow="1">
+          flex_grow="1"
+          style_bg_color="0x252D35"
+          style_radius="4"
+          style_clip_corner="true">
           <label
             text="Ativar"
             style_text_font="font_montserrat_regular_14"
             style_text_color="0xF2F5F7" />
-        </tile>
-        <tile
-          main_align="center"
-          cross_align="center"
+        </button>
+        <button
+          flex_flow="row"
+          style_flex_main_place="center"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
           style_pad_column="0"
           width="0"
           height="36"
-          flex_grow="1">
+          flex_grow="1"
+          style_bg_color="0x252D35"
+          style_radius="4"
+          style_clip_corner="true">
           <label
             text="Desativar"
             style_text_font="font_montserrat_regular_14"
             style_text_color="0xF2F5F7" />
-        </tile>
+        </button>
       </row>
       <column pad_top="4" pad_bottom="4" gap="8" width="100%" height="content">
         <row gap="8" width="100%" height="content">

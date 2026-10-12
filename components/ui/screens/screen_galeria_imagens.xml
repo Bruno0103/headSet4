@@ -103,7 +103,18 @@
           style_text_color="0xABB6BF" />
       </row>
       <column width="100%" height="content">
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -114,8 +125,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -126,8 +148,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -138,8 +171,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -150,8 +194,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -162,8 +217,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -174,8 +240,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -186,8 +263,19 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
-        <row pad_left="8" pad_right="8" gap="8" cross_align="center" width="100%" height="28">
+        </button_subtle>
+        <button_subtle
+          flex_flow="row"
+          style_flex_cross_place="center"
+          style_flex_track_place="center"
+          style_pad_hor="8"
+          style_pad_ver="0"
+          style_pad_column="8"
+          width="100%"
+          height="28"
+          style_border_color="0x39444E"
+          style_border_width="1"
+          style_border_side="bottom">
           <label
             width="0"
             flex_grow="1"
@@ -198,7 +286,7 @@
             text="—"
             style_text_font="font_montserrat_regular_12"
             style_text_color="0xABB6BF" />
-        </row>
+        </button_subtle>
       </column>
     </column>
   </view>

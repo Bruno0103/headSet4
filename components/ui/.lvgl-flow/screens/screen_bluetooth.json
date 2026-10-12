@@ -2246,6 +2246,9 @@
                 "isMask": false,
                 "maskType": "ALPHA",
                 "effects": [],
+                "annotations": {
+                  "widgetType": "lv_button"
+                },
                 "devStatus": null,
                 "children": [
                   {
@@ -3001,6 +3004,9 @@
                 "isMask": false,
                 "maskType": "ALPHA",
                 "effects": [],
+                "annotations": {
+                  "widgetType": "lv_button"
+                },
                 "devStatus": null,
                 "children": [
                   {
@@ -3496,6 +3502,9 @@
                 "isMask": false,
                 "maskType": "ALPHA",
                 "effects": [],
+                "annotations": {
+                  "widgetType": "lv_button"
+                },
                 "devStatus": null,
                 "children": [
                   {
