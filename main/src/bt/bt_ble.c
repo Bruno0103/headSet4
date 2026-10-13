@@ -135,9 +135,17 @@ static size_t build_adv(uint8_t *buf)
 static size_t build_scan_rsp(uint8_t *buf)
 {
     size_t n = 0;
-    /* Anexa o Nome do Dispositivo no pacote de Scan Response */
+    /* WP-BAT.3: anuncia o Battery Service (UUID16 0x180F) na scan response para que
+     * Android/Windows descubram o BAS. Fica aqui (e não no ADV principal) para não
+     * competir por bytes com Swift Pair / Fast Pair. Custo: 4 bytes a menos no nome. */
+    buf[n++] = 3;       /* tamanho */
+    buf[n++] = 0x03;    /* Complete List of 16-bit Service UUIDs */
+    buf[n++] = 0x0F;    /* 0x180F little-endian */
+    buf[n++] = 0x18;
+
+    /* Anexa o Nome do Dispositivo no restante do pacote de Scan Response */
     size_t len = strlen(s_name);
-    size_t max_name_len = (ADV_MAX_LEN > 2) ? (ADV_MAX_LEN - 2) : 0;
+    size_t max_name_len = (ADV_MAX_LEN > n + 2) ? (ADV_MAX_LEN - n - 2) : 0;
     bool shortened = len > max_name_len;
     if (shortened) {
         len = max_name_len;

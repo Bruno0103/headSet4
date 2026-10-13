@@ -33,5 +33,13 @@ esp_err_t battery_init(void);
  */
 void battery_task(void *pvParameters);
 
+/**
+ * @brief Último percentual publicado (0..100), sem bloquear (leitura atômica).
+ *
+ * Permite que assinantes novos/reconexões tenham o valor sem esperar o próximo ciclo (WP-BAT.5).
+ * @return 0..100, ou -1 se ainda não houve nenhuma leitura.
+ */
+int battery_get_last(void);
+
 #endif // BATTERY_H
 

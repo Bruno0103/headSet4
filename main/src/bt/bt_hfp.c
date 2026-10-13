@@ -188,8 +188,11 @@ void bt_hfp_report_battery(uint8_t percent)
             return;
         }
         s_xapl_sent = true;
-        /* Em conformidade com AGENTS.md §3 (handlers e funções de despacho nunca bloqueiam com vTaskDelay),
-         * enviamos a primeira indicação logo a seguir ou no próximo ciclo sem bloquear a task */
+        /* O AG precisa processar o XAPL (e responder +XAPL) antes de aceitar IPHONEACCEV;
+         * enviar os dois colados faz Android/Windows descartarem o nível. Como não podemos
+         * bloquear (AGENTS.md §3), o nível segue no próximo evento de bateria (15 s) ou LINK_UP. */
+        ESP_LOGI(TAG, "XAPL enviado; bateria (%u%%) seguirá na próxima leitura", percent);
+        return;
     }
 
     /* 
@@ -209,14 +212,21 @@ void bt_hfp_report_battery(uint8_t percent)
         return;
     }
 
-    /* Envia o valor atualizado de bateria */
+    /* Contadores de diagnóstico (WP-BAT.1); log de falha limitado a 1 a cada 2^n (§3.7) */
+    static uint32_t s_ok_cnt = 0, s_fail_cnt = 0;
     esp_err_t err_acc = esp_hf_client_send_iphoneaccev((uint32_t)level, false);
     if (err_acc == ESP_OK) {
+        s_ok_cnt++;
         s_last_level = level;
         s_last_report_ms = now_ms;
-        ESP_LOGI(TAG, "Bateria informada com sucesso ao host HFP: %u%% (nivel %d/9)", percent, level);
+        ESP_LOGI(TAG, "Bateria informada com sucesso ao host HFP: %u%% (nivel %d/9) [ok=%lu falhas=%lu]",
+                 percent, level, (unsigned long)s_ok_cnt, (unsigned long)s_fail_cnt);
     } else {
-        ESP_LOGW(TAG, "IPHONEACCEV recusado pela pilha (%s)", esp_err_to_name(err_acc));
+        s_fail_cnt++;
+        if ((s_fail_cnt & (s_fail_cnt - 1)) == 0) {
+            ESP_LOGW(TAG, "IPHONEACCEV recusado pela pilha (%s) [falhas=%lu]",
+                     esp_err_to_name(err_acc), (unsigned long)s_fail_cnt);
+        }
     }
 }
 

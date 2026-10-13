@@ -51,6 +51,14 @@ static bool s_calibration_enabled = false;
 /* Flag indicadora se a inicialização de hardware foi bem-sucedida */
 static bool s_battery_initialized = false;
 
+/* Último percentual publicado; -1 = sem leitura. int de 32 bits é atômico no Xtensa. */
+static volatile int s_last_percent = -1;
+
+int battery_get_last(void)
+{
+    return s_last_percent;
+}
+
 /**
  * @brief Inicializa o pino MOSFET e a unidade ADC1 para monitoramento de bateria.
  * 
@@ -358,6 +366,7 @@ void battery_task(void *pvParameters)
             .millivolts = (uint16_t)battery_voltage_mv,
             .is_charging = false,
         };
+        s_last_percent = percent;
         hs_event_post(SENSOR_EVT, SENSOR_EVT_BATTERY, &s_ev, sizeof(s_ev));
 
         /* Ciclo de amostragem padrão: 15 segundos entre cada medição completa */
