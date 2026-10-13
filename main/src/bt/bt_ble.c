@@ -13,7 +13,7 @@
 
 static const char *TAG = "bt_ble";
 
-#define MAX_APPS         4
+#define MAX_APPS         5
 #define MAX_BLE_CONN     2          /* = CONFIG_BTDM_CTRL_BLE_MAX_CONN */
 #define ADV_MAX_LEN      31
 

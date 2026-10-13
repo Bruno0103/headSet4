@@ -386,8 +386,11 @@ void ui_model_drain_updates(void)
                 s_model.battery_mv = msg.payload.battery.mv;
                 s_model.battery_charging = msg.payload.battery.charging;
                 if (s_subjects_initialized) {
+                    /* Atualiza o subject interno do modelo */
                     lv_subject_set_int(&g_subj_bateria_porcentagem, s_model.battery_percent);
                     lv_subject_set_int(&g_subj_bateria_tensao_mv, s_model.battery_mv);
+                    /* Atualiza o subject oficial gerado pelo Figma (components/ui/ui_gen.h) */
+                    lv_subject_set_int(&subject_subj_battery_percent, s_model.battery_percent);
                 }
                 needs_string_update = true;
                 break;

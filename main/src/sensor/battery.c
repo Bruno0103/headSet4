@@ -331,23 +331,34 @@ void battery_task(void *pvParameters)
             ESP_LOGI(TAG, "=============================================");
             
             prev_avg = voltage_mv;
-
-            /* 4. Converte para porcentagem da curva de descarga */
-            uint8_t percent = battery_percent_from_mv(battery_voltage_mv);
-            if (percent != prev_percent) {
-                prev_percent = percent;
-                ESP_LOGI(TAG, "[BATERIA] Publicando evento SENSOR_EVT_BATTERY: %u%% (%u mV)",
-                         percent, battery_voltage_mv);
-
-                /* Publica no barramento central hs_events (SENSOR_EVT) */
-                sensor_battery_evt_t s_ev = {
-                    .percent = percent,
-                    .millivolts = (uint16_t)battery_voltage_mv,
-                    .is_charging = false,
-                };
-                hs_event_post(SENSOR_EVT, SENSOR_EVT_BATTERY, &s_ev, sizeof(s_ev));
-            }
         }
+
+        /* 4. Converte para porcentagem da curva de descarga */
+        uint8_t percent = battery_percent_from_mv(battery_voltage_mv);
+
+        /* 
+         * Requisito do sistema: Todos os subsistemas (Display ILI9341, Windows e Android)
+         * devem receber o nível atual de energia sempre que houver leitura ou batimento.
+         * Publica sempre se a porcentagem mudar OU periodicamente a cada ciclo de medição.
+         */
+        bool percent_changed = (percent != prev_percent);
+        prev_percent = percent;
+
+        if (percent_changed) {
+            ESP_LOGI(TAG, "[BATERIA] Publicando evento SENSOR_EVT_BATTERY (alteração): %u%% (%u mV)",
+                     percent, battery_voltage_mv);
+        } else {
+            ESP_LOGD(TAG, "[BATERIA] Publicando evento SENSOR_EVT_BATTERY (periódico): %u%% (%u mV)",
+                     percent, battery_voltage_mv);
+        }
+
+        /* Publica no barramento central hs_events (SENSOR_EVT) */
+        sensor_battery_evt_t s_ev = {
+            .percent = percent,
+            .millivolts = (uint16_t)battery_voltage_mv,
+            .is_charging = false,
+        };
+        hs_event_post(SENSOR_EVT, SENSOR_EVT_BATTERY, &s_ev, sizeof(s_ev));
 
         /* Ciclo de amostragem padrão: 15 segundos entre cada medição completa */
         vTaskDelay(pdMS_TO_TICKS(15000));

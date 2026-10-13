@@ -16,6 +16,7 @@ idf_component_register(
          "src/bt/bt_link_mgr.c"
          "src/bt/bt_eq_service.c"
          "src/bt/bt_ctl_service.c"
+         "src/bt/bt_bas_service.c"
          "src/bt/phone_ctl.c"
          "src/audio/audio.c"
          "src/audio/audio_codec.c"

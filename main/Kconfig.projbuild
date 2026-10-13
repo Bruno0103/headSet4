@@ -50,16 +50,16 @@ menu "Headset"
     menu "Google Fast Pair"
         config HEADSET_FASTPAIR_MODEL_ID
             string "Model ID (3 bytes em hexa, ex.: 209865) - do Google Nearby Console"
-            default ""
+            default "209865"
             help
-                Identificador de 3 bytes (ex: 209865) registrado no Google Nearby Console.
+                Identificador de 3 bytes (0x209865) registrado no Google Nearby Console.
                 Deixe vazio para DESATIVAR o Fast Pair (o headset segue com pareamento
                 Classic manual). A imagem do pop-up e configurada no console, nao aqui.
                 Configure no sdkconfig local ou grave via NVS.
 
         config HEADSET_FASTPAIR_ANTISPOOF_PRIVATE_KEY_B64
             string "Anti-Spoofing PRIVATE key (Base64, 32 bytes) - do Nearby Console"
-            default ""
+            default "W9Ff/5Y6pNI3A5QBnamnuALyDQLvw9rYEwG2OfzWPQ0="
             help
                 Segredo do produto (32 bytes em Base64, secp256r1) para ECDH Anti-Spoofing.
                 Fica EXCLUSIVAMENTE no sdkconfig local (ignorado pelo git) ou gravado via NVS.

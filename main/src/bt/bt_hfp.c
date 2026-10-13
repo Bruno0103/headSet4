@@ -9,6 +9,7 @@
 #include "esp_check.h"
 #include "esp_hf_client_api.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "bt_app_core.h"
 
@@ -171,25 +172,51 @@ esp_err_t bt_hfp_reject_call(void) { return esp_hf_client_reject_call(); }
 void bt_hfp_report_battery(uint8_t percent)
 {
     if (!s_slc_up) {
+        /* Conexão de controle SLC ainda não estabelecida */
         return;
     }
+
+    /* Mapeia 0..100% para a escala 0..9 exigida pelo padrão Apple AT+IPHONEACCEV */
     const int level = ((percent > 100 ? 100 : percent) * 9 + 50) / 100;   /* 0..9 */
-    if (level == s_last_level) {
-        return;
-    }
+
+    /* Envia o handshake de recursos Apple AT+XAPL caso ainda não tenha sido negociado nesta sessão SLC */
     if (!s_xapl_sent) {
         char info[] = XAPL_INFO;
-        if (esp_hf_client_send_xapl(info, ESP_HF_CLIENT_XAPL_FEAT_BATTERY_REPORT) != ESP_OK) {
-            ESP_LOGW(TAG, "XAPL recusado pela pilha");
+        esp_err_t err = esp_hf_client_send_xapl(info, ESP_HF_CLIENT_XAPL_FEAT_BATTERY_REPORT);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "XAPL recusado pela pilha (%s) - aguardando proximo ciclo", esp_err_to_name(err));
             return;
         }
         s_xapl_sent = true;
+        /* Em conformidade com AGENTS.md §3 (handlers e funções de despacho nunca bloqueiam com vTaskDelay),
+         * enviamos a primeira indicação logo a seguir ou no próximo ciclo sem bloquear a task */
     }
-    if (esp_hf_client_send_iphoneaccev((uint32_t)level, false) == ESP_OK) {
+
+    /* 
+     * Heartbeat para Windows e hosts Bluetooth:
+     * O Windows e alguns sistemas precisam de atualizações periódicas mesmo se o nível
+     * permanecer no mesmo degrau (0..9), para confirmar que o dispositivo está ativo
+     * e o valor de bateria continua fresco.
+     */
+    static uint32_t s_last_report_ms = 0;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    /* Cada leitura (15 s) é repassada ao host; o debounce de 5 s só evita rajadas
+     * (ex.: LINK_UP + evento periódico juntos). Mudança de nível sempre envia. */
+    bool should_send = (level != s_last_level) || (s_last_report_ms == 0) ||
+                       (now_ms - s_last_report_ms >= 5000);
+
+    if (!should_send) {
+        return;
+    }
+
+    /* Envia o valor atualizado de bateria */
+    esp_err_t err_acc = esp_hf_client_send_iphoneaccev((uint32_t)level, false);
+    if (err_acc == ESP_OK) {
         s_last_level = level;
-        ESP_LOGI(TAG, "Bateria informada ao celular: %u%% (nivel %d/9)", percent, level);
+        s_last_report_ms = now_ms;
+        ESP_LOGI(TAG, "Bateria informada com sucesso ao host HFP: %u%% (nivel %d/9)", percent, level);
     } else {
-        ESP_LOGW(TAG, "IPHONEACCEV recusado pela pilha");
+        ESP_LOGW(TAG, "IPHONEACCEV recusado pela pilha (%s)", esp_err_to_name(err_acc));
     }
 }
 

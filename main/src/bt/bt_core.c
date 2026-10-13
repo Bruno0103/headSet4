@@ -8,6 +8,7 @@
 #include "bt_a2dp.h"
 #include "bt_app_core.h"
 #include "bt_avrcp.h"
+#include "bt_bas_service.h"
 #include "bt_ble.h"
 #include "bt_ctl_service.h"
 #include "bt_eq_service.h"
@@ -46,6 +47,7 @@ static void stack_up_hdl(uint16_t event, void *p)
     log_step("Fast Pair", bt_fastpair_init());   /* registra o servico 0xFE2C e o provider no bt_ble */
 
     log_step("EQ GATT", bt_eq_service_init());
+    log_step("BAS GATT", bt_bas_service_init());
     log_step("Phone CTL", phone_ctl_init());
     log_step("CTL GATT", bt_ctl_service_init());
 
