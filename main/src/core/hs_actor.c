@@ -121,19 +121,10 @@ esp_err_t hs_actor_create(const hs_actor_cfg_t *cfg, hs_actor_t **out_actor)
     return ESP_OK;
 }
 
-esp_err_t hs_actor_start(hs_actor_t *actor)
+static esp_err_t start_locked(hs_actor_t *actor)
 {
-    if (!actor) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (xSemaphoreTake(actor->lock, portMAX_DELAY) != pdTRUE) {
-        return ESP_ERR_TIMEOUT;
-    }
-
     if (actor->is_running && actor->task != NULL) {
         /* Já está em execução */
-        xSemaphoreGive(actor->lock);
         return ESP_OK;
     }
 
@@ -165,14 +156,27 @@ esp_err_t hs_actor_start(hs_actor_t *actor)
         ESP_LOGE(TAG, "Falha ao criar Task FreeRTOS para o ator '%s'", actor->cfg.name ? actor->cfg.name : "anon");
         actor->task = NULL;
         actor->is_running = false;
-        xSemaphoreGive(actor->lock);
         return ESP_FAIL;
     }
 
     actor->is_running = true;
+    return ESP_OK;
+}
+
+esp_err_t hs_actor_start(hs_actor_t *actor)
+{
+    if (!actor) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (xSemaphoreTake(actor->lock, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t err = start_locked(actor);
     xSemaphoreGive(actor->lock);
 
-    return ESP_OK;
+    return err;
 }
 
 esp_err_t hs_actor_stop(hs_actor_t *actor, TickType_t wait_ticks)
@@ -280,7 +284,7 @@ esp_err_t hs_actor_send(hs_actor_t *actor, uint16_t cmd, const void *p, size_t n
             return ESP_ERR_INVALID_STATE;
         }
 
-        esp_err_t err = hs_actor_start(actor);
+        esp_err_t err = start_locked(actor);
         if (err != ESP_OK) {
             actor->stats.dropped_msgs++;
             xSemaphoreGive(actor->lock);
@@ -348,7 +352,7 @@ esp_err_t hs_actor_request(hs_actor_t *actor, uint16_t cmd, const void *in, size
             return ESP_ERR_INVALID_STATE;
         }
 
-        esp_err_t err = hs_actor_start(actor);
+        esp_err_t err = start_locked(actor);
         if (err != ESP_OK) {
             actor->stats.dropped_msgs++;
             xSemaphoreGive(actor->lock);
@@ -522,15 +526,23 @@ static void hs_actor_task_fn(void *arg)
         actor->cfg.on_stop(actor->cfg.ctx);
     }
 
-    /* Atualiza estado final sob lock */
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    bool stopped_by_request = false;
+
+    /* Atualiza estado final sob lock garantindo que so zera se ainda formos a task atual (R.1 b) */
     if (xSemaphoreTake(actor->lock, portMAX_DELAY) == pdTRUE) {
-        actor->is_running = false;
-        actor->task = NULL;
+        if (actor->task == self) {
+            actor->is_running = false;
+            actor->task = NULL;
+        }
+        stopped_by_request = actor->stop_requested;
         xSemaphoreGive(actor->lock);
     }
 
-    /* Sinaliza quem estiver aguardando no hs_actor_stop */
-    xSemaphoreGive(actor->stop_sem);
+    /* Sinaliza quem estiver aguardando no hs_actor_stop SOMENTE se foi parada solicitada (R.1 c) */
+    if (stopped_by_request) {
+        xSemaphoreGive(actor->stop_sem);
+    }
 
     ESP_LOGI(TAG, "Task do ator '%s' encerrada com sucesso", actor->cfg.name ? actor->cfg.name : "anon");
     vTaskDelete(NULL);

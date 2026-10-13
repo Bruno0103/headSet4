@@ -169,8 +169,38 @@ void bt_hfp_disconnect(esp_bd_addr_t remote) { esp_hf_client_disconnect(remote);
 esp_err_t bt_hfp_answer_call(void) { return esp_hf_client_answer_call(); }
 esp_err_t bt_hfp_reject_call(void) { return esp_hf_client_reject_call(); }
 
-void bt_hfp_report_battery(uint8_t percent)
+/* Reenvio atrasado: o AG precisa de tempo para processar o XAPL antes do IPHONEACCEV.
+ * Usa esp_timer (nao bloqueia nenhuma task, AGENTS.md §3.7) e re-enfileira o nivel. */
+void bt_hfp_report_battery(uint8_t percent);
+static esp_timer_handle_t s_retry_timer;
+static volatile uint8_t   s_retry_percent;
+
+static void retry_timer_cb(void *arg)
 {
+    (void)arg;
+    bt_hfp_report_battery(s_retry_percent);
+}
+
+static void schedule_battery_retry(uint8_t percent)
+{
+    s_retry_percent = percent;
+    if (!s_retry_timer) {
+        const esp_timer_create_args_t args = { .callback = retry_timer_cb, .name = "hfp_bat" };
+        if (esp_timer_create(&args, &s_retry_timer) != ESP_OK) {
+            s_retry_timer = NULL;
+            return;
+        }
+    }
+    esp_timer_stop(s_retry_timer); /* ignora ESP_ERR_INVALID_STATE se nao estava ativo */
+    esp_timer_start_once(s_retry_timer, 1500 * 1000);
+}
+
+/* Corpo real do envio. Roda SEMPRE na task BtApp (via bt_app_work_dispatch), porque a
+ * pilha Bluedroid nao deve ser chamada do handler do actor bt_link (AGENTS.md R.19 / C3). */
+static void hfp_send_battery_work(uint16_t ev, void *p)
+{
+    (void)ev;
+    const uint8_t percent = *(const uint8_t *)p;
     if (!s_slc_up) {
         /* Conexão de controle SLC ainda não estabelecida */
         return;
@@ -191,7 +221,8 @@ void bt_hfp_report_battery(uint8_t percent)
         /* O AG precisa processar o XAPL (e responder +XAPL) antes de aceitar IPHONEACCEV;
          * enviar os dois colados faz Android/Windows descartarem o nível. Como não podemos
          * bloquear (AGENTS.md §3), o nível segue no próximo evento de bateria (15 s) ou LINK_UP. */
-        ESP_LOGI(TAG, "XAPL enviado; bateria (%u%%) seguirá na próxima leitura", percent);
+        ESP_LOGI(TAG, "XAPL enviado; bateria (%u%%) sera reenviada em 1,5 s", percent);
+        schedule_battery_retry(percent);
         return;
     }
 
@@ -205,8 +236,9 @@ void bt_hfp_report_battery(uint8_t percent)
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     /* Cada leitura (15 s) é repassada ao host; o debounce de 5 s só evita rajadas
      * (ex.: LINK_UP + evento periódico juntos). Mudança de nível sempre envia. */
+    /* Windows/Android pedem atualizacao a cada leitura: debounce de 1 s so contra rajadas */
     bool should_send = (level != s_last_level) || (s_last_report_ms == 0) ||
-                       (now_ms - s_last_report_ms >= 5000);
+                       (now_ms - s_last_report_ms >= 1000);
 
     if (!should_send) {
         return;
@@ -227,6 +259,19 @@ void bt_hfp_report_battery(uint8_t percent)
             ESP_LOGW(TAG, "IPHONEACCEV recusado pela pilha (%s) [falhas=%lu]",
                      esp_err_to_name(err_acc), (unsigned long)s_fail_cnt);
         }
+    }
+}
+
+/* API publica: apenas enfileira (nao bloqueia, copia 1 byte) para a task BtApp */
+void bt_hfp_report_battery(uint8_t percent)
+{
+    if (!s_slc_up) {
+        ESP_LOGI(TAG, "Bateria %u%% recebida, mas SLC HFP inativo - nada enviado", percent);
+        return;
+    }
+    ESP_LOGI(TAG, "Bateria %u%% recebida, enfileirando envio HFP", percent);
+    if (!bt_app_work_dispatch(hfp_send_battery_work, 0, &percent, sizeof(percent), NULL, NULL)) {
+        ESP_LOGW(TAG, "Fila BtApp cheia: bateria %u%% nao enviada ao HFP", percent);
     }
 }
 

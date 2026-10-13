@@ -342,7 +342,49 @@ void battery_task(void *pvParameters)
         }
 
         /* 4. Converte para porcentagem da curva de descarga */
-        uint8_t percent = battery_percent_from_mv(battery_voltage_mv);
+        uint8_t raw_percent = battery_percent_from_mv(battery_voltage_mv);
+
+        /*
+         * Filtro de Histerese (WP-BAT / AGENTS.md R.19):
+         * Flutuacoes de +-3 mV no ADC fazem o percentual oscilar em +-1%..+-2%.
+         * Pequenas variacoes de ate 2% exigem 2 leituras consecutivas para confirmacao.
+         */
+        static int s_stable_percent = -1;
+        static int s_pending_percent = -1;
+        static int s_pending_count = 0;
+
+        uint8_t percent;
+        if (s_stable_percent == -1) {
+            /* Primeira leitura: adota imediatamente */
+            s_stable_percent = raw_percent;
+            percent = raw_percent;
+        } else {
+            int delta = (int)raw_percent - s_stable_percent;
+            if (delta < 0) delta = -delta;
+
+            if (delta == 0) {
+                s_pending_count = 0;
+                percent = (uint8_t)s_stable_percent;
+            } else if (delta > 2) {
+                /* Variacao acentuada (ex: carregador conectado ou queda brusca): adota imediatamente */
+                s_stable_percent = raw_percent;
+                s_pending_count = 0;
+                percent = raw_percent;
+            } else {
+                /* Pequena variacao (1% ou 2%): exige 2 leituras consecutivas para estabilizar */
+                if (raw_percent == s_pending_percent) {
+                    s_pending_count++;
+                    if (s_pending_count >= 2) {
+                        s_stable_percent = raw_percent;
+                        s_pending_count = 0;
+                    }
+                } else {
+                    s_pending_percent = raw_percent;
+                    s_pending_count = 1;
+                }
+                percent = (uint8_t)s_stable_percent;
+            }
+        }
 
         /* 
          * Requisito do sistema: Todos os subsistemas (Display ILI9341, Windows e Android)
@@ -356,7 +398,7 @@ void battery_task(void *pvParameters)
             ESP_LOGI(TAG, "[BATERIA] Publicando evento SENSOR_EVT_BATTERY (alteração): %u%% (%u mV)",
                      percent, battery_voltage_mv);
         } else {
-            ESP_LOGD(TAG, "[BATERIA] Publicando evento SENSOR_EVT_BATTERY (periódico): %u%% (%u mV)",
+            ESP_LOGI(TAG, "[BATERIA] Publicando evento SENSOR_EVT_BATTERY (periódico): %u%% (%u mV)",
                      percent, battery_voltage_mv);
         }
 

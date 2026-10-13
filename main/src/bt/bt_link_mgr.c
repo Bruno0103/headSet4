@@ -529,9 +529,10 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
         case SENSOR_EVT_BATTERY: {
             const sensor_battery_evt_t *ev = (const sensor_battery_evt_t *)ev_msg->payload;
             s_ctx.battery = ev->percent;
-            if (s_ctx.link.profiles & BT_PROFILE_HFP) {
-                bt_hfp_report_battery(ev->percent);
-            }
+            /* Sempre repassa: bt_hfp_report_battery ignora sozinho se o SLC nao esta ativo.
+             * Antes dependia de profiles&HFP, que nao estava setado mesmo com o SLC conectado
+             * (log: "HFP conectado (SLC)" sem "Link ativo ... perfis 0x3"). */
+            bt_hfp_report_battery(ev->percent);
             break;
         }
 
