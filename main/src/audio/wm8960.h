@@ -20,6 +20,7 @@
 #define WM8960_R_ALC2        0x12
 #define WM8960_R_ALC3        0x13
 #define WM8960_R_NOISEGATE   0x14
+#define WM8960_R_ADDCTL1     0x17
 #define WM8960_R_PWR1        0x19
 #define WM8960_R_PWR2        0x1A
 #define WM8960_R_LINPATH     0x20

@@ -63,5 +63,11 @@ esp_err_t audio_codec_mute(bool mute);
  * estiver ligado. */
 esp_err_t audio_codec_set_ambient_gain(uint8_t pga);
 
+/** Liga ou desliga a alimentação (MICBIAS), amplificadores e ADCs do microfone sob demanda.
+ * Usado para manter o microfone 100% desligado durante repouso ou reprodução de música,
+ * ativando-o estritamente durante chamadas de voz HFP ou gravação de mensagens de áudio. */
+esp_err_t audio_codec_set_mic_power(bool enable);
+
 /** Aplica um conjunto de filtros. */
 esp_err_t audio_codec_apply_filters(const audio_filters_t *f);
+

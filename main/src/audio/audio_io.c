@@ -184,6 +184,7 @@ static bool pump_music(void) {
       xRingbufferReceiveUpTo(s_music_rb, &n, pdMS_TO_TICKS(10), MUSIC_CHUNK);
   if (p) {
     size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
+    (void)fill; /* reservado para diagnostico de buffer */
 
     /* Copia para um buffer local (o EQ altera no lugar) e libera o ringbuffer
      * logo */
@@ -220,16 +221,35 @@ static bool pump_call(void) {
   int16_t in[CALL_FRAMES * 2], out[CALL_FRAMES * 2], mono[CALL_FRAMES];
   size_t rd = 0, wr = 0;
 
-  /* uplink: microfones (L+R)/2 -> limpeza -> buffer do HFP */
+  /* uplink: microfone L (LINPUT1) -> limpeza de ruido (Voice NR) -> buffer do HFP */
   if (i2s_channel_read(s_rx, in, sizeof in, &rd, 100) != ESP_OK || rd == 0) {
     s_i2s_err++;
     return false;
   }
   size_t frames = rd / 4;
-  for (size_t i = 0; i < frames; i++)
-    mono[i] = (int16_t)((in[2 * i] + in[2 * i + 1]) / 2);
-  voice_nr_process(mono, frames);
+  int16_t peak = 0;
+  for (size_t i = 0; i < frames; i++) {
+    /* O microfone fisico do headset esta conectado em LINPUT1 (canal esquerdo) */
+    mono[i] = in[2 * i];
+    int16_t abs_s = (mono[i] < 0) ? -mono[i] : mono[i];
+    if (abs_s > peak) peak = abs_s;
+  }
+  /* Tratamentos de audio desativados a pedido do usuario: audio cru (RAW) enviado direto ao ringbuffer */
   xRingbufferSend(s_ul_rb, mono, frames * 2, 0);
+
+
+  /* Telemetria de audio de uplink para depuracao e confirmacao de envio de voz */
+  static uint32_t s_last_vu_time = 0;
+  static int16_t  s_max_peak = 0;
+  if (peak > s_max_peak) s_max_peak = peak;
+  uint32_t now = esp_log_timestamp();
+  if (now - s_last_vu_time >= 1500) {
+    s_last_vu_time = now;
+    ESP_LOGI(TAG, "[UPLINK MIC] Sinal capturado: pico=%5d / 32767 | frames=%u | enviando para HFP",
+             s_max_peak, (unsigned)frames);
+    s_max_peak = 0;
+  }
+
 
   /* downlink: voz do interlocutor (mono) -> L e R. Falta de dados = silencio.
    */
@@ -301,8 +321,11 @@ static void stop_locked(bool power_down) {
     return;
   audio_codec_mute(true);
   i2s_channel_disable(s_tx);
-  if (s_mode == AUDIO_IO_CALL)
+  if (s_mode == AUDIO_IO_CALL) {
     i2s_channel_disable(s_rx);
+    /* Desliga a alimentacao MICBIAS, amplificadores e ADCs do microfone ao encerrar chamada */
+    audio_codec_set_mic_power(false);
+  }
   s_mode = AUDIO_IO_IDLE;
   if (power_down)
     audio_codec_power_down();
@@ -342,13 +365,18 @@ static esp_err_t start_mode(audio_io_mode_t mode, uint32_t rate, bool by_tone) {
   if (mode == AUDIO_IO_CALL) {
     voice_nr_init(rate);
     s_call_limit_bytes = rate * 2 * 35 / 1000;
+    /* Ativa polarizacao MICBIAS, amplificadores e ADCs do WM8960 estritamente durante chamadas / gravacao */
+    ESP_GOTO_ON_ERROR(audio_codec_set_mic_power(true), out, TAG, "mic power on");
   } else {
     s_call_limit_bytes = 0;
+    /* Garante que o microfone permanece completamente desenergizado em modo musica/SFX */
+    audio_codec_set_mic_power(false);
   }
 
   ESP_GOTO_ON_ERROR(i2s_channel_enable(s_tx), out, TAG, "tx enable");
   if (mode == AUDIO_IO_CALL)
     ESP_GOTO_ON_ERROR(i2s_channel_enable(s_rx), out, TAG, "rx enable");
+
 
   s_prebuffering = (mode == AUDIO_IO_MUSIC);
   s_mode = mode;

@@ -29,6 +29,7 @@ static const char *TAG = "audio_codec";
 #define PWR1_AINR         (1u << 4)
 #define PWR1_ADCL         (1u << 3)
 #define PWR1_ADCR         (1u << 2)
+#define PWR1_MICB         (1u << 1)   /* MICB = bit 1: alimentacao de polarizacao MICBIAS */
 
 #define PWR2_DACL         (1u << 8)
 #define PWR2_DACR         (1u << 7)
@@ -43,6 +44,7 @@ static const char *TAG = "audio_codec";
 #define PWR3_ROMIX        (1u << 2)
 
 #define PATH_MN1          (1u << 8)   /* INPUT1 -> entrada inversora do PGA */
+#define PATH_MICBOOST_20DB (2u << 4)  /* Boost de +20 dB no mixer de entrada (ideal para eletreto) */
 #define PATH_MIC2B        (1u << 3)   /* PGA -> boost mixer */
 #define VOL_UPDATE        (1u << 8)   /* IPVU / OUT1VU / ADCVU: grava o ganho */
 #define VOL_ZEROCROSS     (1u << 7)   /* troca de volume so no cruzamento por zero */
@@ -86,34 +88,36 @@ static uint8_t  s_pll_n;
 static uint32_t s_pll_k;
 static bool     s_powered;
 
-/* ---- presets de filtros ---- */
+/* ---- presets de filtros (tratamentos desativados para audio puro do microfone) ---- */
 const audio_filters_t AUDIO_FILTERS_MUSIC = {
-    .adc_hpf = true,                      /* o resto desligado: igual ao sketch */
+    .adc_hpf = false,                     /* ADC HPF desligado */
+    .alc     = false,                     /* ALC desligado */
+    .noise_gate = false,                  /* Noise Gate desligado */
 };
 
-const audio_filters_t AUDIO_FILTERS_CALL = {   /* ponto de partida: ajuste ouvindo */
-    .adc_hpf = true,
-    .alc = true, .alc_limiter = false,
-    .alc_target = 11,                     /* -6 dBFS */
-    .alc_max_gain = 4,                    /* +12 dB */
-    .alc_min_gain = 0,
-    .alc_hold = 0, .alc_decay = 3, .alc_attack = 2,
-    .noise_gate = true, .noise_gate_threshold = 11,   /* -60 dBFS */
+const audio_filters_t AUDIO_FILTERS_CALL = {
+    .adc_hpf    = false,                  /* Sem passa-altas: captura resposta plana (flat) */
+    .alc        = false,                  /* Sem ALC: sem compressao nem ganho variavel */
+    .noise_gate = false,                  /* Sem Noise Gate: sem cortes dinamicos */
 };
+
 
 #define W(reg, val)  ESP_RETURN_ON_ERROR(wm8960_write((reg), (val)), TAG, #reg)
 
 /* ------------------------------------------------------------------ */
 
-/* Liga os blocos de entrada/saida na ordem do init: referencias -> entradas/ADC -> mixers -> DAC/headphone.
- * O DAC fica mudo (R5 nao e tocado aqui); quem toca tira o mudo depois do clock estabilizar. */
+/* Liga os blocos de saida na ordem do init: referencias -> mixers -> DAC/headphone.
+ * Os blocos de captura/microfone (AINL/R, ADCL/R, LMIC/RMIC e MICBIAS) permanecem
+ * desligados por padrao para economia de energia e privacidade, sendo ligados sob demanda
+ * por audio_codec_set_mic_power() somente durante chamadas ou gravacao de voz. */
 static esp_err_t power_blocks_on(void)
 {
-    W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF | PWR1_AINL | PWR1_AINR | PWR1_ADCL | PWR1_ADCR);
-    W(WM8960_R_PWR3, PWR3_LMIC | PWR3_RMIC | PWR3_LOMIX | PWR3_ROMIX);
+    W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF);
+    W(WM8960_R_PWR3, PWR3_LOMIX | PWR3_ROMIX);
     W(WM8960_R_PWR2, PWR2_DACL | PWR2_DACR | PWR2_LOUT1 | PWR2_ROUT1 | PWR2_OUT3);
     return ESP_OK;
 }
+
 
 esp_err_t audio_codec_power_up(void)
 {
@@ -213,6 +217,44 @@ esp_err_t audio_codec_apply_filters(const audio_filters_t *f)
     return ESP_OK;
 }
 
+esp_err_t audio_codec_set_mic_power(bool enable)
+{
+    if (!s_powered) return ESP_OK;
+
+    if (enable) {
+        /* Liga alimentacao MICBIAS (bit 1), amplificadores de entrada (AINL/AINR) e ADCs (ADCL/ADCR) */
+        ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_PWR1,
+                            PWR1_MICB | PWR1_AINL | PWR1_AINR | PWR1_ADCL | PWR1_ADCR,
+                            PWR1_MICB | PWR1_AINL | PWR1_AINR | PWR1_ADCL | PWR1_ADCR),
+                            TAG, "pwr1 mic on");
+
+        /* Liga os PGAs de entrada de microfone (LMIC / RMIC) */
+        ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_PWR3,
+                            PWR3_LMIC | PWR3_RMIC,
+                            PWR3_LMIC | PWR3_RMIC),
+                            TAG, "pwr3 mic on");
+
+        /* Restaura o ganho de 0 dB nas entradas do microfone */
+        audio_codec_set_ambient_gain(23);
+        ESP_LOGI(TAG, "Microfone ATIVADO sob demanda (MICBIAS, entradas analogicas e ADC ligados)");
+    } else {
+        /* Desliga MICBIAS, entradas analogicas e ADCs para economizar energia e garantir privacidade */
+        ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_PWR1,
+                            PWR1_MICB | PWR1_AINL | PWR1_AINR | PWR1_ADCL | PWR1_ADCR,
+                            0),
+                            TAG, "pwr1 mic off");
+
+        /* Desliga os PGAs de entrada de microfone */
+        ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_PWR3,
+                            PWR3_LMIC | PWR3_RMIC,
+                            0),
+                            TAG, "pwr3 mic off");
+
+        ESP_LOGI(TAG, "Microfone DESATIVADO (MICBIAS e ADC desligados para economia e privacidade)");
+    }
+    return ESP_OK;
+}
+
 esp_err_t audio_codec_set_sidetone(bool enable)
 {
     ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_BYPASS1, BYPASS_B2O, enable ? BYPASS_B2O : 0), TAG, "BYPASS1");
@@ -237,12 +279,16 @@ esp_err_t audio_codec_init(void)
     W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF);
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    /* Entrada: INPUT1 single-ended -> PGA -> boost mixer (boost 0 dB, nao-inversora em VMID) */
-    W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF | PWR1_AINL | PWR1_AINR | PWR1_ADCL | PWR1_ADCR);
-    W(WM8960_R_PWR3, PWR3_LMIC | PWR3_RMIC | PWR3_LOMIX | PWR3_ROMIX);
-    W(WM8960_R_LINPATH, PATH_MN1 | PATH_MIC2B);
-    W(WM8960_R_RINPATH, PATH_MN1 | PATH_MIC2B);
+    /* Entrada: Configura roteamento (INPUT1 single-ended -> PGA -> boost mixer, boost +20 dB, VMID).
+     * Nota: Os blocos de potencia do microfone (MICB, AIN, ADC, LMIC) permanecem DESLIGADOS
+     * aqui e serao ativados somente durante chamadas HFP / gravacao de voz. */
+    W(WM8960_R_PWR3, PWR3_LOMIX | PWR3_ROMIX);
+    W(WM8960_R_LINPATH, PATH_MN1 | PATH_MICBOOST_20DB | PATH_MIC2B);
+    W(WM8960_R_RINPATH, PATH_MN1 | PATH_MICBOOST_20DB | PATH_MIC2B);
+    W(WM8960_R_ADDCTL1, (1u << 2));           /* DATSEL = 01: replica ADC L (LINPUT1) para L e R no barramento I2S */
     ESP_RETURN_ON_ERROR(audio_codec_set_ambient_gain(23), TAG, "gain");     /* 0 dB */
+
+
 
     /* Mixers de saida: Apenas DAC para fones de ouvido (sem retorno de mic analogico para fones) */
     W(WM8960_R_LOUTMIX, MIX_DAC2OUT);
