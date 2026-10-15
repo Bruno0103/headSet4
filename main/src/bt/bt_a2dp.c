@@ -95,8 +95,9 @@ static void a2dp_evt_hdl(uint16_t event, void *p)
             if (s_has_remote && memcmp(bda, s_remote, sizeof s_remote) == 0) {
                 s_has_remote = false;
                 s_streaming = false;
-                /* Envia comando assíncrono para o Actor Audio parar a reprodução */
-                audio_cmd_stop_send(0xFF);
+                /* Envia comando assíncrono para o Actor Audio parar a reprodução
+                 * REPARO R.10: Máscara 1 para apenas o áudio de música A2DP, preservando chamadas HFP ativas */
+                audio_cmd_stop_send(1);
                 bt_streaming_evt_t st = { .slot = 0, .streaming = false };
                 hs_event_post(BT_EVT, BT_EVT_STREAMING, &st, sizeof(st));
             }

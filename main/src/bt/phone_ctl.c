@@ -312,6 +312,116 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             settings_set_u8(SETTINGS_KEY_EARS_ANGLE, (uint8_t)a);
         }
     }
+    else if (strcmp(cmd, "set_ears_enable") == 0) {
+        cJSON *en = cJSON_GetObjectItem(root, "enable");
+        if (en && cJSON_IsBool(en)) {
+            bool e_en = cJSON_IsTrue(en);
+            settings_set_u8(SETTINGS_KEY_EARS_ANGLE, e_en ? 90 : 0);
+            ui_model_update_msg_t umsg = {
+                .type = UI_UPDATE_ORELHAS_CONFIG,
+                .payload.orelhas_cfg = { .enabled = e_en, .max_angle = e_en ? 90 : 0 }
+            };
+            ui_model_post_update(&umsg);
+        }
+    }
+    /* --- Comandos de Display & Backlight --- */
+    else if (strcmp(cmd, "set_display_state") == 0) {
+        cJSON *en = cJSON_GetObjectItem(root, "enable");
+        if (en && cJSON_IsBool(en)) {
+            bool turn_on = cJSON_IsTrue(en);
+            ui_model_update_msg_t umsg = {
+                .type = UI_UPDATE_DISPLAY_CONFIG,
+                .payload.display_cfg = { .on = turn_on, .brightness = turn_on ? 60 : 0, .timeout_sec = 60 }
+            };
+            ui_model_post_update(&umsg);
+        }
+    }
+    else if (strcmp(cmd, "set_display_timeout") == 0) {
+        cJSON *val = cJSON_GetObjectItem(root, "val");
+        if (val && cJSON_IsNumber(val)) {
+            int to = val->valueint;
+            if (to >= 0 && to <= 600) {
+                settings_set_u16(SETTINGS_KEY_DISP_TIMEOUT, (uint16_t)to);
+                ui_model_update_msg_t umsg = {
+                    .type = UI_UPDATE_DISPLAY_CONFIG,
+                    .payload.display_cfg = { .on = true, .brightness = 60, .timeout_sec = (uint16_t)to }
+                };
+                ui_model_post_update(&umsg);
+            }
+        }
+    }
+    /* --- Comandos do Sensor de Proximidade --- */
+    else if (strcmp(cmd, "set_prox_enable") == 0) {
+        cJSON *en = cJSON_GetObjectItem(root, "enable");
+        if (en && cJSON_IsBool(en)) {
+            bool p_en = cJSON_IsTrue(en);
+            settings_set_u8(SETTINGS_KEY_SENS_PROX_EN, p_en ? 1 : 0);
+            ui_model_update_msg_t umsg = {
+                .type = UI_UPDATE_PROX_CONFIG,
+                .payload.prox_cfg = { .enabled = p_en, .sensitivity = 150 }
+            };
+            ui_model_post_update(&umsg);
+        }
+    }
+    else if (strcmp(cmd, "set_prox_sensitivity") == 0) {
+        cJSON *val = cJSON_GetObjectItem(root, "val");
+        if (val && cJSON_IsNumber(val)) {
+            int sens = val->valueint;
+            if (sens >= 0 && sens <= 1023) {
+                settings_set_u16(SETTINGS_KEY_SENS_THRESH_ON, (uint16_t)sens);
+                ui_model_update_msg_t umsg = {
+                    .type = UI_UPDATE_PROX_CONFIG,
+                    .payload.prox_cfg = { .enabled = true, .sensitivity = (uint16_t)sens }
+                };
+                ui_model_post_update(&umsg);
+            }
+        }
+    }
+    /* --- Comandos de Troca Automática e Áudio --- */
+    else if (strcmp(cmd, "set_auto_switch") == 0) {
+        cJSON *en = cJSON_GetObjectItem(root, "enable");
+        if (en && cJSON_IsBool(en)) {
+            bool asw = cJSON_IsTrue(en);
+            settings_set_u8(SETTINGS_KEY_BT_AUTOSWITCH, asw ? 1 : 0);
+            hs_actor_t *bt_act = bt_link_actor_get();
+            if (bt_act) {
+                bt_cmd_set_auto_switch_t scmd = { .enabled = asw };
+                hs_actor_send(bt_act, BT_CMD_SET_AUTO_SWITCH, &scmd, sizeof(scmd), pdMS_TO_TICKS(50));
+            }
+            ui_model_update_msg_t umsg = {
+                .type = UI_UPDATE_BT_AUTO_SWITCH,
+                .payload.bt_auto_sw = { .auto_switch = asw }
+            };
+            ui_model_post_update(&umsg);
+        }
+    }
+    else if (strcmp(cmd, "set_mute") == 0) {
+        cJSON *m = cJSON_GetObjectItem(root, "mute");
+        if (m && cJSON_IsBool(m)) {
+            audio_cmd_set_mute_send(cJSON_IsTrue(m));
+        }
+    }
+    /* --- Comandos de Galeria e Wallpapers --- */
+    else if (strcmp(cmd, "set_wallpaper_idx") == 0) {
+        cJSON *val = cJSON_GetObjectItem(root, "val");
+        if (val && cJSON_IsNumber(val)) {
+            ui_model_update_msg_t umsg = {
+                .type = UI_UPDATE_DISPLAY_CONFIG,
+                .payload.display_cfg = { .img_idx = val->valueint }
+            };
+            ui_model_post_update(&umsg);
+        }
+    }
+    else if (strcmp(cmd, "set_gif_idx") == 0) {
+        cJSON *val = cJSON_GetObjectItem(root, "val");
+        if (val && cJSON_IsNumber(val)) {
+            ui_model_update_msg_t umsg = {
+                .type = UI_UPDATE_DISPLAY_CONFIG,
+                .payload.display_cfg = { .gif_idx = val->valueint }
+            };
+            ui_model_post_update(&umsg);
+        }
+    }
     /* --- Comandos de Fast Pair (Model ID) --- */
     else if (strcmp(cmd, "get_model_id") == 0) {
         uint8_t mid[3] = {0};
