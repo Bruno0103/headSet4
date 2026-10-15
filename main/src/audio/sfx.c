@@ -26,64 +26,71 @@ static const char *TAG = "sfx";
 
 /* 1. Conexão Bluetooth (SFX_CONNECTED):
  * Intervalo harmônico ascendente cintilante (Quarta Justa: Sol 5 -> Dó 6).
- * Rápido, alegre e positivo! Duração total: ~180 ms. */
+ * Rápido, alegre e positivo! Duração total audível: ~175 ms. */
 static const audio_tone_t k_connected[] = {
-    { 784,  50 },  /* G5: 784 Hz, 50 ms (ataque inicial límpido) */
-    { 1047, 110 }, /* C6: 1047 Hz, 110 ms (resolução harmônica cristalina) */
-    { 0,    20 },  /* Micro-cauda de 20 ms para liberação suave do DMA */
+    { 0,    30 },  /* Estabilização inicial silenciosa do DAC (anti-pop) */
+    { 784,  55 },  /* G5: 784 Hz, 55 ms (ataque inicial límpido) */
+    { 1047, 120 }, /* C6: 1047 Hz, 120 ms (resolução harmônica cristalina) */
+    { 0,    90 },  /* Drenagem suave dos descritores DMA antes do desligamento do I2S */
 };
 
 /* 2. Desconexão Bluetooth (SFX_DISCONNECTED):
  * Intervalo harmônico descendente aveludado (Dó 6 -> Sol 5).
- * Discreto, rápido e elegante sem sobressaltos. Duração total: ~160 ms. */
+ * Discreto, rápido e elegante sem sobressaltos. Duração audível: ~150 ms. */
 static const audio_tone_t k_disconnected[] = {
-    { 1047, 45 },  /* C6: 1047 Hz, 45 ms */
-    { 784,  95 },  /* G5: 784 Hz, 95 ms (decaimento aveludado macio) */
-    { 0,    20 },  /* Micro-cauda de flush DMA */
+    { 0,    30 },  /* Estabilização inicial silenciosa */
+    { 1047, 50 },  /* C6: 1047 Hz, 50 ms */
+    { 784,  100 }, /* G5: 784 Hz, 100 ms (decaimento aveludado macio) */
+    { 0,    90 },  /* Drenagem suave do DMA */
 };
 
 /* 3. Fone Colocado na Cabeça (SFX_WORN):
  * "Crystal Water Drop" / Detecção de presença na cabeça (Si 5 -> Mi 6).
- * Resposta sonora ultra-rápida (estilo AirPods). Duração total: ~130 ms. */
+ * Resposta sonora ultra-rápida (estilo AirPods). Duração audível: ~120 ms. */
 static const audio_tone_t k_worn[] = {
+    { 0,    25 },  /* Estabilização inicial silenciosa */
     { 988,  35 },  /* B5: 988 Hz, 35 ms */
-    { 1319, 75 },  /* E6: 1319 Hz, 75 ms (gota d'água percussiva) */
-    { 0,    20 },  /* Micro-cauda de flush DMA */
+    { 1319, 85 },  /* E6: 1319 Hz, 85 ms (gota d'água percussiva) */
+    { 0,    85 },  /* Drenagem suave do DMA */
 };
 
 /* 4. Fone Retirado da Cabeça (SFX_REMOVED):
  * Tom aveludado e relaxante de repouso (Mi 5).
- * Duração total: ~90 ms. */
+ * Duração audível: ~75 ms. */
 static const audio_tone_t k_removed[] = {
-    { 659,  70 },  /* E5: 659 Hz, 70 ms (decaimento macio) */
-    { 0,    20 },  /* Micro-cauda de flush DMA */
+    { 0,    25 },  /* Estabilização inicial silenciosa */
+    { 659,  75 },  /* E5: 659 Hz, 75 ms (decaimento macio) */
+    { 0,    85 },  /* Drenagem suave do DMA */
 };
 
 /* 5. Modo de Pareamento Ativado (SFX_PAIRING):
  * Tríade ascendente suave indicando busca (Ré 5 -> Sol 5 -> Si 5).
- * Duração total: ~160 ms. */
+ * Duração audível: ~160 ms. */
 static const audio_tone_t k_pairing[] = {
-    { 587,  30 },  /* D5: 587 Hz, 30 ms */
-    { 784,  30 },  /* G5: 784 Hz, 30 ms */
-    { 988,  80 },  /* B5: 988 Hz, 80 ms */
-    { 0,    20 },  /* Micro-cauda de flush DMA */
+    { 0,    25 },  /* Estabilização inicial silenciosa */
+    { 587,  35 },  /* D5: 587 Hz, 35 ms */
+    { 784,  35 },  /* G5: 784 Hz, 35 ms */
+    { 988,  90 },  /* B5: 988 Hz, 90 ms */
+    { 0,    90 },  /* Drenagem suave do DMA */
 };
 
 /* 6. Alerta de Bateria Fraca (SFX_BATTERY_LOW):
  * Duplo aviso acústico discreto (Mi 5 -> Dó 5).
- * Duração total: ~135 ms. */
+ * Duração audível: ~130 ms. */
 static const audio_tone_t k_battery_low[] = {
-    { 659,  45 },  /* E5: 659 Hz, 45 ms */
-    { 523,  70 },  /* C5: 523 Hz, 70 ms */
-    { 0,    20 },  /* Micro-cauda de flush DMA */
+    { 0,    25 },  /* Estabilização inicial silenciosa */
+    { 659,  50 },  /* E5: 659 Hz, 50 ms */
+    { 523,  80 },  /* C5: 523 Hz, 80 ms */
+    { 0,    85 },  /* Drenagem suave do DMA */
 };
 
 /* 7. Limite de Volume Mínimo ou Máximo (SFX_VOLUME_LIMIT):
  * Micro-tick percussivo refinado (Mi 6).
- * Duração total: ~40 ms. */
+ * Duração audível: ~30 ms. */
 static const audio_tone_t k_volume_limit[] = {
-    { 1319, 25 },  /* E6: 1319 Hz, 25 ms */
-    { 0,    15 },  /* Micro-cauda de flush DMA */
+    { 0,    15 },  /* Estabilização inicial silenciosa */
+    { 1319, 30 },  /* E6: 1319 Hz, 30 ms */
+    { 0,    70 },  /* Drenagem suave do DMA */
 };
 
 static const struct {

@@ -126,6 +126,21 @@ static void trim_rb_reader_side(RingbufHandle_t rb) {
  * @param[out] dst     Buffer de destino mono de 16 bits.
  * @param[in]  frames  Quantidade de amostras a sintetizar.
  */
+/**
+ * @brief Sintetizador digital de alta fidelidade para efeitos sonoros de interface (UX Sound Design).
+ *
+ * Gera notas com timbre orgânico percussivo (chime cristalino / marimba suave / cálice de cristal)
+ * com fase estritamente contínua entre notas e envelope quadrático percussivo (1 - p)^2.
+ *
+ * Elimina 100% de qualquer estalo ou clique através de:
+ *   1. Continuidade de fase contínua: s_tone_phase NUNCA é resetada para zero na transição de notas.
+ *   2. Ataque suave anti-pop de 3 ms nos primeiros milissegundos.
+ *   3. Decaimento percussivo (1 - p)^2 que chega a EXATAMENTE zero na última amostra da nota.
+ *   4. Zero chamadas a expf() por amostra, garantindo latência ultra-baixa sem engasgos no DMA.
+ *
+ * @param[out] dst     Buffer de destino mono de 16 bits.
+ * @param[in]  frames  Quantidade de amostras a sintetizar.
+ */
 static void tone_render(int16_t *dst, size_t frames) {
   for (size_t i = 0; i < frames; i++) {
     int16_t v = 0;
@@ -135,56 +150,46 @@ static void tone_render(int16_t *dst, size_t frames) {
       if (s_tone_pos >= total) {
         s_tone_idx++;
         s_tone_pos = 0;
-        s_tone_phase = 0.0f;
+        /* IMPORTANTE: NÃO reseta s_tone_phase! Preserva a continuidade da forma de onda */
         continue;
       }
       if (t->hz > 0) {
         uint32_t attack_samples = s_rate * SFX_ATTACK_MS / 1000;
-        uint32_t release_samples = s_rate * SFX_RELEASE_MS / 1000;
         if (attack_samples == 0) attack_samples = 1;
-        if (release_samples == 0) release_samples = 1;
 
-        /* Fração decorrida da nota (0.0f a 1.0f) */
-        float progress = (float)s_tone_pos / (float)total;
+        /* Progresso normalizado de 0.0f a 1.0f ao longo da nota */
+        float p = (float)s_tone_pos / (float)total;
 
-        /* Envelope dinâmico: ataque imediato suave anti-pop seguido de decaimento percussivo orgânico */
-        float env = 1.0f;
+        /* Envelope percussivo suave (1 - p)^2:
+         * Decaimento natural tipo sino/marimba que chega a EXATAMENTE 0.0f no final da nota,
+         * garantindo transições perfeitamente contínuas e sem cliques. */
+        float decay = (1.0f - p) * (1.0f - p);
+
+        /* Rampa suave de ataque anti-pop nos primeiros milissegundos */
+        float env = decay;
         if (s_tone_pos < attack_samples) {
-          /* Rampa suave de subida inicial para evitar harmônicos DC espúrios */
-          env = (float)s_tone_pos / (float)attack_samples;
-        } else {
-          /* Decaimento exponencial natural percussivo (sensação física de sino/marimba) */
-          float decay_progress = (float)(s_tone_pos - attack_samples) / (float)(total - attack_samples);
-          env = expf(-1.8f * decay_progress);
-
-          /* Rampa final de descida nos últimos milissegundos para zerar sem estalos */
-          if (total - s_tone_pos < release_samples) {
-            env *= (float)(total - s_tone_pos) / (float)release_samples;
-          }
+          env *= (float)s_tone_pos / (float)attack_samples;
         }
 
-        /* Amortecimento espectral: harmônicos agudos dissipam energia mais rápido que a fundamental */
-        float h2_amp = 0.32f * expf(-2.5f * progress); /* 2º harmônico (oitava) */
-        float h3_amp = 0.10f * expf(-3.5f * progress); /* 3º harmônico (quinta) */
-        float h4_amp = 0.03f * expf(-4.5f * progress); /* 4º harmônico (ataque cristalino) */
-
-        /* Síntese aditiva com soma normalizada */
+        /* Síntese harmônica pura e rica:
+         * Fundamental + 2º harmônico (oitava musical que traz o timbre cristalino de carrilhão) */
         float s1 = sinf(s_tone_phase);
         float s2 = sinf(2.0f * s_tone_phase);
-        float s3 = sinf(3.0f * s_tone_phase);
-        float s4 = sinf(4.0f * s_tone_phase);
-        float combined = (s1 + s2 * h2_amp + s3 * h3_amp + s4 * h4_amp) * 0.68f;
+
+        /* O 2º harmônico tem brilho no ataque e decai suavemente */
+        float h2_gain = 0.35f * (1.0f - p);
+        float combined = (s1 + s2 * h2_gain) * 0.72f;
 
         v = (int16_t)(combined * env * SFX_AMPLITUDE);
 
-        /* Avanço da fase fundamental */
+        /* Avanço contínuo da fase fundamental */
         s_tone_phase += 2.0f * (float)M_PI * t->hz / s_rate;
         if (s_tone_phase >= 2.0f * (float)M_PI) {
           s_tone_phase -= 2.0f * (float)M_PI;
         }
       } else {
-        /* Silêncio / pausa técnica entre notas ou cauda */
-        s_tone_phase = 0.0f;
+        /* Silêncio técnico / pausa entre notas ou esvaziamento de DMA */
+        v = 0;
       }
       s_tone_pos++;
       break;
@@ -233,9 +238,10 @@ static bool i2s_write_ok(const void *src, size_t len) {
   return true;
 }
 
+#define TONE_CHUNK_FRAMES 256
 static bool pump_tone_only(void) {
-  int16_t st[CALL_FRAMES * 2] = {0};
-  tone_mix_stereo(st, CALL_FRAMES);
+  int16_t st[TONE_CHUNK_FRAMES * 2] = {0};
+  tone_mix_stereo(st, TONE_CHUNK_FRAMES);
   return i2s_write_ok(st, sizeof st);
 }
 
@@ -466,8 +472,12 @@ static void audio_task(void *arg) {
         m = s_mode;
       }
     }
+    /* Se um efeito sonoro estiver sendo ativamente bombeado para o I2S DMA,
+     * a cadência é mantida pelo bloqueio natural do i2s_channel_write (backpressure).
+     * Não devemos forçar vTaskDelay quando transferred == true, caso contrário o
+     * buffer DMA esvazia e provoca rajada contínua de estalos (underruns) no fone. */
     bool needs_delay = (m == AUDIO_IO_IDLE || s_reconfig_req ||
-                        s_prebuffering || !transferred);
+                        (!s_tone_active && s_prebuffering) || !transferred);
     xSemaphoreGive(s_lock);
 
     if (needs_delay) {

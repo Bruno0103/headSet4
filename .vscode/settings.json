@@ -30,7 +30,7 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=a:\\BackupDesktopFileBruno\\Estudos\\ESP\\ESP32\\displayTest\\build"
+    "--compile-commands-dir=a:\\BackupDesktopFileBruno\\Estudos\\ESP\\ESP32\\headSet4\\build"
   ],
   "idf.flashType": "UART",
   "idf.port": "COM9"
