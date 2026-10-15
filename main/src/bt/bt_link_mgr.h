@@ -40,6 +40,14 @@ uint8_t bt_link_mgr_get_volume(void);
 void    bt_link_mgr_set_volume(uint8_t volume);
 
 /**
+ * @brief Verifica se todos os slots de dispositivo estão cheios (vinculados).
+ * Retorna true se todos os slots possuem dispositivos válidos salvos no NVS (modo ultrarrápido).
+ * Retorna false se há pelo menos um slot livre para novo pareamento (Fast Pair / Swift Pair).
+ * Leitura atômica thread-safe sem bloqueio (AGENTS.md Exceção E3).
+ */
+bool bt_link_mgr_slots_full(void);
+
+/**
  * @brief Retorna a instância do Actor bt_link (Core 0, prioridade 6).
  */
 struct hs_actor *bt_link_actor_get(void);

@@ -42,12 +42,24 @@
 static const char *TAG = "act_bt_link";
 
 #define PAIRING_WINDOW_MS   120000
-#define COMPLETE_DELAY_MS   2500      /* espera o celular abrir o 2o perfil antes de conectarmos */
+#define COMPLETE_DELAY_MS   800       /* Acelera a subida do perfil de voz HFP após o A2DP conectar (reduzido de 2500 ms) */
 #define VOLUME_SAVE_MS      5000
 #define DEFAULT_VOLUME      64
 #define MAX_CONNECT_TRIES   12
 
-static const uint32_t k_backoff_ms[] = { 2000, 3000, 5000, 8000, 13000, 20000, 30000 };
+/**
+ * Tabela de reconexão ultrarrápida (ativa quando todos os slots estiverem cheios):
+ * - Tentativa 0: 50 ms (reconexão praticamente instantânea ao ligar, colocar na cabeça ou trocar de slot)
+ * - Tentativa 1: 1.000 ms (tempo para o host Bluetooth do celular reativar a banda base)
+ * - Tentativas seguintes: recuo progressivo defensivo
+ */
+static const uint32_t k_backoff_ultrafast_ms[] = { 50, 1000, 2500, 5000, 8000, 15000, 30000 };
+
+/**
+ * Tabela de reconexão padrão (usada enquanto houver slot vazio para novos dispositivos):
+ * - Deixa janela temporal adequada para anúncios e sincronização BLE de Fast Pair / Swift Pair
+ */
+static const uint32_t k_backoff_standard_ms[]  = { 300, 1500, 3000, 5000, 8000, 15000, 30000 };
 
 /* Estrutura armazenada no NVS */
 typedef struct {
@@ -114,10 +126,11 @@ static hs_actor_t *s_bt_actor = NULL;
 static bt_link_actor_state_t s_ctx;
 
 /* Variáveis atômicas / rápidas para consulta síncrona sem bloqueio (getters e SSP confirm) */
-static atomic_bool s_atomic_pairing  = ATOMIC_VAR_INIT(false);
-static atomic_int  s_atomic_sel      = ATOMIC_VAR_INIT(0);
+static atomic_bool s_atomic_pairing    = ATOMIC_VAR_INIT(false);
+static atomic_int  s_atomic_sel        = ATOMIC_VAR_INIT(0);
 static atomic_int  s_atomic_state[BT_LINK_NUM_SLOTS] = { ATOMIC_VAR_INIT(BT_LINK_SLEEP), ATOMIC_VAR_INIT(BT_LINK_SLEEP) };
-static atomic_int  s_atomic_volume   = ATOMIC_VAR_INIT(DEFAULT_VOLUME);
+static atomic_int  s_atomic_volume     = ATOMIC_VAR_INIT(DEFAULT_VOLUME);
+static atomic_bool s_atomic_slots_full = ATOMIC_VAR_INIT(false);
 
 /* Timers FreeRTOS / esp_timer */
 static esp_timer_handle_t s_connect_tmr  = NULL;
@@ -133,6 +146,8 @@ static void start_pairing(void);
 static void stop_pairing(const char *why);
 static void schedule_connect(void);
 static void stop_connect_timer(void);
+static bool has_empty_slot(void);
+static void update_slots_full_status(void);
 
 /* ============================================================================
  * PERSISTÊNCIA NVS (DELEGADA AO ACTOR SETTINGS)
@@ -167,6 +182,7 @@ static void nvs_load(void)
 
     atomic_store(&s_atomic_sel, s_ctx.sel);
     atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
+    update_slots_full_status();
 }
 
 static void nvs_save(void)
@@ -178,6 +194,7 @@ static void nvs_save(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Falha ao solicitar gravação de slots ao actor settings: %s", esp_err_to_name(err));
     }
+    update_slots_full_status();
 }
 
 /* ============================================================================
@@ -192,6 +209,34 @@ static bool sel_valid(void)
 static bool is_sel_bda(const uint8_t *bda)
 {
     return sel_valid() && memcmp(s_ctx.slot[s_ctx.sel].bda, bda, ESP_BD_ADDR_LEN) == 0;
+}
+
+/**
+ * @brief Verifica se há algum slot vazio (não preenchido/não válido).
+ * Permite que novos aparelhos se conectem via Fast Pair e Swift Pair.
+ */
+static bool has_empty_slot(void)
+{
+    for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
+        if (!s_ctx.slot[i].valid) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Atualiza a variável atômica s_atomic_slots_full com base nos slots salvos.
+ * Quando ambos os slots estiverem cheios, o headset migra para o modo de reconexão ultrarrápido.
+ */
+static void update_slots_full_status(void)
+{
+    bool full = !has_empty_slot();
+    atomic_store(&s_atomic_slots_full, full);
+    ESP_LOGI(TAG, "Status dos slots: %s (slot 0: %s, slot 1: %s)",
+             full ? "100% CHEIOS -> MODO ULTRARRAPIDO" : "HA VAGAS -> MODO DESCOBERTA (Fast Pair / Swift Pair)",
+             s_ctx.slot[0].valid ? "ocupado" : "vazio",
+             s_ctx.slot[1].valid ? "ocupado" : "vazio");
 }
 
 static void drop_link(void)
@@ -219,10 +264,14 @@ static void schedule_connect(void)
     if (!s_connect_tmr || esp_timer_is_active(s_connect_tmr)) {
         return;
     }
-    size_t n = sizeof(k_backoff_ms) / sizeof(k_backoff_ms[0]);
-    uint32_t ms = k_backoff_ms[s_ctx.attempts < (int)n ? s_ctx.attempts : (int)n - 1];
-    ESP_LOGI(TAG, "Reconexao com slot %d em %u ms (tentativa %d/%d)", s_ctx.sel, (unsigned)ms, s_ctx.attempts + 1,
-             MAX_CONNECT_TRIES);
+    bool ultrafast = !has_empty_slot();
+    const uint32_t *table = ultrafast ? k_backoff_ultrafast_ms : k_backoff_standard_ms;
+    size_t n = ultrafast ? (sizeof(k_backoff_ultrafast_ms) / sizeof(k_backoff_ultrafast_ms[0]))
+                         : (sizeof(k_backoff_standard_ms) / sizeof(k_backoff_standard_ms[0]));
+    uint32_t ms = table[s_ctx.attempts < (int)n ? s_ctx.attempts : (int)n - 1];
+    ESP_LOGI(TAG, "[%s] Reconexao com slot %d em %u ms (tentativa %d/%d)",
+             ultrafast ? "MODO ULTRARRAPIDO" : "MODO DESCOBERTA",
+             s_ctx.sel, (unsigned)ms, s_ctx.attempts + 1, MAX_CONNECT_TRIES);
     esp_timer_start_once(s_connect_tmr, (uint64_t)ms * 1000);
 }
 
@@ -278,7 +327,7 @@ static void apply_state(void)
     /* ACTIVE */
     bt_ble_set_profile(BT_BLE_ADV_ACTIVE);
     if (!sel_valid()) {
-        ESP_LOGI(TAG, "Slot %d vazio: abrindo janela de pareamento", s_ctx.sel);
+        ESP_LOGI(TAG, "Slot %d vazio: abrindo janela de pareamento (Fast Pair & Swift Pair ativos)", s_ctx.sel);
         start_pairing();
         return;
     }
@@ -292,6 +341,11 @@ static void apply_state(void)
         if (s_ctx.manual_disconnect) {
             ESP_LOGI(TAG, "Reconexao automatica suprimida: dispositivo foi desconectado voluntariamente.");
         } else {
+            if (!has_empty_slot()) {
+                ESP_LOGI(TAG, "[MODO ULTRARRAPIDO] Todos os slots cheios (0 e 1 validos). Reconexao imediata ativada.");
+            } else {
+                ESP_LOGI(TAG, "[MODO DESCOBERTA] Ha slot livre. Fast Pair e Swift Pair disponiveis.");
+            }
             schedule_connect();
         }
     }
@@ -874,6 +928,11 @@ void bt_link_mgr_set_volume(uint8_t volume)
     if (s_bt_actor) {
         hs_actor_send(s_bt_actor, BT_INTERNAL_CMD_SET_VOLUME, &volume, 1, 0);
     }
+}
+
+bool bt_link_mgr_slots_full(void)
+{
+    return atomic_load(&s_atomic_slots_full);
 }
 
 static esp_timer_handle_t make_timer(const char *name, esp_timer_cb_t cb)

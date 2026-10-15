@@ -138,13 +138,19 @@ esp_err_t bt_gap_start(const char *device_name) {
       esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &iocap, sizeof iocap),
       TAG, "iocap");
 
+  /* Timeout de paginação (Page Timeout) otimizado:
+   * O padrão da pilha é 0x2000 (5,12 segundos). Ajustamos para 0x1000 (4096 * 0.625 ms = ~2,56 s)
+   * para que o headset detecte rapidamente se o peer estiver fora de alcance ou ocupado,
+   * permitindo retentativa ágil sem prender o rádio Classic por mais de 5 segundos. */
+  ESP_RETURN_ON_ERROR(esp_bt_gap_set_page_timeout(0x1000), TAG, "page_timeout");
+
   /* Comeca invisivel/inconectavel; o bt_link_mgr abre o scan conforme o estado
    * do slot. */
   ESP_RETURN_ON_ERROR(
       esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE),
       TAG, "scan");
 
-  ESP_LOGI(TAG, "GAP pronto (\"%s\")", device_name ? device_name : "");
+  ESP_LOGI(TAG, "GAP pronto (\"%s\", page_to=2560ms)", device_name ? device_name : "");
   return ESP_OK;
 }
 

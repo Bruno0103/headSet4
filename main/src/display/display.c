@@ -427,140 +427,291 @@ static void on_subject_ears_angle_changed(lv_observer_t *observer, lv_subject_t 
   settings_set_u8(SETTINGS_KEY_EARS_ANGLE, (uint8_t)val);
 }
 
-/* Event callback para os botões de ação identificados pelo texto do label filho */
-static void on_action_button_clicked(lv_event_t *e) {
-  const char *action_type = (const char *)lv_event_get_user_data(e);
-  if (!action_type) return;
-
-  ESP_LOGI(TAG, "Botao de acao clicado: %s", action_type);
-
-  if (strcmp(action_type, "BT_DISCONNECT_1") == 0) {
-    ui_bridge_bt_set_desconectar_dispositivo_1(true);
-  } else if (strcmp(action_type, "BT_DISCONNECT_2") == 0) {
-    ui_bridge_bt_set_desconectar_dispositivo_2(true);
-  } else if (strcmp(action_type, "DISP_ENABLE") == 0) {
-    ui_bridge_display_set_ativar(true);
-  } else if (strcmp(action_type, "DISP_DISABLE") == 0) {
-    ui_bridge_display_set_desativar(true);
-  } else if (strcmp(action_type, "PROX_ENABLE") == 0) {
-    ui_bridge_proximidade_set_ativar(true);
-  } else if (strcmp(action_type, "PROX_DISABLE") == 0) {
-    ui_bridge_proximidade_set_desativar(true);
-  } else if (strcmp(action_type, "VIB_ENABLE") == 0) {
-    ui_bridge_vibracall_set_ativar(true);
-  } else if (strcmp(action_type, "VIB_DISABLE") == 0) {
-    ui_bridge_vibracall_set_desativar(true);
-  } else if (strcmp(action_type, "EARS_ENABLE") == 0) {
-    ui_bridge_orelhas_set_ativar(true);
-  } else if (strcmp(action_type, "EARS_DISABLE") == 0) {
-    ui_bridge_orelhas_set_desativar(true);
-  } else if (strcmp(action_type, "BT_TOGGLE_AUTOSWITCH") == 0) {
-    ui_model_data_t snap;
-    ui_model_get_snapshot(&snap);
-    ESP_LOGI(TAG, "Alternando modo Bluetooth Auto-Switch: atual=%d -> novo=%d", 
-             snap.bt_auto_switch, !snap.bt_auto_switch);
-    ui_bridge_bt_set_alternar_ativo(!snap.bt_auto_switch);
-  }
-}
+/* ============================================================================
+ * GERENCIAMENTO DE AÇÕES E CONTROLES DA UI (DESACOPLADO DE LABELS / FIGMA)
+ * ============================================================================
+ * Identifica ações de botões e switches por IDs numéricos fortemente tipados,
+ * utilizando o 'user_data' do objeto e do evento no LVGL 9.
+ *
+ * Vantagens desta abordagem:
+ * 1. Não inspeciona texto de labels (elimina o anti-pattern de strcmp em labels).
+ * 2. Imune a traduções de idiomas (i18n), textos alterados no LVGL Pro ou ícones.
+ * 3. Preserva 100% intacta a pasta components/ui (regerável pelo LVGL Pro a qualquer momento).
+ * 4. Sliders são controlados de forma reativa direta pelos subjects (lv_subject_t).
+ */
+typedef enum {
+  UI_ACTION_NONE = 0,
+  UI_ACTION_DISP_ENABLE,
+  UI_ACTION_DISP_DISABLE,
+  UI_ACTION_PROX_ENABLE,
+  UI_ACTION_PROX_DISABLE,
+  UI_ACTION_VIB_ENABLE,
+  UI_ACTION_VIB_DISABLE,
+  UI_ACTION_EARS_ENABLE,
+  UI_ACTION_EARS_DISABLE,
+  UI_ACTION_BT_DISCONNECT_1,
+  UI_ACTION_BT_DISCONNECT_2,
+  UI_ACTION_BT_TOGGLE_AUTOSWITCH,
+} ui_action_id_t;
 
 /**
- * @brief Identifica o contexto da tela pai para saber a qual componente o botão Ativar/Desativar pertence.
+ * @brief Callback universal de clique para botões de ação da interface gráfica.
+ * Recupera o ID da ação diretamente do user_data do evento/objeto sem string parsing.
  */
-static const char *get_screen_action_prefix(lv_obj_t *obj) {
-  lv_obj_t *scr = lv_obj_get_screen(obj);
-  if (!scr) return "DISP";
+static void on_action_control_clicked(lv_event_t *e) {
+  /* Obtém a ação através do user_data do evento (passado em lv_obj_add_event_cb) */
+  ui_action_id_t action = (ui_action_id_t)(uintptr_t)lv_event_get_user_data(e);
 
-  const char *name = lv_obj_get_name(scr);
-  if (name) {
-    if (strstr(name, "orelhas")) return "EARS";
-    if (strstr(name, "vibracall")) return "VIB";
-    if (strstr(name, "proximidade")) return "PROX";
-    if (strstr(name, "bluetooth")) return "BT";
-    if (strstr(name, "display")) return "DISP";
+  /* Fallback de segurança: caso o evento venha de um filho, tenta ler o user_data do alvo */
+  if (action == UI_ACTION_NONE) {
+    lv_obj_t *target = lv_event_get_target(e);
+    if (target) {
+      action = (ui_action_id_t)(uintptr_t)lv_obj_get_user_data(target);
+    }
   }
-  return "DISP";
-}
 
-/**
- * @brief Varre recursivamente a árvore de objetos LVGL da tela para encontrar
- * botões de ação e vincular o evento de clique sem violar arquivos gerados pelo Figma.
- */
-static void bind_action_buttons_recursive(lv_obj_t *parent, int *bt_disconnect_count) {
-  if (!parent) return;
+  if (action == UI_ACTION_NONE) return;
 
-  uint32_t cnt = lv_obj_get_child_count(parent);
-  for (uint32_t i = 0; i < cnt; i++) {
-    lv_obj_t *child = lv_obj_get_child(parent, i);
-    if (!child) continue;
+  ESP_LOGI(TAG, "Controle de acao acionado: id=%d", action);
 
-    /* Verifica se o próprio objeto ou seus filhos contêm texto de ação */
-    uint32_t sub_cnt = lv_obj_get_child_count(child);
-    for (uint32_t j = 0; j < sub_cnt; j++) {
-      lv_obj_t *grandchild = lv_obj_get_child(child, j);
-      if (grandchild && lv_obj_check_type(grandchild, &lv_label_class)) {
-        const char *txt = lv_label_get_text(grandchild);
-        if (txt) {
-          if (strcmp(txt, "Desconectar") == 0) {
-            const char *action = (*bt_disconnect_count == 0) ? "BT_DISCONNECT_1" : "BT_DISCONNECT_2";
-            (*bt_disconnect_count)++;
-            lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
-            /* Remove callback existente com essa função para evitar acúmulo a cada troca de tela */
-            lv_obj_remove_event_cb(child, on_action_button_clicked);
-            lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)action);
-            ESP_LOGI(TAG, "Mapeado botao 'Desconectar' -> %s", action);
-          } else if (strcmp(txt, "Ativar") == 0) {
-            const char *prefix = get_screen_action_prefix(child);
-            const char *action = "DISP_ENABLE";
-            if (strcmp(prefix, "EARS") == 0) action = "EARS_ENABLE";
-            else if (strcmp(prefix, "VIB") == 0) action = "VIB_ENABLE";
-            else if (strcmp(prefix, "PROX") == 0) action = "PROX_ENABLE";
+  switch (action) {
+    case UI_ACTION_BT_DISCONNECT_1:
+      ESP_LOGI(TAG, "Acao: Desconectar Bluetooth Slot 1");
+      ui_bridge_bt_set_desconectar_dispositivo_1(true);
+      break;
 
-            lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_remove_event_cb(child, on_action_button_clicked);
-            lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)action);
-            ESP_LOGI(TAG, "Mapeado botao 'Ativar' (tela %s) -> %s", prefix, action);
-          } else if (strcmp(txt, "Desativar") == 0) {
-            const char *prefix = get_screen_action_prefix(child);
-            const char *action = "DISP_DISABLE";
-            if (strcmp(prefix, "EARS") == 0) action = "EARS_DISABLE";
-            else if (strcmp(prefix, "VIB") == 0) action = "VIB_DISABLE";
-            else if (strcmp(prefix, "PROX") == 0) action = "PROX_DISABLE";
+    case UI_ACTION_BT_DISCONNECT_2:
+      ESP_LOGI(TAG, "Acao: Desconectar Bluetooth Slot 2");
+      ui_bridge_bt_set_desconectar_dispositivo_2(true);
+      break;
 
-            lv_obj_remove_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_remove_event_cb(child, on_action_button_clicked);
-            lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)action);
-            ESP_LOGI(TAG, "Mapeado botao 'Desativar' (tela %s) -> %s", prefix, action);
-          } else if (strstr(txt, "Alternância") != NULL || strstr(txt, "Alternancia") != NULL ||
-                     strstr(txt, "Manual") != NULL || strstr(txt, "Automático") != NULL ||
-                     strstr(txt, "Dispositivo") != NULL || strstr(txt, "Ativo (") != NULL ||
-                     strstr(txt, "Slot") != NULL) {
-            /*
-             * Botão de Alternância de Dispositivos Bluetooth:
-             * Em screen_bluetooth_gen.c, há container_0 com label_12 ("Alternância: Manual")
-             * e tile_0 que contém label_13 bindado a g_subj_bt_status_alternancia.
-             * Tornamos o child (tile_0 ou container_0) E o grandchild clicáveis!
-             */
-            const char *prefix = get_screen_action_prefix(child);
-            if (strcmp(prefix, "BT") == 0 || strcmp(prefix, "DISP") == 0) {
-              /* Remove e adiciona nos dois níveis para garantir captura do toque */
-              lv_obj_add_flag(grandchild, LV_OBJ_FLAG_CLICKABLE);
-              lv_obj_remove_event_cb(grandchild, on_action_button_clicked);
-              lv_obj_add_event_cb(grandchild, on_action_button_clicked, LV_EVENT_CLICKED, (void *)"BT_TOGGLE_AUTOSWITCH");
-
-              lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
-              lv_obj_remove_event_cb(child, on_action_button_clicked);
-              lv_obj_add_event_cb(child, on_action_button_clicked, LV_EVENT_CLICKED, (void *)"BT_TOGGLE_AUTOSWITCH");
-              ESP_LOGI(TAG, "Mapeado botao de Alternancia Bluetooth (txt: '%s') -> BT_TOGGLE_AUTOSWITCH", txt);
-            }
-          }
-        }
-      }
+    case UI_ACTION_BT_TOGGLE_AUTOSWITCH: {
+      ui_model_data_t snap;
+      ui_model_get_snapshot(&snap);
+      ESP_LOGI(TAG, "Acao: Alternar Bluetooth Auto-Switch (atual=%d -> novo=%d)",
+               snap.bt_auto_switch, !snap.bt_auto_switch);
+      ui_bridge_bt_set_alternar_ativo(!snap.bt_auto_switch);
+      break;
     }
 
-    bind_action_buttons_recursive(child, bt_disconnect_count);
+    case UI_ACTION_DISP_ENABLE:
+      ESP_LOGI(TAG, "Acao: Ativar Display");
+      ui_bridge_display_set_ativar(true);
+      break;
+
+    case UI_ACTION_DISP_DISABLE:
+      ESP_LOGI(TAG, "Acao: Desativar Display");
+      ui_bridge_display_set_desativar(true);
+      break;
+
+    case UI_ACTION_PROX_ENABLE:
+      ESP_LOGI(TAG, "Acao: Ativar Sensor de Proximidade");
+      ui_bridge_proximidade_set_ativar(true);
+      break;
+
+    case UI_ACTION_PROX_DISABLE:
+      ESP_LOGI(TAG, "Acao: Desativar Sensor de Proximidade");
+      ui_bridge_proximidade_set_desativar(true);
+      break;
+
+    case UI_ACTION_VIB_ENABLE:
+      ESP_LOGI(TAG, "Acao: Ativar Vibracall");
+      ui_bridge_vibracall_set_ativar(true);
+      break;
+
+    case UI_ACTION_VIB_DISABLE:
+      ESP_LOGI(TAG, "Acao: Desativar Vibracall");
+      ui_bridge_vibracall_set_desativar(true);
+      break;
+
+    case UI_ACTION_EARS_ENABLE:
+      ESP_LOGI(TAG, "Acao: Ativar Orelhas Animatronicas");
+      ui_bridge_orelhas_set_ativar(true);
+      break;
+
+    case UI_ACTION_EARS_DISABLE:
+      ESP_LOGI(TAG, "Acao: Desativar Orelhas Animatronicas");
+      ui_bridge_orelhas_set_desativar(true);
+      break;
+
+    default:
+      ESP_LOGW(TAG, "Acao de controle desconhecida: %d", action);
+      break;
+  }
+}
+
+/**
+ * @brief Vincula uma ação fortemente tipada a um controle do LVGL sem depender do texto da label.
+ *
+ * Configura:
+ * 1. user_data no próprio objeto (para consulta via lv_obj_get_user_data).
+ * 2. Flag LV_OBJ_FLAG_CLICKABLE para garantir recepção de toque.
+ * 3. Callback on_action_control_clicked com event_user_data configurado para o ID da ação.
+ * 4. Propaga para os filhos diretos (ex: label dentro do card/tile) para que toques no texto
+ *    sejam capturados com a mesma ação sem necessidade de ler string.
+ */
+static void bind_control_action(lv_obj_t *obj, ui_action_id_t action) {
+  if (!obj) return;
+
+  /* Associa a ação ao objeto principal */
+  lv_obj_set_user_data(obj, (void *)(uintptr_t)action);
+  lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_remove_event_cb(obj, on_action_control_clicked);
+  lv_obj_add_event_cb(obj, on_action_control_clicked, LV_EVENT_CLICKED, (void *)(uintptr_t)action);
+
+  /* Propaga para os filhos (labels, ícones) para garantir toque em qualquer ponto do botão */
+  uint32_t child_cnt = lv_obj_get_child_count(obj);
+  for (uint32_t i = 0; i < child_cnt; i++) {
+    lv_obj_t *child = lv_obj_get_child(obj, i);
+    if (child) {
+      lv_obj_set_user_data(child, (void *)(uintptr_t)action);
+      lv_obj_add_flag(child, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_remove_event_cb(child, on_action_control_clicked);
+      lv_obj_add_event_cb(child, on_action_control_clicked, LV_EVENT_CLICKED, (void *)(uintptr_t)action);
+    }
+  }
+}
+
+/**
+ * @brief Mapeia os botões da tela de Bluetooth usando a estrutura hierárquica gerada.
+ *
+ * Estrutura determinística do LVGL Pro para screen_bluetooth:
+ * - content_col:
+ *   - child 0: tile_5_0 (Slot 1) -> seu child 1 é o card_0 (Botão Desconectar Slot 1)
+ *   - child 1: tile_5_1 (Slot 2) -> seu child 1 é o card_1 (Botão Desconectar Slot 2)
+ *   - child 2: container_0 (Alternância) -> seu child 1 é o tile_0 (Botão Alternar)
+ */
+static void bind_bluetooth_controls(lv_obj_t *screen) {
+  lv_obj_t *content_col = NULL;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+  for (uint32_t i = 0; i < scr_cnt; i++) {
+    lv_obj_t *c = lv_obj_get_child(screen, i);
+    if (c && lv_obj_get_child_count(c) >= 3) {
+      content_col = c;
+      break;
+    }
+  }
+  if (!content_col && scr_cnt > 2) {
+    content_col = lv_obj_get_child(screen, 2);
+  }
+  if (!content_col) {
+    ESP_LOGW(TAG, "Coluna de conteudo nao encontrada em screen_bluetooth");
+    return;
+  }
+
+  uint32_t col_cnt = lv_obj_get_child_count(content_col);
+
+  /* Slot 1: child 0 -> child 1 é o card/botão de desconexão */
+  if (col_cnt > 0) {
+    lv_obj_t *slot1_box = lv_obj_get_child(content_col, 0);
+    if (slot1_box && lv_obj_get_child_count(slot1_box) > 1) {
+      lv_obj_t *btn_disc1 = lv_obj_get_child(slot1_box, 1);
+      bind_control_action(btn_disc1, UI_ACTION_BT_DISCONNECT_1);
+      ESP_LOGI(TAG, "Mapeado controle estrutural: Bluetooth Slot 1 Desconectar");
+    }
+  }
+
+  /* Slot 2: child 1 -> child 1 é o card/botão de desconexão */
+  if (col_cnt > 1) {
+    lv_obj_t *slot2_box = lv_obj_get_child(content_col, 1);
+    if (slot2_box && lv_obj_get_child_count(slot2_box) > 1) {
+      lv_obj_t *btn_disc2 = lv_obj_get_child(slot2_box, 1);
+      bind_control_action(btn_disc2, UI_ACTION_BT_DISCONNECT_2);
+      ESP_LOGI(TAG, "Mapeado controle estrutural: Bluetooth Slot 2 Desconectar");
+    }
+  }
+
+  /* Alternância: child 2 -> child 1 é o tile/botão de alternar */
+  if (col_cnt > 2) {
+    lv_obj_t *toggle_box = lv_obj_get_child(content_col, 2);
+    if (toggle_box && lv_obj_get_child_count(toggle_box) > 1) {
+      lv_obj_t *btn_toggle = lv_obj_get_child(toggle_box, 1);
+      bind_control_action(btn_toggle, UI_ACTION_BT_TOGGLE_AUTOSWITCH);
+      ESP_LOGI(TAG, "Mapeado controle estrutural: Bluetooth Alternância Auto-Switch");
+    }
+  }
+}
+
+/**
+ * @brief Mapeia os botões Ativar / Desativar em telas de periféricos com layout padrão.
+ *
+ * Em todas as telas periféricas (Display, Proximidade, Vibracall, Orelhas), o LVGL Pro
+ * gera a coluna principal de conteúdo contendo uma linha de botões de ação (action row)
+ * com exatamente 2 tiles lado a lado:
+ * - child 0 da linha = Botão "Ativar" (True)
+ * - child 1 da linha = Botão "Desativar" (False)
+ */
+static void bind_toggle_screen_controls(lv_obj_t *screen, ui_action_id_t action_enable,
+                                       ui_action_id_t action_disable, const char *screen_name) {
+  lv_obj_t *content_col = NULL;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+  for (uint32_t i = 0; i < scr_cnt; i++) {
+    lv_obj_t *c = lv_obj_get_child(screen, i);
+    if (c && lv_obj_get_child_count(c) >= 2) {
+      content_col = c;
+      break;
+    }
+  }
+  if (!content_col && scr_cnt > 2) {
+    content_col = lv_obj_get_child(screen, 2);
+  }
+  if (!content_col) {
+    ESP_LOGW(TAG, "Coluna de conteudo nao encontrada na tela '%s'", screen_name);
+    return;
+  }
+
+  /* Busca a linha de botões que contém exatamente 2 filhos (tiles de Ativar e Desativar) */
+  lv_obj_t *action_row = NULL;
+  uint32_t col_cnt = lv_obj_get_child_count(content_col);
+  for (uint32_t i = 0; i < col_cnt; i++) {
+    lv_obj_t *row = lv_obj_get_child(content_col, i);
+    if (row && lv_obj_get_child_count(row) == 2) {
+      action_row = row;
+      break;
+    }
+  }
+
+  if (action_row) {
+    lv_obj_t *btn_enable = lv_obj_get_child(action_row, 0);
+    lv_obj_t *btn_disable = lv_obj_get_child(action_row, 1);
+
+    bind_control_action(btn_enable, action_enable);
+    bind_control_action(btn_disable, action_disable);
+
+    ESP_LOGI(TAG, "Mapeados controles estruturais para tela '%s': Ativar (id=%d) e Desativar (id=%d)",
+             screen_name, action_enable, action_disable);
+  } else {
+    ESP_LOGW(TAG, "Linha de acoes Ativar/Desativar nao encontrada na tela '%s'", screen_name);
+  }
+}
+
+/**
+ * @brief Identifica a tela carregada pelo seu identificador estático e vincula seus controles.
+ *
+ * Utiliza lv_obj_get_name(screen) ("screen_bluetooth_#", "screen_display_#", etc.)
+ * para determinar o contexto da tela e mapear os controles de hardware.
+ */
+static void bind_screen_controls(lv_obj_t *screen) {
+  if (!screen) return;
+
+  const char *name = lv_obj_get_name(screen);
+  if (!name) {
+    ESP_LOGW(TAG, "Tela sem nome static ao carregar controles");
+    return;
+  }
+
+  ESP_LOGI(TAG, "Tela carregada: '%s'. Vinculando controles via identificacao estrutural e user_data...", name);
+
+  if (strstr(name, "bluetooth")) {
+    bind_bluetooth_controls(screen);
+  } else if (strstr(name, "display")) {
+    bind_toggle_screen_controls(screen, UI_ACTION_DISP_ENABLE, UI_ACTION_DISP_DISABLE, "Display");
+  } else if (strstr(name, "proximidade")) {
+    bind_toggle_screen_controls(screen, UI_ACTION_PROX_ENABLE, UI_ACTION_PROX_DISABLE, "Proximidade");
+  } else if (strstr(name, "vibracall")) {
+    bind_toggle_screen_controls(screen, UI_ACTION_VIB_ENABLE, UI_ACTION_VIB_DISABLE, "Vibracall");
+  } else if (strstr(name, "orelhas")) {
+    bind_toggle_screen_controls(screen, UI_ACTION_EARS_ENABLE, UI_ACTION_EARS_DISABLE, "Orelhas");
   }
 }
 
@@ -577,10 +728,7 @@ static void on_screen_loaded_cb(lv_event_t *e) {
   }
   if (!screen) return;
 
-  const char *scr_name = lv_obj_get_name(screen);
-  ESP_LOGI(TAG, "Tela carregada: '%s'. Vinculando botoes de acao...", scr_name ? scr_name : "sem nome");
-  int bt_disconnect_count = 0;
-  bind_action_buttons_recursive(screen, &bt_disconnect_count);
+  bind_screen_controls(screen);
 }
 
 static void register_ui_observers(void) {
@@ -734,9 +882,8 @@ esp_err_t display_create_app_ui(void) {
   /* Registra os observadores nos subjects dos sliders e hook para botões */
   register_ui_observers();
 
-  /* Conecta os botões da tela inicial carregada */
-  int initial_disconnect_cnt = 0;
-  bind_action_buttons_recursive(screen, &initial_disconnect_cnt);
+  /* Conecta os controles e acoes da tela inicial carregada */
+  bind_screen_controls(screen);
 
   return ESP_OK;
 }
@@ -802,10 +949,7 @@ void display_task(void *arg) {
     lv_obj_t *current_scr = lv_screen_active();
     if (current_scr != NULL && current_scr != last_bound_screen) {
       last_bound_screen = current_scr;
-      const char *s_name = lv_obj_get_name(current_scr);
-      ESP_LOGI(TAG, "Tela ativa alterada para '%s'. Vinculando botoes...", s_name ? s_name : "desconhecida");
-      int bt_disconnect_cnt = 0;
-      bind_action_buttons_recursive(current_scr, &bt_disconnect_cnt);
+      bind_screen_controls(current_scr);
     }
 
     /*
