@@ -22,28 +22,25 @@
  */
 
 /* ============================================================================
- * SPI3_HOST (VSPI) compartilhado: ILI9341 240x320 + XPT2046
- * 18/23/19/5 sao os pinos NATIVOS (IOMUX) do VSPI: sem matriz de GPIO,
- * clock de 40 MHz estavel no LCD e MISO confiavel para o touch.
- * Em display.h use: #define LCD_SPI_NUM SPI3_HOST
+ * SPI3_HOST (VSPI): ILI9341 240x320 (40 MHz) + Touch XPT2046 (1 MHz)
+ * 18/23/19/5 sao os pinos NATIVOS (IOMUX) do VSPI no silicio do ESP32.
+ * Esta rota direta evita a GPIO Matrix, garantindo integridade de sinal a 40 MHz.
+ * O Touch XPT2046 e o LCD ILI9341 compartilham SCLK (18) e MOSI (23).
+ * MISO (19) e exclusivo do Touch T_DO (o SDO do LCD NAO deve ser ligado).
+ * Durante transicoes de tela e animacoes graficas, a amostragem do XPT2046 e
+ * suspensa temporariamente para liberar o barramento SPI3 e eliminar polling.
  * ========================================================================== */
-#define LCD_GPIO_SCLK 18 /* LCD SCK  + T_CLK */
-#define LCD_GPIO_MOSI 23 /* LCD SDI  + T_DIN */
-#define LCD_GPIO_MISO 19 /* SOMENTE T_DO. NAO ligar LCD SDO nem SD_MISO */
-#define LCD_GPIO_CS 5 /* CS do LCD (VSPI CS0 nativo; strapping, tem pull-up externo no modulo) */
-#define LCD_GPIO_DC 27 /* DC/RS */
-#define LCD_GPIO_RST 4 /* RST do LCD */
-#define LCD_GPIO_BL 13 /* Backlight (via transistor/MOSFET se o modulo nao tiver) */
+#define LCD_GPIO_SCLK 18 /* LCD SCK / Touch T_CLK nativo VSPI */
+#define LCD_GPIO_MOSI 23 /* LCD SDI / Touch T_DIN nativo VSPI */
+#define LCD_GPIO_MISO 19 /* Touch T_DO exclusivo (pull-up interno contra flutuacao) */
+#define LCD_GPIO_CS 5    /* CS do LCD (VSPI CS0 nativo; strapping, pull-up de 10k) */
+#define LCD_GPIO_DC 27   /* DC/RS do LCD */
+#define LCD_GPIO_RST 4   /* RST do LCD */
+#define LCD_GPIO_BL 13   /* Backlight (LEDC Hardware PWM a 5 kHz, resolucao 10 bits) */
 
-#define TOUCH_GPIO_CS 22 /* T_CS */
-#define TOUCH_GPIO_IRQ (-1) /* T_IRQ: entrada pura; o modulo ja tem pull-up. Nao usado (polling) */
+#define TOUCH_GPIO_CS  22 /* Chip Select do Touch XPT2046 */
+#define TOUCH_GPIO_IRQ (-1) /* Sem IRQ por pino: polling coordenado com suspensao em transicao */
 
-/* Checklist de fiacao do touch (causa mais comum de touch morto):
- *  - LCD SDO, SD_CS, SD_MISO, SD_MOSI, SD_SCK: SEM LIGACAO.
- *  - T_DO -> GPIO19 (fio curto, longe do BCLK/WS do audio).
- *  - Touch a 1-2 MHz em device proprio (ja configurado em display.h).
- *  - 3,3 V e GND do modulo no mesmo ponto de GND do codec (estrela), nao em
- * serie. */
 
 /* ============================================================================
  * I2C0 - WM8960 (0x1A) + APDS-9930 (0x39). Pull-ups ja existem no breakout.

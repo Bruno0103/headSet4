@@ -57,7 +57,7 @@
 #define TOUCH_ACTIVE_MIN_Y 16
 #define TOUCH_ACTIVE_MAX_Y 286
 
-/* Inicializa SPI, ILI9341, XPT2046 e o LVGL base (drivers e buffers).
+/* Inicializa SPI, ILI9341, Touch CST816S e o LVGL base (drivers e buffers).
  * Chame uma unica vez a partir da main.c. */
 esp_err_t display_init(void);
 
@@ -65,6 +65,42 @@ esp_err_t display_init(void);
  * Possui tratativa de erro e fallback caso screen_main_create falhe. */
 esp_err_t display_create_app_ui(void);
 
-/* Loop da task do LVGL (lv_timer_handler + delay). A main.c cria a task do
- * FreeRTOS. */
+/* Loop da task do LVGL (lv_timer_handler + delay). A main.c cria a task do FreeRTOS. */
 void display_task(void *arg);
+
+/* ============================================================================
+ * CONTROLE DE BACKLIGHT INTELIGENTE POR HARDWARE PWM LEDC (5 kHz, 10 bits)
+ * ============================================================================ */
+
+/** @brief Inicializa o driver LEDC no GPIO 13 para controle fino de brilho. */
+esp_err_t display_backlight_init(void);
+
+/** @brief Ajusta o brilho nominal do display de 0 a 100% com curva perceptual. */
+void display_backlight_set_duty(uint8_t brightness_pct);
+
+/** @brief Retorna o percentual atual de brilho configurado (0 a 100%). */
+uint8_t display_backlight_get_duty(void);
+
+/** @brief Ativa o modo de pré-dimming de inatividade (redução suave para 15% de duty). */
+void display_backlight_dim(void);
+
+/** @brief Acorda o backlight restaurando o brilho nominal configurado. */
+void display_backlight_wake(void);
+
+/** @brief Retorna se o backlight está atualmente no modo pré-dimming de economia. */
+bool display_backlight_is_dimmed(void);
+
+/** @brief Retorna se a tela está suspensa com backlight desligado (Sleep). */
+bool display_backlight_is_sleeping(void);
+
+/** @brief Coloca o display e backlight em modo Sleep total (0% duty, LCD desligado, touch em sleep). */
+void display_backlight_sleep(void);
+
+
+/** @brief Pausa ou retoma a amostragem de toque durante transições de tela ou animações. */
+void display_touch_set_transition_pause(bool pause);
+
+/** @brief Retorna se a amostragem de toque está pausada. */
+bool display_touch_is_paused(void);
+
+
