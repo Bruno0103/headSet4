@@ -63,9 +63,11 @@ static uint32_t s_drift_inserted_frames = 0;  /* Contador de frames sintetizados
 static uint32_t s_drift_cooldown_frames = 0;  /* Contador regressivo de histerese */
 static uint32_t s_drift_cur_fill_bytes = 0;   /* Última medição de ocupação do buffer */
 
-#define SFX_IDLE_RATE 44100
-#define SFX_AMPLITUDE 9000.0f
-#define SFX_RAMP_MS 6 /* sobe/desce suave para nao estalar */
+/* Parâmetros do Sintetizador Acústico de Alta Fidelidade (UX Sound Design) */
+#define SFX_IDLE_RATE     44100
+#define SFX_AMPLITUDE     8500.0f  /* Amplitude calibrada para faixa cristalina sem distorção (-11.7 dBFS) */
+#define SFX_ATTACK_MS     3        /* Ataque ultra-rápido anti-pop em milissegundos */
+#define SFX_RELEASE_MS    2        /* Rampa final suave de descida para evitar transitórios DC */
 
 static const audio_tone_t *s_tone_seq;
 static size_t s_tone_len, s_tone_idx;
@@ -106,8 +108,24 @@ static void trim_rb_reader_side(RingbufHandle_t rb) {
   }
 }
 
-/* ---------------- efeitos sonoros (tons) ---------------- */
+/* ---------------- Efeitos Sonoros / Síntese Acústica Digital (DSP Chime / Bell) ---------------- */
 
+/**
+ * @brief Sintetizador digital de alta fidelidade para efeitos sonoros de interface (UX Sound Design).
+ *
+ * Gera notas com timbre orgânico percussivo (chime cristalino / marimba suave / cálice de cristal)
+ * utilizando síntese aditiva multi-harmônica com decaimento exponencial natural:
+ *   - Fundamental f0 (corpo musical)
+ *   - 2º harmônico 2*f0 (oitava musical, traz brilho e presença) com amortecimento rápido
+ *   - 3º harmônico 3*f0 (textura vítrea sutil) com amortecimento ainda mais veloz
+ *   - 4º harmônico 4*f0 (micro-ataque acústico inicial cristalino)
+ *
+ * O envelope dinâmico possui ataque limpo anti-pop de 2.5 ms seguido de curva de decaimento natural
+ * percussivo (e^-1.8*t/T), eliminando totalmente o aspecto "robótico/buzzer" das senoides estáticas.
+ *
+ * @param[out] dst     Buffer de destino mono de 16 bits.
+ * @param[in]  frames  Quantidade de amostras a sintetizar.
+ */
 static void tone_render(int16_t *dst, size_t frames) {
   for (size_t i = 0; i < frames; i++) {
     int16_t v = 0;
@@ -117,20 +135,56 @@ static void tone_render(int16_t *dst, size_t frames) {
       if (s_tone_pos >= total) {
         s_tone_idx++;
         s_tone_pos = 0;
-        s_tone_phase = 0;
+        s_tone_phase = 0.0f;
         continue;
       }
-      if (t->hz) {
-        uint32_t ramp = s_rate * SFX_RAMP_MS / 1000;
+      if (t->hz > 0) {
+        uint32_t attack_samples = s_rate * SFX_ATTACK_MS / 1000;
+        uint32_t release_samples = s_rate * SFX_RELEASE_MS / 1000;
+        if (attack_samples == 0) attack_samples = 1;
+        if (release_samples == 0) release_samples = 1;
+
+        /* Fração decorrida da nota (0.0f a 1.0f) */
+        float progress = (float)s_tone_pos / (float)total;
+
+        /* Envelope dinâmico: ataque imediato suave anti-pop seguido de decaimento percussivo orgânico */
         float env = 1.0f;
-        if (s_tone_pos < ramp)
-          env = (float)s_tone_pos / ramp;
-        else if (total - s_tone_pos < ramp)
-          env = (float)(total - s_tone_pos) / ramp;
-        v = (int16_t)(sinf(s_tone_phase) * env * SFX_AMPLITUDE);
+        if (s_tone_pos < attack_samples) {
+          /* Rampa suave de subida inicial para evitar harmônicos DC espúrios */
+          env = (float)s_tone_pos / (float)attack_samples;
+        } else {
+          /* Decaimento exponencial natural percussivo (sensação física de sino/marimba) */
+          float decay_progress = (float)(s_tone_pos - attack_samples) / (float)(total - attack_samples);
+          env = expf(-1.8f * decay_progress);
+
+          /* Rampa final de descida nos últimos milissegundos para zerar sem estalos */
+          if (total - s_tone_pos < release_samples) {
+            env *= (float)(total - s_tone_pos) / (float)release_samples;
+          }
+        }
+
+        /* Amortecimento espectral: harmônicos agudos dissipam energia mais rápido que a fundamental */
+        float h2_amp = 0.32f * expf(-2.5f * progress); /* 2º harmônico (oitava) */
+        float h3_amp = 0.10f * expf(-3.5f * progress); /* 3º harmônico (quinta) */
+        float h4_amp = 0.03f * expf(-4.5f * progress); /* 4º harmônico (ataque cristalino) */
+
+        /* Síntese aditiva com soma normalizada */
+        float s1 = sinf(s_tone_phase);
+        float s2 = sinf(2.0f * s_tone_phase);
+        float s3 = sinf(3.0f * s_tone_phase);
+        float s4 = sinf(4.0f * s_tone_phase);
+        float combined = (s1 + s2 * h2_amp + s3 * h3_amp + s4 * h4_amp) * 0.68f;
+
+        v = (int16_t)(combined * env * SFX_AMPLITUDE);
+
+        /* Avanço da fase fundamental */
         s_tone_phase += 2.0f * (float)M_PI * t->hz / s_rate;
-        if (s_tone_phase > 2.0f * (float)M_PI)
+        if (s_tone_phase >= 2.0f * (float)M_PI) {
           s_tone_phase -= 2.0f * (float)M_PI;
+        }
+      } else {
+        /* Silêncio / pausa técnica entre notas ou cauda */
+        s_tone_phase = 0.0f;
       }
       s_tone_pos++;
       break;
