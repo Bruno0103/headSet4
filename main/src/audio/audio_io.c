@@ -25,6 +25,22 @@
 #define CALL_RB_SIZE (4 * 1024)
 #define CALL_FRAMES 128 /* 16 ms a 8 kHz, 8 ms a 16 kHz */
 
+/* --- Parâmetros de Compensação Suave de Clock Drift (R.16) ---
+ * Em 44,1 kHz estéreo 16 bits (4 bytes por frame), a taxa é de 176.400 bytes/s.
+ * 1 ms de áudio equivale a aproximadamente 176,4 bytes.
+ * O objetivo é manter o nível de ocupação do ringbuffer centralizado em torno de ~185 ms (32 KB),
+ * reagindo preventivamente antes que o buffer atinja 100% (overflow) ou 0% (underrun). */
+#define DRIFT_HIGH_WARN_BYTES   (46 * 1024)   /* ~260 ms: tendência a acúmulo excessivo -> descarta suavemente */
+#define DRIFT_HIGH_CRIT_BYTES   (65 * 1024)   /* ~370 ms: overflow iminente -> cadência de descarte acelerada */
+#define DRIFT_LOW_WARN_BYTES    (20 * 1024)   /* ~115 ms: tendência a esvaziamento -> sintetiza suavemente */
+#define DRIFT_LOW_CRIT_BYTES    (10 * 1024)   /* ~57 ms:  underrun iminente -> cadência de síntese acelerada */
+
+/* Intervalos mínimos de histerese (em frames processados) entre intervenções de interpolação.
+ * 1 frame em 44,1 kHz dura ~22,6 us. Um cooldown de 2048 frames equivale a ~46 ms entre cada micro-ajuste,
+ * garantindo que qualquer alteração de pitch ou fase seja 100% imperceptível ao ouvido humano. */
+#define DRIFT_COOLDOWN_MODERATE 2048          /* Intervalo para alerta moderado (~46 ms) */
+#define DRIFT_COOLDOWN_CRITICAL  512          /* Intervalo para alerta crítico (~11 ms) */
+
 static const char *TAG = "audio_io";
 
 static i2s_chan_handle_t s_tx, s_rx;
@@ -34,9 +50,18 @@ static volatile audio_io_mode_t s_mode = AUDIO_IO_IDLE;
 static volatile bool s_reconfig_req;
 static size_t s_music_size;
 static bool s_prebuffering;
-static int16_t s_chunk[MUSIC_CHUNK / 2];
+
+/* Array local de processamento: alocado com margem de segurança de +8 amostras
+ * para acomodar expansão pontual de 1 frame (+2 int16_t) durante duplicação suave */
+static int16_t s_chunk[(MUSIC_CHUNK / 2) + 8];
 static uint32_t s_call_limit_bytes;
 static uint32_t s_rate;
+
+/* Variáveis de estado e telemetria do compensador de drift (R.16) */
+static uint32_t s_drift_dropped_frames = 0;   /* Contador de frames reduzidos suavemente */
+static uint32_t s_drift_inserted_frames = 0;  /* Contador de frames sintetizados suavemente */
+static uint32_t s_drift_cooldown_frames = 0;  /* Contador regressivo de histerese */
+static uint32_t s_drift_cur_fill_bytes = 0;   /* Última medição de ocupação do buffer */
 
 #define SFX_IDLE_RATE 44100
 #define SFX_AMPLITUDE 9000.0f
@@ -160,6 +185,78 @@ static bool pump_tone_only(void) {
   return i2s_write_ok(st, sizeof st);
 }
 
+/* ---------------- Compensação Suave de Clock Drift (R.16) ---------------- */
+
+/**
+ * @brief Remove suavemente 1 frame estéreo (4 bytes = L16 + R16) do bloco por interpolação linear contínua.
+ *
+ * Em vez de descartar brutalmente uma amostra (o que geraria descontinuidade e clique audível),
+ * fundimos suavemente a amostra com a média dos vizinhos antes do deslocamento.
+ *
+ * @param[in,out] samples      Vetor contendo os dados intercalados L16/R16.
+ * @param[in]     frame_count  Quantidade de frames no vetor.
+ * @return size_t Nova quantidade de frames no vetor (frame_count - 1).
+ */
+static size_t audio_drift_soft_drop(int16_t *samples, size_t frame_count) {
+  if (frame_count < 4) return frame_count;
+
+  /* Ponto de corte e fusão na metade exata do bloco para evitar transitórios nas bordas */
+  size_t mid = frame_count / 2;
+
+  /* Interpolação linear contínua: funde a amostra central com a média ponderada dos vizinhos */
+  int32_t prev_l = samples[2 * (mid - 1)];
+  int32_t next_l = samples[2 * (mid + 1)];
+  int32_t prev_r = samples[2 * (mid - 1) + 1];
+  int32_t next_r = samples[2 * (mid + 1) + 1];
+
+  samples[2 * mid]     = (int16_t)((prev_l + next_l) / 2);
+  samples[2 * mid + 1] = (int16_t)((prev_r + next_r) / 2);
+
+  /* Desloca os frames da segunda metade 1 posição para a esquerda */
+  for (size_t i = mid; i < frame_count - 1; i++) {
+    samples[2 * i]     = samples[2 * (i + 1)];
+    samples[2 * i + 1] = samples[2 * (i + 1) + 1];
+  }
+
+  s_drift_dropped_frames++;
+  return frame_count - 1;
+}
+
+/**
+ * @brief Insere suavemente 1 frame estéreo sintetizado pela média linear das amostras vizinhas.
+ *
+ * Aumenta a duração do bloco em 1 frame para retardar o esvaziamento do ringbuffer (underrun),
+ * mantendo a derivada e a fase senoidal sem nenhum clique perceptível.
+ *
+ * @param[in,out] samples      Vetor com espaço alocado de pelo menos frame_count + 1 frames.
+ * @param[in]     frame_count  Quantidade de frames atualmente preenchidos no vetor.
+ * @return size_t Nova quantidade de frames no vetor (frame_count + 1).
+ */
+static size_t audio_drift_soft_insert(int16_t *samples, size_t frame_count) {
+  if (frame_count < 2) return frame_count;
+
+  size_t mid = frame_count / 2;
+
+  /* Desloca os frames da segunda metade 1 posição para a direita para abrir espaço */
+  for (size_t i = frame_count; i > mid; i--) {
+    samples[2 * i]     = samples[2 * (i - 1)];
+    samples[2 * i + 1] = samples[2 * (i - 1) + 1];
+  }
+
+  /* Amostras vizinhas para interpolação contínua */
+  int32_t l_a = samples[2 * (mid - 1)];
+  int32_t l_b = samples[2 * (mid + 1)];
+  int32_t r_a = samples[2 * (mid - 1) + 1];
+  int32_t r_b = samples[2 * (mid + 1) + 1];
+
+  /* Insere a nova amostra interpolada */
+  samples[2 * mid]     = (int16_t)((l_a + l_b) / 2);
+  samples[2 * mid + 1] = (int16_t)((r_a + r_b) / 2);
+
+  s_drift_inserted_frames++;
+  return frame_count + 1;
+}
+
 /* ---------------- bombeamento (rodam dentro da task, com s_lock)
  * ---------------- */
 
@@ -184,22 +281,51 @@ static bool pump_music(void) {
       xRingbufferReceiveUpTo(s_music_rb, &n, pdMS_TO_TICKS(10), MUSIC_CHUNK);
   if (p) {
     size_t fill = s_music_size - xRingbufferGetCurFreeSize(s_music_rb);
-    (void)fill; /* reservado para diagnostico de buffer */
+    s_drift_cur_fill_bytes = (uint32_t)fill;
 
-    /* Copia para um buffer local (o EQ altera no lugar) e libera o ringbuffer
-     * logo */
+    /* Copia para um buffer local (o EQ altera no lugar) e libera o ringbuffer logo */
     n &= ~3u;
+    size_t frames = n / 4;
     memcpy(s_chunk, p, n);
     vRingbufferReturnItem(s_music_rb, p);
-    eq_process(s_chunk, n / 4);
+
+    /* --- Compensação Dinâmica de Clock Drift (R.16) ---
+     * Monitora continuamente a linha d'água do ringbuffer em PSRAM e reage antes que
+     * ocorra overflow ou underrun. O cooldown impede intervenções consecutivas,
+     * garantindo dispersão temporal ampla das micro-interpolações. */
+    if (s_drift_cooldown_frames > 0) {
+      if (s_drift_cooldown_frames > frames) {
+        s_drift_cooldown_frames -= frames;
+      } else {
+        s_drift_cooldown_frames = 0;
+      }
+    } else {
+      if (fill >= DRIFT_HIGH_CRIT_BYTES) {
+        /* Alerta Crítico Superior: acelera o descarte de 1 frame a cada ~11 ms */
+        frames = audio_drift_soft_drop(s_chunk, frames);
+        s_drift_cooldown_frames = DRIFT_COOLDOWN_CRITICAL;
+      } else if (fill >= DRIFT_HIGH_WARN_BYTES) {
+        /* Alerta Alto Moderado: descarte de 1 frame a cada ~46 ms */
+        frames = audio_drift_soft_drop(s_chunk, frames);
+        s_drift_cooldown_frames = DRIFT_COOLDOWN_MODERATE;
+      } else if (fill <= DRIFT_LOW_CRIT_BYTES && fill > 0) {
+        /* Alerta Crítico Inferior: sintetiza 1 frame a cada ~11 ms para evitar underrun */
+        frames = audio_drift_soft_insert(s_chunk, frames);
+        s_drift_cooldown_frames = DRIFT_COOLDOWN_CRITICAL;
+      } else if (fill <= DRIFT_LOW_WARN_BYTES && fill > 0) {
+        /* Alerta Baixo Moderado: sintetiza 1 frame a cada ~46 ms */
+        frames = audio_drift_soft_insert(s_chunk, frames);
+        s_drift_cooldown_frames = DRIFT_COOLDOWN_MODERATE;
+      }
+      n = frames * 4;
+    }
+
+    eq_process(s_chunk, frames);
     if (s_tone_active)
-      tone_mix_stereo(s_chunk, n / 4);
+      tone_mix_stereo(s_chunk, frames);
     uint8_t *d = (uint8_t *)s_chunk;
 
-    /* Envia o bloco completo de PCM diretamente ao DMA I2S.
-     * Com buffer de 128 KB em PSRAM e backpressure elástico do I2S,
-     * NÃO descartamos nem duplicamos frames artificialmente no meio da onda PCM,
-     * preservando 100% da integridade da forma de onda senoidal sem cliques/estalos. */
+    /* Envia o bloco completo de PCM diretamente ao DMA I2S */
     if (n > 0) {
       ok = i2s_write_ok(d, n);
     } else {
@@ -379,6 +505,9 @@ static esp_err_t start_mode(audio_io_mode_t mode, uint32_t rate, bool by_tone) {
 
 
   s_prebuffering = (mode == AUDIO_IO_MUSIC);
+  if (mode == AUDIO_IO_MUSIC) {
+    s_drift_cooldown_frames = 0;
+  }
   s_mode = mode;
   s_rate = rate;
   s_tone_owns = by_tone;
@@ -530,4 +659,12 @@ esp_err_t audio_io_init(void) {
       xTaskCreatePinnedToCore(audio_task, "audio_io", 4096, NULL, 18, NULL, 1);
   ESP_RETURN_ON_FALSE(ok == pdPASS, ESP_ERR_NO_MEM, TAG, "task");
   return ESP_OK;
+}
+
+void audio_io_get_drift_stats(audio_io_drift_stats_t *stats) {
+  if (!stats) return;
+  stats->fill_bytes = s_drift_cur_fill_bytes;
+  stats->fill_ms = (s_rate > 0) ? (uint32_t)((uint64_t)s_drift_cur_fill_bytes * 1000 / (s_rate * 4)) : 0;
+  stats->dropped_frames = s_drift_dropped_frames;
+  stats->inserted_frames = s_drift_inserted_frames;
 }

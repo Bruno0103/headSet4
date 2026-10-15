@@ -36,6 +36,23 @@ esp_err_t audio_io_play_tones(const audio_tone_t *seq, size_t count);
 /** true enquanto uma sequencia de tons ainda esta tocando. */
 bool audio_io_tones_busy(void);
 
+/**
+ * @brief Estatísticas de telemetria do compensador de Clock Drift no Ringbuffer (R.16).
+ */
+typedef struct {
+    uint32_t fill_bytes;     /**< Quantidade atual de bytes no ringbuffer de música */
+    uint32_t fill_ms;        /**< Quantidade equivalente em milissegundos de áudio */
+    uint32_t dropped_frames; /**< Total de frames estéreo reduzidos suavemente por acúmulo (overflow prevention) */
+    uint32_t inserted_frames;/**< Total de frames estéreo sintetizados suavemente por déficit (underrun prevention) */
+} audio_io_drift_stats_t;
+
+/**
+ * @brief Obtém as métricas em tempo real do controlador de deriva de clock.
+ *
+ * @param[out] stats Ponteiro para a estrutura de saída onde serão gravadas as métricas.
+ */
+void audio_io_get_drift_stats(audio_io_drift_stats_t *stats);
+
 #include "audio_data.h"
 
 /* --- Usados nos callbacks de dados do Bluetooth (plano de dados rápido, não bloqueia) ---
