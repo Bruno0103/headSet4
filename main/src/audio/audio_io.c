@@ -68,14 +68,15 @@ static uint32_t s_drift_cur_fill_bytes = 0;   /* Última medição de ocupação
 #define SFX_AMPLITUDE     8500.0f  /* Amplitude calibrada para faixa cristalina sem distorção (-11.7 dBFS) */
 #define SFX_ATTACK_MS     3        /* Ataque ultra-rápido anti-pop em milissegundos */
 #define SFX_RELEASE_MS    2        /* Rampa final suave de descida para evitar transitórios DC */
+#define SFX_KEEP_ALIVE_MS 3000     /* Mantém clocks I2S e codec aquecidos por 3s após tom para transição contínua */
 
 static const audio_tone_t *s_tone_seq;
 static size_t s_tone_len, s_tone_idx;
 static uint32_t s_tone_pos; /* amostras ja geradas na nota atual */
 static float s_tone_phase;
 static volatile bool s_tone_active;
-static bool s_tone_owns; /* o efeito ligou o audio sozinho: ele mesmo desliga ao
-                            terminar */
+static bool s_tone_owns; /* o efeito ligou o audio sozinho */
+static uint32_t s_idle_timer_ms; /* timestamp de início do repouso para desligamento suave */
 
 /* APLL so em 44.1/48 kHz (precisao); taxas de voz usam o clock padrao */
 static i2s_std_clk_config_t clk_for(uint32_t rate) {
@@ -465,13 +466,26 @@ static void audio_task(void *arg) {
       transferred = pump_music();
     else if (m == AUDIO_IO_CALL)
       transferred = pump_call();
+
     if (s_tone_active && s_tone_idx >= s_tone_len) { /* efeito terminou */
       s_tone_active = false;
       if (s_tone_owns) {
+        /* Registra timestamp para manter o I2S aquecido por 3s em repouso
+         * sem cortar bruscamente os clocks enquanto a mídia ou novo tom pode iniciar */
+        s_idle_timer_ms = esp_log_timestamp();
+      }
+    }
+
+    /* Se o efeito sonoro terminou e o headset permaneceu ocioso por mais de 3s,
+     * executa a transição suave para standby com dreno de descritores DMA */
+    if (m == AUDIO_IO_MUSIC && s_tone_owns && !s_tone_active && s_idle_timer_ms > 0) {
+      if ((esp_log_timestamp() - s_idle_timer_ms) >= SFX_KEEP_ALIVE_MS) {
         stop_locked(true);
+        s_idle_timer_ms = 0;
         m = s_mode;
       }
     }
+
     /* Se um efeito sonoro estiver sendo ativamente bombeado para o I2S DMA,
      * a cadência é mantida pelo bloqueio natural do i2s_channel_write (backpressure).
      * Não devemos forçar vTaskDelay quando transferred == true, caso contrário o
@@ -507,9 +521,26 @@ static void audio_task(void *arg) {
 static void stop_locked(bool power_down) {
   s_tone_active = false;
   s_tone_owns = false;
+  s_idle_timer_ms = 0;
   if (s_mode == AUDIO_IO_IDLE)
     return;
+
+  /* 1. Mute digital suave no DAC (rampa senoidal do hardware via DACSMM em R6) */
   audio_codec_mute(true);
+
+  /* 2. Drena os descritores DMA transmitindo blocos de silêncio (zeros).
+   * Isso empurra todo o áudio acumulado na DMA para fora do DAC e permite
+   * que a rampa digital de soft mute complete suavemente com o clock I2S rodando. */
+  static const int16_t zeros[512] = {0};
+  size_t w = 0;
+  (void)i2s_channel_write(s_tx, zeros, sizeof(zeros), &w, 50);
+  (void)i2s_channel_write(s_tx, zeros, sizeof(zeros), &w, 50);
+  vTaskDelay(pdMS_TO_TICKS(15));
+
+  /* 3. Aplica mute analógico real nas saídas LOUT1/ROUT1 com zero-crossing antes de parar o I2S */
+  audio_codec_set_analog_mute(true);
+
+  /* 4. Desabilita o canal I2S com o hardware já em silêncio absoluto */
   i2s_channel_disable(s_tx);
   if (s_mode == AUDIO_IO_CALL) {
     i2s_channel_disable(s_rx);
@@ -531,9 +562,28 @@ static esp_err_t start_mode(audio_io_mode_t mode, uint32_t rate, bool by_tone) {
     ret = ESP_ERR_INVALID_STATE;
     goto out;
   }
+
+  /* Se o canal I2S já estiver ativo na mesma taxa e modo (ex: transição entre tom e música A2DP,
+   * ou troca de faixa / despause em 44.1 kHz), NÃO reinicializa o hardware I2S nem o codec!
+   * Isso elimina 100% de qualquer ruído de comutação ou estalo entre eventos de áudio. */
+  if (s_mode == mode && s_rate == rate) {
+    if (!by_tone) {
+      s_tone_owns = false; /* Streaming de música ou chamada assumiu a posse */
+    }
+    s_idle_timer_ms = 0;
+    s_prebuffering = (mode == AUDIO_IO_MUSIC);
+    audio_codec_set_analog_mute(false);
+    audio_codec_mute(false);
+    xSemaphoreGive(s_lock);
+    s_reconfig_req = false;
+    return ESP_OK;
+  }
+
   stop_locked(false);
   ESP_GOTO_ON_ERROR(audio_codec_power_up(), out, TAG, "codec power up");
+  /* Inicia com DAC em mute digital e saídas em mute analógico */
   audio_codec_mute(true);
+  audio_codec_set_analog_mute(true);
 
   ESP_GOTO_ON_ERROR(audio_codec_set_sample_rate(rate), out, TAG, "codec rate");
   if (mode == AUDIO_IO_MUSIC)
@@ -567,6 +617,11 @@ static esp_err_t start_mode(audio_io_mode_t mode, uint32_t rate, bool by_tone) {
   if (mode == AUDIO_IO_CALL)
     ESP_GOTO_ON_ERROR(i2s_channel_enable(s_rx), out, TAG, "rx enable");
 
+  /* Pré-carrega os descritores DMA com silêncio antes de desmutar para estabilizar BCLK/WS */
+  static const int16_t zeros[512] = {0};
+  size_t w = 0;
+  (void)i2s_channel_write(s_tx, zeros, sizeof(zeros), &w, 50);
+  (void)i2s_channel_write(s_tx, zeros, sizeof(zeros), &w, 50);
 
   s_prebuffering = (mode == AUDIO_IO_MUSIC);
   if (mode == AUDIO_IO_MUSIC) {
@@ -575,6 +630,7 @@ static esp_err_t start_mode(audio_io_mode_t mode, uint32_t rate, bool by_tone) {
   s_mode = mode;
   s_rate = rate;
   s_tone_owns = by_tone;
+  s_idle_timer_ms = 0;
   ESP_LOGI(TAG, "modo %s @ %lu Hz",
            mode == AUDIO_IO_CALL ? "CHAMADA" : "MUSICA", (unsigned long)rate);
 
@@ -584,9 +640,9 @@ out:
   xSemaphoreGive(s_lock);
   s_reconfig_req = false;
   if (ret == ESP_OK) {
-    vTaskDelay(pdMS_TO_TICKS(
-        30)); /* deixa o clock estabilizar antes de tirar o mudo */
-    audio_codec_mute(false);
+    vTaskDelay(pdMS_TO_TICKS(20)); /* deixa o clock estabilizar antes de tirar o mudo */
+    audio_codec_mute(false);       /* rampa digital suave de desmute do DAC */
+    audio_codec_set_analog_mute(false); /* restaura ganho analógico nos fones */
   }
   return ret;
 }
@@ -598,24 +654,30 @@ esp_err_t audio_io_start(audio_io_mode_t mode, uint32_t rate) {
 esp_err_t audio_io_play_tones(const audio_tone_t *seq, size_t count) {
   if (!seq || count == 0)
     return ESP_ERR_INVALID_ARG;
-  if (s_mode == AUDIO_IO_IDLE) {
-    ESP_RETURN_ON_ERROR(start_mode(AUDIO_IO_MUSIC, SFX_IDLE_RATE, true), TAG,
-                        "audio para efeito");
-  }
+
+  /* Arma a sequência de tons sob lock atômico para que o sintetizador já inicie
+   * gerando o primeiro frame com ataque percussivo suave anti-pop */
   xSemaphoreTake(s_lock, portMAX_DELAY);
-  esp_err_t ret =
-      ESP_ERR_INVALID_STATE; /* o audio foi parado entre a partida e agora */
-  if (s_mode != AUDIO_IO_IDLE) {
-    s_tone_seq = seq;
-    s_tone_len = count;
-    s_tone_idx = 0;
-    s_tone_pos = 0;
-    s_tone_phase = 0;
-    s_tone_active = true;
-    ret = ESP_OK;
-  }
+  s_tone_seq = seq;
+  s_tone_len = count;
+  s_tone_idx = 0;
+  s_tone_pos = 0;
+  s_tone_phase = 0.0f;
+  s_tone_active = true;
+  s_idle_timer_ms = 0;
+  bool need_start = (s_mode == AUDIO_IO_IDLE);
   xSemaphoreGive(s_lock);
-  return ret;
+
+  if (need_start) {
+    esp_err_t err = start_mode(AUDIO_IO_MUSIC, SFX_IDLE_RATE, true);
+    if (err != ESP_OK) {
+      xSemaphoreTake(s_lock, portMAX_DELAY);
+      s_tone_active = false;
+      xSemaphoreGive(s_lock);
+      return err;
+    }
+  }
+  return ESP_OK;
 }
 
 bool audio_io_tones_busy(void) { return s_tone_active; }

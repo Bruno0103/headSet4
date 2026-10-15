@@ -56,8 +56,13 @@ esp_err_t audio_codec_power_down(void);
 /** Volume do headphone na escala do AVRCP: 0 = mudo, 127 = maximo (0 dB). */
 esp_err_t audio_codec_set_volume(uint8_t avrcp_volume);
 
-/** Soft-mute do DAC. */
+/** Soft-mute digital do DAC do WM8960 com rampa gradual suave (DACSMM em R6). */
 esp_err_t audio_codec_mute(bool mute);
+
+/** Mute analógico real das saídas dos fones (LOUT1/ROUT1) com cruzamento por zero.
+ * No hardware WM8960, volumes <= 0x2F aplicam aterramento analógico suave das saídas,
+ * eliminando estalos elétricos durante inicialização ou parada de clock I2S. */
+esp_err_t audio_codec_set_analog_mute(bool mute);
 
 /** Ganho do PGA do microfone ambiente, 0..63 (23 = 0 dB). Ignorado se o ALC
  * estiver ligado. */

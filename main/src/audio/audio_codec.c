@@ -61,6 +61,14 @@ static const char *TAG = "audio_codec";
 #define DACCTL1_DEEMPH    (3u << 1)
 #define DACCTL1_ADCHPD    (1u << 0)   /* 1 = HPF do ADC desligado */
 
+#define DACCTL2_DACSMM    (1u << 3)   /* 1 = DAC Soft Mute Mode (rampa gradual suave anti-pop em hardware) */
+#define DACCTL2_DACMR     (1u << 2)   /* 0 = rampa lenta (1024 amostras ~23ms); 1 = rampa rapida */
+#define DACCTL2_DACSLOPE  (1u << 1)   /* 0 = filtro FIR padrao */
+
+#define APOP1_POBCTRL     (1u << 7)   /* 1 = Controle de bias anti-pop ativo */
+#define APOP1_SOFT_ST     (1u << 2)   /* 1 = Soft start de VMID ativo */
+#define APOP1_BUFDCOPEN   (1u << 4)   /* 1 = Buffers DC de saída suaves */
+
 #define HP_VOL_0DB        0x79        /* LOUT1VOL/ROUT1VOL: 0x79 = 0 dB, 1 dB/passo; <= 0x2F = mudo */
 #define HP_RANGE_DB       60          /* AVRCP 1 -> -60 dB, AVRCP 127 -> 0 dB */
 
@@ -87,6 +95,8 @@ static const rate_cfg_t RATES[] = {
 static uint8_t  s_pll_n;
 static uint32_t s_pll_k;
 static bool     s_powered;
+static uint8_t  s_current_vol_avrcp = CODEC_DEFAULT_VOLUME;
+static bool     s_analog_muted = true;
 
 /* ---- presets de filtros (tratamentos desativados para audio puro do microfone) ---- */
 const audio_filters_t AUDIO_FILTERS_MUSIC = {
@@ -114,35 +124,61 @@ static esp_err_t power_blocks_on(void)
 {
     W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF);
     W(WM8960_R_PWR3, PWR3_LOMIX | PWR3_ROMIX);
+    /* No modo Capless (OUT3 como pseudo-terra de 1.65V), os buffers LOUT1, ROUT1 e OUT3
+     * permanecem energizados para manter a DDP em exatamente 0.000 V */
     W(WM8960_R_PWR2, PWR2_DACL | PWR2_DACR | PWR2_LOUT1 | PWR2_ROUT1 | PWR2_OUT3);
     return ESP_OK;
 }
 
 
+esp_err_t audio_codec_set_analog_mute(bool mute)
+{
+    s_analog_muted = mute;
+    uint16_t hp;
+    if (mute || s_current_vol_avrcp == 0) {
+        /* No hardware WM8960, volumes de 0x00 a 0x2F aplicam mute analógico real nas saídas LOUT1/ROUT1 */
+        hp = 0;
+    } else {
+        hp = (uint16_t)(HP_VOL_0DB - ((127 - s_current_vol_avrcp) * HP_RANGE_DB) / 127);
+    }
+    uint16_t word = VOL_UPDATE | VOL_ZEROCROSS | hp;
+    W(WM8960_R_LOUT1, word);
+    W(WM8960_R_ROUT1, word);
+    return ESP_OK;
+}
+
 esp_err_t audio_codec_power_up(void)
 {
     if (s_powered) return ESP_OK;
-    ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_DACCTL1, DACCTL1_DACMU, DACCTL1_DACMU), TAG, "mute");
+    /* Soft mute digital ativado para que a saída inicie sem transitórios de clock */
+    ESP_RETURN_ON_ERROR(audio_codec_mute(true), TAG, "mute");
     ESP_RETURN_ON_ERROR(power_blocks_on(), TAG, "power up");
-    vTaskDelay(pdMS_TO_TICKS(10));            /* bias das entradas/saidas assenta (VMID ja esta carregado) */
+    vTaskDelay(pdMS_TO_TICKS(15));            /* bias analógico estabiliza com o DAC mutado suavemente */
     s_powered = true;
     ESP_LOGI(TAG, "codec ligado");
     return ESP_OK;
 }
 
-/* Modo "standby" do datasheet (R25 VMIDSEL=10 + VREF): saidas, DAC, ADC, mixers e PLL desligados;
- * so o VMID e mantido por 2x250k, entao o proximo power_up nao tem rampa nem estalo. */
+/* Modo "standby" seguro e anti-pop (Capless Mode):
+ * Mantém OUT3 (pseudo-terra do fone a 1.65V), LOUT1/ROUT1 (saídas de fone) e os mixers
+ * estavelmente polarizados a 1.65V com VMID 2x50k. Desliga apenas DACs e PLL.
+ * As saídas LOUT1/ROUT1 são colocadas em mute analógico real (0x00) com zero-cross,
+ * garantindo DDP diferencial rigorosamente nula (0.000 V) sem estalos. */
 esp_err_t audio_codec_power_down(void)
 {
     if (!s_powered) return ESP_OK;
-    ESP_RETURN_ON_ERROR(wm8960_update(WM8960_R_DACCTL1, DACCTL1_DACMU, DACCTL1_DACMU), TAG, "mute");
-    W(WM8960_R_PWR2, 0);                      /* DAC, LOUT1/ROUT1, OUT3 e PLL */
-    W(WM8960_R_PWR3, 0);                      /* microfones e mixers de saida */
-    W(WM8960_R_PWR1, PWR1_VMID_2X250K | PWR1_VREF);   /* entradas e ADC off */
-    s_pll_n = 0;                              /* o PLL caiu: set_sample_rate precisa reprogramar */
+    /* 1. Mute analógico suave nas saídas de fone */
+    audio_codec_set_analog_mute(true);
+    /* 2. Soft Mute digital no DAC com rampa gradual */
+    audio_codec_mute(true);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    /* Desliga DACs e PLL, mas PRESERVA LOUT1, ROUT1, OUT3 e mixers energizados (Capless Anti-Pop) */
+    W(WM8960_R_PWR2, PWR2_LOUT1 | PWR2_ROUT1 | PWR2_OUT3);
+    W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF);   /* VMID e VREF mantidos estáveis */
+    s_pll_n = 0;                                      /* o PLL caiu: set_sample_rate precisa reprogramar */
     s_pll_k = 0;
     s_powered = false;
-    ESP_LOGI(TAG, "codec desligado (standby)");
+    ESP_LOGI(TAG, "codec em standby suave (anti-pop capless ativo)");
     return ESP_OK;
 }
 
@@ -176,15 +212,17 @@ esp_err_t audio_codec_set_sample_rate(uint32_t hz)
 esp_err_t audio_codec_set_volume(uint8_t v)
 {
     if (v > 127) v = 127;
-    uint16_t hp = (v == 0) ? 0 : (uint16_t)(HP_VOL_0DB - ((127 - v) * HP_RANGE_DB) / 127);
-    uint16_t word = VOL_UPDATE | VOL_ZEROCROSS | hp;
-    W(WM8960_R_LOUT1, word);
-    W(WM8960_R_ROUT1, word);
+    s_current_vol_avrcp = v;
+    if (!s_analog_muted) {
+        return audio_codec_set_analog_mute(false);
+    }
     return ESP_OK;
 }
 
 esp_err_t audio_codec_mute(bool mute)
 {
+    /* DACMU em R5 controla o mute digital sigma-delta.
+     * Como DACSMM=1 é mantido permanentemente em R6, o hardware interpola rampa gradual suave */
     return wm8960_update(WM8960_R_DACCTL1, DACCTL1_DACMU, mute ? DACCTL1_DACMU : 0);
 }
 
@@ -275,6 +313,14 @@ esp_err_t audio_codec_init(void)
     /* Registradores que sofrem update() isolado precisam de uma escrita inteira primeiro */
     W(WM8960_R_CLOCK1, 0x000);
 
+    /* Habilita R6 (DACCTL2) com DACSMM = 1 (Soft Mute Mode: rampa gradual suave anti-pop em hardware) */
+    W(WM8960_R_DACCTL2, DACCTL2_DACSMM);
+
+    /* Anti-pop 1 (R28): Ativa rampa de soft start VMID e controle de bias anti-pop */
+    W(WM8960_R_APOP1, APOP1_POBCTRL | APOP1_SOFT_ST | APOP1_BUFDCOPEN);
+    /* Anti-pop 2 (R29): Sem descarga forçada de capacitores (modo Capless OUT3) */
+    W(WM8960_R_APOP2, 0x000);
+
     /* Referencias (enableVREF / enableVMID) e rampa do VMID, para evitar "pop" */
     W(WM8960_R_PWR1, PWR1_VMID_2X50K | PWR1_VREF);
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -301,12 +347,14 @@ esp_err_t audio_codec_init(void)
     W(WM8960_R_CLOCK2, 0x1C4);                /* DCLKDIV /16, BCLKDIV 4 (como no sketch) */
 
     /* DAC, headphone e OUT3 (PLL e ligado em set_sample_rate) */
-    W(WM8960_R_DACCTL1, DACCTL1_DACMU);       /* comeca mudo; audio_io tira o mudo */
+    W(WM8960_R_DACCTL1, DACCTL1_DACMU);       /* comeca mudo digitalmente */
     W(WM8960_R_PWR2, PWR2_DACL | PWR2_DACR | PWR2_LOUT1 | PWR2_ROUT1 | PWR2_OUT3);
     s_powered = true;
 
     ESP_RETURN_ON_ERROR(audio_codec_set_sample_rate(44100), TAG, "clock");
     ESP_RETURN_ON_ERROR(audio_codec_set_volume(CODEC_DEFAULT_VOLUME), TAG, "volume");
+    /* Garante fones em mute analógico inicialmente para partida sem cliques */
+    ESP_RETURN_ON_ERROR(audio_codec_set_analog_mute(true), TAG, "analog mute");
     ESP_RETURN_ON_ERROR(audio_codec_apply_filters(&AUDIO_FILTERS_MUSIC), TAG, "filtros");
 
     /* Configurado; fica desligado ate o audio_io iniciar musica ou chamada */

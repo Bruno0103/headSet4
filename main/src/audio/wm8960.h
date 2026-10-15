@@ -12,6 +12,7 @@
 #define WM8960_R_ROUT1       0x03
 #define WM8960_R_CLOCK1      0x04
 #define WM8960_R_DACCTL1     0x05
+#define WM8960_R_DACCTL2     0x06
 #define WM8960_R_IFACE1      0x07
 #define WM8960_R_CLOCK2      0x08
 #define WM8960_R_RESET       0x0F
@@ -23,6 +24,8 @@
 #define WM8960_R_ADDCTL1     0x17
 #define WM8960_R_PWR1        0x19
 #define WM8960_R_PWR2        0x1A
+#define WM8960_R_APOP1       0x1C
+#define WM8960_R_APOP2       0x1D
 #define WM8960_R_LINPATH     0x20
 #define WM8960_R_RINPATH     0x21
 #define WM8960_R_LOUTMIX     0x22
