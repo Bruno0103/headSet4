@@ -391,29 +391,29 @@ static void on_subject_timeout_changed(lv_observer_t *observer, lv_subject_t *su
   s_last_sent_timeout = val;
 
   ESP_LOGI(TAG, "Slider Tempo de Tela alterado pelo usuario: %d s", val);
-  settings_set_u16(SETTINGS_KEY_DISP_TIMEOUT, (uint16_t)val);
+  ui_bridge_display_set_tempo_tela(val);
 }
 
 static void on_subject_prox_sensitivity_changed(lv_observer_t *observer, lv_subject_t *subject) {
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 1023) return;
-  if (s_last_sent_prox_sens >= 0 && abs(val - s_last_sent_prox_sens) < 8) return;
+  if (s_last_sent_prox_sens >= 0 && abs(val - s_last_sent_prox_sens) < 4) return;
   s_last_sent_prox_sens = val;
 
   ESP_LOGI(TAG, "Slider Sensibilidade Proximidade alterado pelo usuario: %d", val);
-  settings_set_u16(SETTINGS_KEY_SENS_THRESH_ON, (uint16_t)val);
+  ui_bridge_proximidade_set_distancia_sensibilidade(val);
 }
 
 static void on_subject_vibracall_intensity_changed(lv_observer_t *observer, lv_subject_t *subject) {
   (void)observer;
   int val = lv_subject_get_int(subject);
   if (val < 0 || val > 100) return;
-  if (val == s_last_sent_vib_intens) return;
+  if (s_last_sent_vib_intens >= 0 && abs(val - s_last_sent_vib_intens) < 4) return;
   s_last_sent_vib_intens = val;
 
   ESP_LOGI(TAG, "Slider Intensidade Vibracall alterado pelo usuario: %d%%", val);
-  settings_set_u8(SETTINGS_KEY_HAPTIC_INTENS, (uint8_t)val);
+  ui_bridge_vibracall_set_intensidade(val);
 }
 
 static void on_subject_ears_angle_changed(lv_observer_t *observer, lv_subject_t *subject) {
@@ -714,31 +714,41 @@ static void bind_bluetooth_controls(lv_obj_t *screen) {
  */
 static void bind_toggle_screen_controls(lv_obj_t *screen, ui_action_id_t action_enable,
                                        ui_action_id_t action_disable, const char *screen_name) {
+  if (!screen) return;
   lv_obj_t *content_col = NULL;
   uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  for (uint32_t i = 0; i < scr_cnt; i++) {
-    lv_obj_t *c = lv_obj_get_child(screen, i);
-    if (c && lv_obj_get_child_count(c) >= 2) {
-      content_col = c;
-      break;
-    }
-  }
-  if (!content_col && scr_cnt > 2) {
+
+  /* A coluna de conteúdo é o child 2 (após a barra superior panel_0 e o cabeçalho row_2) */
+  if (scr_cnt > 2) {
     content_col = lv_obj_get_child(screen, 2);
+  }
+  if (!content_col) {
+    for (uint32_t i = 0; i < scr_cnt; i++) {
+      lv_obj_t *c = lv_obj_get_child(screen, i);
+      if (c && lv_obj_get_child_count(c) >= 3) {
+        content_col = c;
+        break;
+      }
+    }
   }
   if (!content_col) {
     ESP_LOGW(TAG, "Coluna de conteudo nao encontrada na tela '%s'", screen_name);
     return;
   }
 
-  /* Busca a linha de botões que contém exatamente 2 filhos (tiles de Ativar e Desativar) */
+  /* Busca a linha de botões que contém exatamente 2 filhos do tipo botão (Ativar e Desativar) */
   lv_obj_t *action_row = NULL;
   uint32_t col_cnt = lv_obj_get_child_count(content_col);
   for (uint32_t i = 0; i < col_cnt; i++) {
     lv_obj_t *row = lv_obj_get_child(content_col, i);
     if (row && lv_obj_get_child_count(row) == 2) {
-      action_row = row;
-      break;
+      lv_obj_t *c0 = lv_obj_get_child(row, 0);
+      lv_obj_t *c1 = lv_obj_get_child(row, 1);
+      /* Diferencia a linha de botões da linha de status: botões contêm pelo menos 1 filho (o label de texto) */
+      if (c0 && c1 && lv_obj_get_child_count(c0) > 0 && lv_obj_get_child_count(c1) > 0) {
+        action_row = row;
+        break;
+      }
     }
   }
 
@@ -765,15 +775,17 @@ static void bind_vibracall_controls(lv_obj_t *screen) {
   /* Mapeia a linha de status inicial (child 0 de content_col) para disparar teste ao toque */
   lv_obj_t *content_col = NULL;
   uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  for (uint32_t i = 0; i < scr_cnt; i++) {
-    lv_obj_t *c = lv_obj_get_child(screen, i);
-    if (c && lv_obj_get_child_count(c) >= 2) {
-      content_col = c;
-      break;
-    }
-  }
-  if (!content_col && scr_cnt > 2) {
+  if (scr_cnt > 2) {
     content_col = lv_obj_get_child(screen, 2);
+  }
+  if (!content_col) {
+    for (uint32_t i = 0; i < scr_cnt; i++) {
+      lv_obj_t *c = lv_obj_get_child(screen, i);
+      if (c && lv_obj_get_child_count(c) >= 3) {
+        content_col = c;
+        break;
+      }
+    }
   }
   if (content_col && lv_obj_get_child_count(content_col) > 0) {
     lv_obj_t *status_row = lv_obj_get_child(content_col, 0);

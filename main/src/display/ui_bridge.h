@@ -190,7 +190,8 @@ bool ui_bridge_proximidade_set_distancia_sensibilidade(int sensibilidade);
 
 /**
  * @brief Obtém o status do vibracall em formato de string.
- * Exemplo: "Ativo (Vibrando)", "Pronto (Inativo)", "Desativado".
+ * Retorna o estado atual acompanhado da intensidade configurada.
+ * Exemplos: "Ativado (70%)", "Desativado (70%)".
  *
  * @param[out] out_status Buffer para receber a string do status.
  * @param[in] max_len Tamanho do buffer.
@@ -222,6 +223,11 @@ int ui_bridge_vibracall_get_intensidade(void);
 
 /**
  * @brief Ajusta a intensidade de vibração do vibracall via PWM/hardware.
+ *
+ * API Universal compartilhada entre o slider do display ILI9341 e comandos do aplicativo companion Android:
+ * - Persiste a nova intensidade no NVS.
+ * - Atualiza os subjects reativos do LVGL 9 no ui_model.
+ * - Dispara automaticamente um pulso háptico de feedback (50 ms) para confirmação tátil imediata.
  *
  * @param[in] intensidade Valor entre 0 e 100%.
  * @return true se a intensidade foi aplicada com sucesso.

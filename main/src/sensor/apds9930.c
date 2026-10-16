@@ -32,6 +32,9 @@ static const char *TAG = "apds9930";
 
 static i2c_master_dev_handle_t s_dev;
 static volatile bool s_worn = true;
+static volatile bool s_enabled = true;
+static volatile uint16_t s_on_threshold = CONFIG_HEADSET_APDS_ON_THRESHOLD;
+static volatile uint16_t s_off_threshold = CONFIG_HEADSET_APDS_OFF_THRESHOLD;
 
 static esp_err_t write_reg(uint8_t reg, uint8_t val)
 {
@@ -192,14 +195,16 @@ static esp_err_t apds_configure(uint8_t *id)
 
 static void apds_task(void *arg)
 {
-    /* Carrega limiares do actor settings se persistidos, mantendo Kconfig como fallback */
-    uint16_t cfg_th_on = CONFIG_HEADSET_APDS_ON_THRESHOLD;
-    uint16_t cfg_th_off = CONFIG_HEADSET_APDS_OFF_THRESHOLD;
-    settings_get_u16(SETTINGS_KEY_SENS_THRESH_ON, &cfg_th_on, CONFIG_HEADSET_APDS_ON_THRESHOLD);
-    settings_get_u16(SETTINGS_KEY_SENS_THRESH_OFF, &cfg_th_off, CONFIG_HEADSET_APDS_OFF_THRESHOLD);
+    /* Carrega limiares e estado de habilitação do actor settings se persistidos */
+    uint8_t cfg_en = 1;
+    settings_get_u8(SETTINGS_KEY_SENS_PROX_EN, &cfg_en, 1);
+    s_enabled = (cfg_en != 0);
 
-    const int on_delta  = (int)cfg_th_on;
-    const int off_delta = (int)cfg_th_off;
+    uint16_t cfg_th_on = CONFIG_HEADSET_APDS_ON_THRESHOLD;
+    settings_get_u16(SETTINGS_KEY_SENS_THRESH_ON, &cfg_th_on, CONFIG_HEADSET_APDS_ON_THRESHOLD);
+    s_on_threshold = cfg_th_on;
+    s_off_threshold = (cfg_th_on * 6) / 10;
+
     const int need      = (CONFIG_HEADSET_APDS_DEBOUNCE_MS + CONFIG_HEADSET_APDS_POLL_MS - 1) /
                           CONFIG_HEADSET_APDS_POLL_MS;
 
@@ -212,6 +217,17 @@ static void apds_task(void *arg)
     int  base = 0;             /* nivel "sem nada perto" (luz ambiente); so e atualizado com o fone retirado */
 
     for (;;) {
+        /* Se o sensor estiver desabilitado pelo usuário, assume fone no ouvido e dorme */
+        if (!s_enabled) {
+            if (!s_worn) {
+                publish(true);
+            }
+            have_state = false;
+            agree = 0;
+            vTaskDelay(pdMS_TO_TICKS(300));
+            continue;
+        }
+
         if (!ready) {
             uint8_t id = 0;
             esp_err_t err = apds_configure(&id);
@@ -224,8 +240,8 @@ static void apds_task(void *arg)
                 vTaskDelay(pdMS_TO_TICKS(2000));
                 continue;
             }
-            ESP_LOGI(TAG, "APDS-9930 ativo (ID 0x%02X, colocado: base+%d, retirado: base+%d, debounce %d ms)", id,
-                     on_delta, off_delta, CONFIG_HEADSET_APDS_DEBOUNCE_MS);
+            ESP_LOGI(TAG, "APDS-9930 ativo (ID 0x%02X, colocado: base+%u, retirado: base+%u, debounce %d ms)", id,
+                     (unsigned int)s_on_threshold, (unsigned int)s_off_threshold, CONFIG_HEADSET_APDS_DEBOUNCE_MS);
             ready = true;
             fails = 0;
             have_state = false;
@@ -245,8 +261,9 @@ static void apds_task(void *arg)
         }
         fails = 0;
 
-        const int on_thr = base + on_delta;
-        const int off_thr = base + off_delta;
+        /* Limiares dinâmicos com histerese (0.6x) ajustáveis via slider */
+        const int on_thr = base + (int)s_on_threshold;
+        const int off_thr = base + (int)s_off_threshold;
 
         /* Histerese: so "candidata" a mudar quando cruza o limiar do lado oposto */
         bool candidate = state;
@@ -307,4 +324,29 @@ esp_err_t apds9930_start(void)
 bool apds9930_is_worn(void)
 {
     return s_worn;
+}
+
+esp_err_t apds9930_set_threshold(uint16_t on_threshold)
+{
+    if (on_threshold < 5) on_threshold = 5;
+    s_on_threshold = on_threshold;
+    s_off_threshold = (on_threshold * 6) / 10;
+    ESP_LOGI(TAG, "Limiares de proximidade atualizados: ON=%u, OFF=%u (histerese 0.6x)",
+             (unsigned int)s_on_threshold, (unsigned int)s_off_threshold);
+    return ESP_OK;
+}
+
+esp_err_t apds9930_set_enabled(bool enabled)
+{
+    s_enabled = enabled;
+    ESP_LOGI(TAG, "Sensor APDS-9930 %s", enabled ? "HABILITADO" : "DESABILITADO");
+    if (!enabled && !s_worn) {
+        publish(true);
+    }
+    return ESP_OK;
+}
+
+bool apds9930_is_enabled(void)
+{
+    return s_enabled;
 }

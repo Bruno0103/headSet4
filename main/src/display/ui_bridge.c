@@ -20,6 +20,7 @@
 #include "esp_log.h"
 #include "audio.h"
 #include "actuators.h"
+#include "apds9930.h"
 #include "bt_avrcp.h"
 #include "bt_fastpair.h"
 #include "bt_link_mgr.h"
@@ -139,9 +140,9 @@ void ui_bridge_bt_get_status_alternancia(char *out_status, size_t max_len)
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
     if (!snap.bt_auto_switch) {
-        snprintf(out_status, max_len, "Manual (Slot %u)", (unsigned int)(snap.bt_active_slot + 1));
+        snprintf(out_status, max_len, "Manual (dispositivo %u)", (unsigned int)(snap.bt_active_slot + 1));
     } else {
-        snprintf(out_status, max_len, "Ativo (Dispositivo %u)", (unsigned int)(snap.bt_active_slot + 1));
+        snprintf(out_status, max_len, "Automatico (dispositivo %u)", (unsigned int)(snap.bt_active_slot + 1));
     }
 }
 
@@ -177,15 +178,16 @@ void ui_bridge_proximidade_get_status(char *out_status, size_t max_len)
     if (!snap.prox_enabled) {
         snprintf(out_status, max_len, "Desativado");
     } else if (snap.prox_worn) {
-        snprintf(out_status, max_len, "Fone na cabeca");
+        snprintf(out_status, max_len, "No ouvido");
     } else {
-        snprintf(out_status, max_len, "Fone retirado");
+        snprintf(out_status, max_len, "Fora do ouvido");
     }
 }
 
 bool ui_bridge_proximidade_set_ativar(bool enable)
 {
     settings_set_u8(SETTINGS_KEY_SENS_PROX_EN, enable ? 1 : 0);
+    apds9930_set_enabled(enable);
 
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
@@ -218,14 +220,19 @@ int ui_bridge_proximidade_get_distancia_sensibilidade(void)
 
 bool ui_bridge_proximidade_set_distancia_sensibilidade(int sensibilidade)
 {
-    if (sensibilidade < 0 || sensibilidade > 1023) return false;
+    if (sensibilidade < 5 || sensibilidade > 1023) return false;
 
     settings_set_u16(SETTINGS_KEY_SENS_THRESH_ON, (uint16_t)sensibilidade);
+    settings_set_u16(SETTINGS_KEY_SENS_THRESH_OFF, (uint16_t)((sensibilidade * 6) / 10));
+    apds9930_set_threshold((uint16_t)sensibilidade);
+
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
 
     ui_model_update_msg_t msg = {
         .type = UI_UPDATE_PROX_CONFIG,
         .payload.prox_cfg = {
-            .enabled = true,
+            .enabled = snap.prox_enabled,
             .sensitivity = (uint16_t)sensibilidade
         }
     };
@@ -245,11 +252,9 @@ void ui_bridge_vibracall_get_status(char *out_status, size_t max_len)
     ui_model_get_snapshot(&snap);
 
     if (!snap.vibracall_enabled) {
-        snprintf(out_status, max_len, "Desativado");
-    } else if (snap.vibracall_active) {
-        snprintf(out_status, max_len, "Vibrando (%u%%)", (unsigned int)snap.vibracall_intensity);
+        snprintf(out_status, max_len, "Desativado (%u%%)", (unsigned int)snap.vibracall_intensity);
     } else {
-        snprintf(out_status, max_len, "Pronto (%u%%)", (unsigned int)snap.vibracall_intensity);
+        snprintf(out_status, max_len, "Ativado (%u%%)", (unsigned int)snap.vibracall_intensity);
     }
 }
 
@@ -268,6 +273,11 @@ bool ui_bridge_vibracall_set_ativar(bool enable)
         }
     };
     ui_model_post_update(&msg);
+
+    /* Se ativado, confirma com vibração breve de feedback */
+    if (enable && snap.vibracall_intensity > 0) {
+        actuators_vibrate(50, snap.vibracall_intensity);
+    }
     return true;
 }
 
@@ -289,14 +299,26 @@ bool ui_bridge_vibracall_set_intensidade(int intensidade)
 
     settings_set_u8(SETTINGS_KEY_HAPTIC_INTENS, (uint8_t)intensidade);
 
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+
     ui_model_update_msg_t msg = {
         .type = UI_UPDATE_VIBRACALL_CONFIG,
         .payload.vib_cfg = {
-            .enabled = true,
+            .enabled = snap.vibracall_enabled,
             .intensity = (uint8_t)intensidade
         }
     };
     ui_model_post_update(&msg);
+
+    /*
+     * Resposta háptica imediata ao interagir com o slider (seja pelo display ou pelo app android).
+     * O headset devolve uma resposta vibratória de 50 ms com a nova intensidade selecionada.
+     */
+    if (snap.vibracall_enabled && intensidade > 0) {
+        actuators_vibrate(50, (uint8_t)intensidade);
+    }
+
     return true;
 }
 

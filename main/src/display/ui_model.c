@@ -154,9 +154,9 @@ static void update_string_subjects_internal(void)
 
     /* Bluetooth Alternância */
     if (!s_model.bt_auto_switch) {
-        snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "Manual (Slot %u)", (unsigned int)(s_model.bt_active_slot + 1));
+        snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "Manual (dispositivo %u)", (unsigned int)(s_model.bt_active_slot + 1));
     } else {
-        snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "Ativo (Dispositivo %u)", (unsigned int)(s_model.bt_active_slot + 1));
+        snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "Automatico (dispositivo %u)", (unsigned int)(s_model.bt_active_slot + 1));
     }
     lv_subject_copy_string(&g_subj_bt_status_alternancia, s_buf_bt_alternancia);
 
@@ -164,19 +164,19 @@ static void update_string_subjects_internal(void)
     if (!s_model.prox_enabled) {
         snprintf(s_buf_prox_status, sizeof(s_buf_prox_status), "Desativado");
     } else if (s_model.prox_worn) {
-        snprintf(s_buf_prox_status, sizeof(s_buf_prox_status), "Fone no ouvido");
+        snprintf(s_buf_prox_status, sizeof(s_buf_prox_status), "No ouvido");
     } else {
-        snprintf(s_buf_prox_status, sizeof(s_buf_prox_status), "Fone retirado");
+        snprintf(s_buf_prox_status, sizeof(s_buf_prox_status), "Fora do ouvido");
     }
     lv_subject_copy_string(&g_subj_proximidade_status_texto, s_buf_prox_status);
 
     /* Vibracall */
     if (!s_model.vibracall_enabled) {
-        snprintf(s_buf_vibracall_status, sizeof(s_buf_vibracall_status), "Desativado");
+        snprintf(s_buf_vibracall_status, sizeof(s_buf_vibracall_status), "Desativado (%u%%)", (unsigned int)s_model.vibracall_intensity);
     } else if (s_model.vibracall_active) {
         snprintf(s_buf_vibracall_status, sizeof(s_buf_vibracall_status), "Vibrando (%u%%)", (unsigned int)s_model.vibracall_intensity);
     } else {
-        snprintf(s_buf_vibracall_status, sizeof(s_buf_vibracall_status), "Pronto (%u%%)", (unsigned int)s_model.vibracall_intensity);
+        snprintf(s_buf_vibracall_status, sizeof(s_buf_vibracall_status), "Ativado (%u%%)", (unsigned int)s_model.vibracall_intensity);
     }
     lv_subject_copy_string(&g_subj_vibracall_status_texto, s_buf_vibracall_status);
 

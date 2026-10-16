@@ -33,6 +33,7 @@
 #include "hs_events.h"
 #include "settings.h"
 #include "ui_model.h"
+#include "ui_bridge.h"
 
 static const char *TAG = "act_phone_ctl";
 
@@ -280,14 +281,14 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
     }
     /* --- Comandos de Atuadores (Vibracall e Orelhas) --- */
     else if (strcmp(cmd, "set_vibracall") == 0) {
-        cJSON *val = cJSON_GetObjectItem(root, "val");
-        if (val && cJSON_IsNumber(val)) {
-            int v = val->valueint;
-            settings_set_u8(SETTINGS_KEY_HAPTIC_INTENS, (uint8_t)v);
-        }
         cJSON *en = cJSON_GetObjectItem(root, "enable");
         if (en && cJSON_IsBool(en)) {
-            settings_set_u8(SETTINGS_KEY_HAPTIC_ENABLE, cJSON_IsTrue(en) ? 1 : 0);
+            ui_bridge_vibracall_set_ativar(cJSON_IsTrue(en));
+        }
+        cJSON *val = cJSON_GetObjectItem(root, "val");
+        if (val && cJSON_IsNumber(val)) {
+            /* Invoca a mesma API utilizada pelo display, persistindo no NVS e disparando feedback háptico */
+            ui_bridge_vibracall_set_intensidade(val->valueint);
         }
     }
     else if (strcmp(cmd, "trigger_vibrate") == 0 || strcmp(cmd, "notification") == 0) {
@@ -310,19 +311,13 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
             int a = val->valueint;
-            settings_set_u8(SETTINGS_KEY_EARS_ANGLE, (uint8_t)a);
+            ui_bridge_orelhas_set_angulo_maximo(a);
         }
     }
     else if (strcmp(cmd, "set_ears_enable") == 0) {
         cJSON *en = cJSON_GetObjectItem(root, "enable");
         if (en && cJSON_IsBool(en)) {
-            bool e_en = cJSON_IsTrue(en);
-            settings_set_u8(SETTINGS_KEY_EARS_ANGLE, e_en ? 90 : 0);
-            ui_model_update_msg_t umsg = {
-                .type = UI_UPDATE_ORELHAS_CONFIG,
-                .payload.orelhas_cfg = { .enabled = e_en, .max_angle = e_en ? 90 : 0 }
-            };
-            ui_model_post_update(&umsg);
+            ui_bridge_orelhas_set_ativar(cJSON_IsTrue(en));
         }
     }
     /* --- Comandos de Display & Backlight --- */
@@ -330,52 +325,30 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         cJSON *en = cJSON_GetObjectItem(root, "enable");
         if (en && cJSON_IsBool(en)) {
             bool turn_on = cJSON_IsTrue(en);
-            ui_model_update_msg_t umsg = {
-                .type = UI_UPDATE_DISPLAY_CONFIG,
-                .payload.display_cfg = { .on = turn_on, .brightness = turn_on ? 60 : 0, .timeout_sec = 60 }
-            };
-            ui_model_post_update(&umsg);
+            if (turn_on) {
+                ui_bridge_display_set_ativar(true);
+            } else {
+                ui_bridge_display_set_desativar(true);
+            }
         }
     }
     else if (strcmp(cmd, "set_display_timeout") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
-            int to = val->valueint;
-            if (to >= 0 && to <= 600) {
-                settings_set_u16(SETTINGS_KEY_DISP_TIMEOUT, (uint16_t)to);
-                ui_model_update_msg_t umsg = {
-                    .type = UI_UPDATE_DISPLAY_CONFIG,
-                    .payload.display_cfg = { .on = true, .brightness = 60, .timeout_sec = (uint16_t)to }
-                };
-                ui_model_post_update(&umsg);
-            }
+            ui_bridge_display_set_tempo_tela(val->valueint);
         }
     }
     /* --- Comandos do Sensor de Proximidade --- */
     else if (strcmp(cmd, "set_prox_enable") == 0) {
         cJSON *en = cJSON_GetObjectItem(root, "enable");
         if (en && cJSON_IsBool(en)) {
-            bool p_en = cJSON_IsTrue(en);
-            settings_set_u8(SETTINGS_KEY_SENS_PROX_EN, p_en ? 1 : 0);
-            ui_model_update_msg_t umsg = {
-                .type = UI_UPDATE_PROX_CONFIG,
-                .payload.prox_cfg = { .enabled = p_en, .sensitivity = 150 }
-            };
-            ui_model_post_update(&umsg);
+            ui_bridge_proximidade_set_ativar(cJSON_IsTrue(en));
         }
     }
     else if (strcmp(cmd, "set_prox_sensitivity") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
-            int sens = val->valueint;
-            if (sens >= 0 && sens <= 1023) {
-                settings_set_u16(SETTINGS_KEY_SENS_THRESH_ON, (uint16_t)sens);
-                ui_model_update_msg_t umsg = {
-                    .type = UI_UPDATE_PROX_CONFIG,
-                    .payload.prox_cfg = { .enabled = true, .sensitivity = (uint16_t)sens }
-                };
-                ui_model_post_update(&umsg);
-            }
+            ui_bridge_proximidade_set_distancia_sensibilidade(val->valueint);
         }
     }
     /* --- Comandos de Troca Automática e Áudio --- */
