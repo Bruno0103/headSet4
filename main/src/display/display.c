@@ -889,16 +889,14 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
 /**
  * @brief Mapeia e ajusta elementos da tela de Status Geral (screen_status).
  *
- * Substitui com segurança o rótulo provisório de template 'Exemplos · não são leituras reais'
- * por 'Telemetria do Sistema em Tempo Real', confirmando ao usuário que os dados
- * exibidos nos subjects observáveis são leituras de telemetria autênticas do firmware.
+ * Apaga e oculta o rótulo provisório de template 'Exemplos · não são leituras reais',
+ * deixando o layout da tela limpo e focado diretamente nas métricas de telemetria.
  *
  * Blindagem Crítica contra Guru Meditation Error (LoadProhibited):
  * 1. Utiliza get_screen_content_container() para acessar column_0 (child 2 da tela),
  *    evitando capturar erroneamente panel_0 (child 0, barra superior) como ocorria no loop anterior.
  * 2. Aplica validação mandante de tipo com lv_obj_check_type(child, &lv_label_class).
- *    Apenas invoca lv_label_set_text() se o objeto for garantidamente da classe lv_label,
- *    eliminando qualquer risco de de-referência em ponteiros espúrios do heap TLSF.
+ *    Apenas invoca operações de label se o objeto for garantidamente da classe lv_label.
  */
 static void bind_status_controls(lv_obj_t *screen) {
   if (!screen) return;
@@ -913,9 +911,11 @@ static void bind_status_controls(lv_obj_t *screen) {
   for (uint32_t i = 0; i < col_cnt; i++) {
     lv_obj_t *child = lv_obj_get_child(content_col, i);
     if (child && lv_obj_check_type(child, &lv_label_class)) {
-      lv_label_set_text(child, "Telemetria do Sistema em Tempo Real");
-      lv_obj_set_style_text_color(child, lv_color_hex(0x67D5E8), 0);
-      ESP_LOGI(TAG, "Tela Status: subtitulo atualizado para telemetria em tempo real com sucesso");
+      /* Apaga o texto e oculta o widget para desocupar espaço no layout */
+      lv_label_set_text(child, "");
+      lv_obj_set_height(child, 0);
+      lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+      ESP_LOGI(TAG, "Tela Status: rotulo provisorio apagado e ocultado com sucesso");
       break;
     }
   }
