@@ -157,7 +157,7 @@
             style_text_font="font_montserrat_regular_14"
             style_text_color="0x67D5E8" />
         </row>
-        <cont_slider_toque_c value="subject_g_subj_proximidade_sensibilidade" />
+        <cont_slider_toque_e value="subject_g_subj_proximidade_sensibilidade" />
         <!-- lv_slider: no distinct indicator child — indicator inherits the <slider> base accent color -->
         <!-- lv_slider: no knob layer found (named "knob", an ellipse, or a small square handle) — knob inherits the <slider> base color -->
         <row gap="8" width="100%" height="content">

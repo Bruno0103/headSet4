@@ -114,14 +114,17 @@ extern lv_font_t * font_montserrat_regular_12;
 extern lv_font_t * font_montserrat_regular_16;
 extern lv_font_t * font_montserrat_regular_14;
 extern lv_font_t * font_montserrat_regular_20;
-extern lv_font_t * font_montserrat_regular_24;
+extern lv_font_t * font_montserrat_italic_12;
+extern lv_font_t * font_montserrat_italic_14;
+extern lv_font_t * font_montserrat_italic_20;
 
 
 /*----------------
  * Images
  *----------------*/
 
-
+/* Targets: any */
+extern const void * image_image;
 
 /*----------------
  * Subjects
@@ -174,6 +177,7 @@ void ui_init_gen(const char * asset_path);
 #include "components/base/card/card_gen.h"
 #include "components/base/column/column_gen.h"
 #include "components/base/container/container_gen.h"
+#include "components/base/image/image_gen.h"
 #include "components/base/label/label_gen.h"
 #include "components/base/panel/panel_gen.h"
 #include "components/base/row/row_gen.h"
@@ -193,6 +197,7 @@ void ui_init_gen(const char * asset_path);
 #include "screens/screen_display_gen.h"
 #include "screens/screen_galeria_gifs_gen.h"
 #include "screens/screen_galeria_imagens_gen.h"
+#include "screens/screen_main_cover_art_gen.h"
 #include "screens/screen_main_gen.h"
 #include "screens/screen_main_gif_gen.h"
 #include "screens/screen_orelhas_gen.h"

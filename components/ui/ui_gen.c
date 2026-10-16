@@ -61,13 +61,17 @@ lv_font_t * font_montserrat_regular_12;
 lv_font_t * font_montserrat_regular_16;
 lv_font_t * font_montserrat_regular_14;
 lv_font_t * font_montserrat_regular_20;
-lv_font_t * font_montserrat_regular_24;
+lv_font_t * font_montserrat_italic_12;
+lv_font_t * font_montserrat_italic_14;
+lv_font_t * font_montserrat_italic_20;
 
 /*----------------
  * Images
  *----------------*/
 
-
+/* Targets: any */
+const void * image_image = NULL;
+extern const void * image_image_data;
 
 /*----------------
  * Global styles
@@ -158,11 +162,25 @@ void ui_init_gen(const char * asset_path)
             font_montserrat_regular_20 = lv_binfont_create(buf);
 
         }
-        if (!font_montserrat_regular_24) {
-            /* font_montserrat_regular_24 */
-            /* create bin font 'font_montserrat_regular_24' from file */
-            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_regular_24.bin");
-            font_montserrat_regular_24 = lv_binfont_create(buf);
+        if (!font_montserrat_italic_12) {
+            /* font_montserrat_italic_12 */
+            /* create bin font 'font_montserrat_italic_12' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_italic_12.bin");
+            font_montserrat_italic_12 = lv_binfont_create(buf);
+
+        }
+        if (!font_montserrat_italic_14) {
+            /* font_montserrat_italic_14 */
+            /* create bin font 'font_montserrat_italic_14' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_italic_14.bin");
+            font_montserrat_italic_14 = lv_binfont_create(buf);
+
+        }
+        if (!font_montserrat_italic_20) {
+            /* font_montserrat_italic_20 */
+            /* create bin font 'font_montserrat_italic_20' from file */
+            lv_snprintf(buf, 256, "%s%s", asset_path, "fonts/font_montserrat_italic_20.bin");
+            font_montserrat_italic_20 = lv_binfont_create(buf);
 
         }
     }
@@ -172,7 +190,15 @@ void ui_init_gen(const char * asset_path)
      * Images
      *----------------*/
 
-
+    /* Targets: any */
+    #if UI_CHECK_COMPILE_TARGET(UI_TARGET_ALL)
+    if (ui_check_target(UI_TARGET_ALL)) {
+        /* image_image */
+        if (!image_image) {
+            image_image = &image_image_data;
+        }
+    }
+    #endif
 
     /*----------------
      * Global styles
@@ -218,7 +244,7 @@ void ui_init_gen(const char * asset_path)
                            subject_g_subj_bt_nome_1_buf,
                            subject_g_subj_bt_nome_1_prev_buf,
                            UI_SUBJECT_STRING_LENGTH,
-                           "Fone A"
+                           "Dispositivo 1"
                           );
     static char subject_g_subj_bt_nome_2_buf[UI_SUBJECT_STRING_LENGTH];
     static char subject_g_subj_bt_nome_2_prev_buf[UI_SUBJECT_STRING_LENGTH];
@@ -226,7 +252,7 @@ void ui_init_gen(const char * asset_path)
                            subject_g_subj_bt_nome_2_buf,
                            subject_g_subj_bt_nome_2_prev_buf,
                            UI_SUBJECT_STRING_LENGTH,
-                           "Fone B"
+                           "Dispositivo 2"
                           );
     static char subject_g_subj_bt_status_1_buf[UI_SUBJECT_STRING_LENGTH];
     static char subject_g_subj_bt_status_1_prev_buf[UI_SUBJECT_STRING_LENGTH];
@@ -250,7 +276,7 @@ void ui_init_gen(const char * asset_path)
                            subject_g_subj_bt_status_alternancia_buf,
                            subject_g_subj_bt_status_alternancia_prev_buf,
                            UI_SUBJECT_STRING_LENGTH,
-                           "Alternar ativo"
+                           "Alternância: Manual"
                           );
     lv_subject_init_int(&subject_g_subj_display_brilho, 70);
     static char subject_g_subj_display_ligado_buf[UI_SUBJECT_STRING_LENGTH];
@@ -269,7 +295,7 @@ void ui_init_gen(const char * asset_path)
                            subject_g_subj_orelhas_status_texto_buf,
                            subject_g_subj_orelhas_status_texto_prev_buf,
                            UI_SUBJECT_STRING_LENGTH,
-                           "Pronto"
+                           "Desativado"
                           );
     lv_subject_init_int(&subject_g_subj_proximidade_sensibilidade, 80);
     static char subject_g_subj_proximidade_status_texto_buf[UI_SUBJECT_STRING_LENGTH];
@@ -278,7 +304,7 @@ void ui_init_gen(const char * asset_path)
                            subject_g_subj_proximidade_status_texto_buf,
                            subject_g_subj_proximidade_status_texto_prev_buf,
                            UI_SUBJECT_STRING_LENGTH,
-                           "Pronto"
+                           "Desativado"
                           );
     lv_subject_init_int(&subject_g_subj_vibracall_intensidade, 60);
     static char subject_g_subj_vibracall_status_texto_buf[UI_SUBJECT_STRING_LENGTH];
@@ -287,7 +313,7 @@ void ui_init_gen(const char * asset_path)
                            subject_g_subj_vibracall_status_texto_buf,
                            subject_g_subj_vibracall_status_texto_prev_buf,
                            UI_SUBJECT_STRING_LENGTH,
-                           "Pronto"
+                           "Desativado"
                           );
     lv_subject_init_int(&subject_subj_battery_percent, 82);
 
@@ -309,14 +335,18 @@ void ui_init_gen(const char * asset_path)
     check_font(&font_montserrat_regular_16, "font_montserrat_regular_16");
     check_font(&font_montserrat_regular_14, "font_montserrat_regular_14");
     check_font(&font_montserrat_regular_20, "font_montserrat_regular_20");
-    check_font(&font_montserrat_regular_24, "font_montserrat_regular_24");
+    check_font(&font_montserrat_italic_12, "font_montserrat_italic_12");
+    check_font(&font_montserrat_italic_14, "font_montserrat_italic_14");
+    check_font(&font_montserrat_italic_20, "font_montserrat_italic_20");
 
     /* Register fonts */
     lv_xml_register_font(NULL, "font_montserrat_regular_12", font_montserrat_regular_12);
     lv_xml_register_font(NULL, "font_montserrat_regular_16", font_montserrat_regular_16);
     lv_xml_register_font(NULL, "font_montserrat_regular_14", font_montserrat_regular_14);
     lv_xml_register_font(NULL, "font_montserrat_regular_20", font_montserrat_regular_20);
-    lv_xml_register_font(NULL, "font_montserrat_regular_24", font_montserrat_regular_24);
+    lv_xml_register_font(NULL, "font_montserrat_italic_12", font_montserrat_italic_12);
+    lv_xml_register_font(NULL, "font_montserrat_italic_14", font_montserrat_italic_14);
+    lv_xml_register_font(NULL, "font_montserrat_italic_20", font_montserrat_italic_20);
 
     /* Register subjects */
     lv_xml_register_subject(NULL, "subject_g_subj_bateria_tensao_mv", &subject_g_subj_bateria_tensao_mv);
@@ -345,6 +375,7 @@ void ui_init_gen(const char * asset_path)
      * While running in the editor skip this step to update the preview when the XML changes */
 #if defined(LV_USE_XML) && LV_USE_XML && !defined(LV_EDITOR_PREVIEW)
     /* Register images */
+    lv_xml_register_image(NULL, "image_image", image_image);
 #endif
 
 #if !defined(LV_USE_XML) || LV_USE_XML == 0

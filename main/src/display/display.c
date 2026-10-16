@@ -689,6 +689,18 @@ static void bind_bluetooth_controls(lv_obj_t *screen) {
       ESP_LOGI(TAG, "Mapeado controle estrutural: Bluetooth Alternar Slot Ativo");
     }
   }
+
+  /* Cabeçalho da tela: toque no título 'Bluetooth' ativa modo de pareamento manual (Google Fast Pair / Classic) */
+  if (scr_cnt > 1) {
+    lv_obj_t *header_row = lv_obj_get_child(screen, 1);
+    if (header_row && lv_obj_get_child_count(header_row) > 1) {
+      lv_obj_t *title_lbl = lv_obj_get_child(header_row, 1);
+      if (title_lbl) {
+        bind_control_action(title_lbl, UI_ACTION_BT_START_PAIRING);
+        ESP_LOGI(TAG, "Mapeado controle estrutural: Titulo Bluetooth -> Iniciar Modo Pareamento (120 s)");
+      }
+    }
+  }
 }
 
 /**
@@ -774,6 +786,17 @@ static void bind_vibracall_controls(lv_obj_t *screen) {
 
 /**
  * @brief Mapeia os itens interativos das galerias de imagens e GIFs.
+ *
+ * Estrutura determinística do LVGL Pro para screen_galeria_imagens e screen_galeria_gifs:
+ * - the_root:
+ *   - child 0: panel_0 (barra superior BT + BAT)
+ *   - child 1: row_2 (cabeçalho com botão '<' e título)
+ *   - child 2: column_0 (coluna de conteúdo):
+ *     - child 0: row_3 (labels "Principal: —" e "0 / 8")
+ *     - child 1: column_1 (container com os 8 botões button_subtle_0..7)
+ *
+ * Correção crítica: Ignora a row_3 (que possui apenas 2 labels informativos) e busca
+ * o container column_1 que contém a lista dos 8 botões reais de seleção de mídia.
  */
 static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
   lv_obj_t *content_col = NULL;
@@ -791,20 +814,88 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
   if (!content_col) return;
 
   uint32_t col_cnt = lv_obj_get_child_count(content_col);
+  lv_obj_t *items_container = NULL;
+
+  /* Varre os filhos de content_col procurando o container que abriga os 8 botões */
   for (uint32_t i = 0; i < col_cnt; i++) {
-    lv_obj_t *sub_col = lv_obj_get_child(content_col, i);
-    if (sub_col && lv_obj_get_child_count(sub_col) > 1) {
-      uint32_t item_cnt = lv_obj_get_child_count(sub_col);
-      for (uint32_t k = 0; k < item_cnt && k < 10; k++) {
-        lv_obj_t *btn_item = lv_obj_get_child(sub_col, k);
-        if (btn_item) {
-          ui_action_id_t action = is_gif ? (ui_action_id_t)(UI_ACTION_SELECT_GIF_BASE + k)
-                                         : (ui_action_id_t)(UI_ACTION_SELECT_WALLPAPER_BASE + k);
-          bind_control_action(btn_item, action);
-        }
+    lv_obj_t *sub = lv_obj_get_child(content_col, i);
+    if (sub && lv_obj_get_child_count(sub) >= 4) {
+      items_container = sub;
+      break;
+    }
+  }
+
+  /* Fallback estrutural: se não identificado por contagem >= 4, adota child 1 */
+  if (!items_container && col_cnt > 1) {
+    items_container = lv_obj_get_child(content_col, 1);
+  }
+
+  if (items_container) {
+    uint32_t item_cnt = lv_obj_get_child_count(items_container);
+    for (uint32_t k = 0; k < item_cnt && k < 10; k++) {
+      lv_obj_t *btn_item = lv_obj_get_child(items_container, k);
+      if (btn_item) {
+        ui_action_id_t action = is_gif ? (ui_action_id_t)(UI_ACTION_SELECT_GIF_BASE + k)
+                                       : (ui_action_id_t)(UI_ACTION_SELECT_WALLPAPER_BASE + k);
+        bind_control_action(btn_item, action);
       }
-      ESP_LOGI(TAG, "Mapeados controles estruturais para Galeria (%s, %ld itens)",
-               is_gif ? "GIF" : "Imagens", (long)item_cnt);
+    }
+    ESP_LOGI(TAG, "Mapeados controles estruturais para Galeria (%s, %ld itens vinculados)",
+             is_gif ? "GIF" : "Imagens", (long)item_cnt);
+  } else {
+    ESP_LOGW(TAG, "Container de itens da Galeria (%s) nao encontrado", is_gif ? "GIF" : "Imagens");
+  }
+}
+
+/**
+ * @brief Mapeia controles na tela de Cover Art (screen_main_cover_art).
+ *
+ * Estrutura determinística do LVGL Pro:
+ * - the_root:
+ *   - child 0: panel_0 (barra superior)
+ *   - child 1: container_0:
+ *     - child 0: card_0 (card com imagem da capa e labels de artista/música)
+ *     - child 1: button_0 (botão "Apps")
+ *
+ * Vincula o card_0 a UI_ACTION_MEDIA_PLAY_PAUSE para permitir alternar reprodução
+ * ao tocar na capa do álbum.
+ */
+static void bind_main_cover_art_controls(lv_obj_t *screen) {
+  if (!screen) return;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+  for (uint32_t i = 0; i < scr_cnt; i++) {
+    lv_obj_t *c = lv_obj_get_child(screen, i);
+    if (c && lv_obj_get_child_count(c) >= 2) {
+      lv_obj_t *card = lv_obj_get_child(c, 0);
+      if (card) {
+        bind_control_action(card, UI_ACTION_MEDIA_PLAY_PAUSE);
+        ESP_LOGI(TAG, "Mapeado controle estrutural: Cover Art toque na Capa -> Play/Pause AVRCP");
+      }
+      break;
+    }
+  }
+}
+
+/**
+ * @brief Mapeia e ajusta elementos da tela de Status Geral (screen_status).
+ *
+ * Remove o rótulo provisório de template 'Exemplos · não são leituras reais'
+ * substituindo-o por 'Telemetria do Sistema em Tempo Real', confirmando ao usuário
+ * que todos os dados exibidos nos subjects observáveis são leituras autênticas de hardware.
+ */
+static void bind_status_controls(lv_obj_t *screen) {
+  if (!screen) return;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+  for (uint32_t i = 0; i < scr_cnt; i++) {
+    lv_obj_t *c = lv_obj_get_child(screen, i);
+    if (c && lv_obj_get_child_count(c) >= 2) {
+      /* column_0 é a coluna de conteúdo; seu primeiro filho é o label informativo */
+      lv_obj_t *lbl_info = lv_obj_get_child(c, 0);
+      if (lbl_info) {
+        lv_label_set_text(lbl_info, "Telemetria do Sistema em Tempo Real");
+        lv_obj_set_style_text_color(lbl_info, lv_color_hex(0x67D5E8), 0);
+        ESP_LOGI(TAG, "Tela Status: subtitulo atualizado para telemetria em tempo real");
+      }
       break;
     }
   }
@@ -841,6 +932,10 @@ static void bind_screen_controls(lv_obj_t *screen) {
     bind_gallery_controls(screen, false);
   } else if (strstr(name, "galeria_gifs")) {
     bind_gallery_controls(screen, true);
+  } else if (strstr(name, "cover_art")) {
+    bind_main_cover_art_controls(screen);
+  } else if (strstr(name, "status")) {
+    bind_status_controls(screen);
   }
 }
 
@@ -919,10 +1014,6 @@ esp_err_t display_create_app_ui(void) {
       "_binary_font_montserrat_regular_20_bin_start");
   extern const uint8_t font_montserrat_regular_20_bin_end[] asm(
       "_binary_font_montserrat_regular_20_bin_end");
-  extern const uint8_t font_montserrat_regular_24_bin_start[] asm(
-      "_binary_font_montserrat_regular_24_bin_start");
-  extern const uint8_t font_montserrat_regular_24_bin_end[] asm(
-      "_binary_font_montserrat_regular_24_bin_end");
 
   /*
    * Carrega as fontes binárias completas da memória ANTES de ui_init("").
@@ -930,6 +1021,7 @@ esp_err_t display_create_app_ui(void) {
    * previamente as fontes a partir dos buffers embutidos na flash (que possuem
    * todos os glifos com acento), o LVGL utiliza as fontes completas sem falhas
    * de arquivo em disco.
+   * As fontes exportadas pelo LVGL Pro em ui_gen.h são 12, 14, 16 e 20.
    */
   uint32_t sz12 = (uint32_t)(font_montserrat_regular_12_bin_end -
                              font_montserrat_regular_12_bin_start);
@@ -955,17 +1047,10 @@ esp_err_t display_create_app_ui(void) {
     font_montserrat_regular_20 = lv_binfont_create_from_buffer(
         (void *)font_montserrat_regular_20_bin_start, sz20);
   }
-  uint32_t sz24 = (uint32_t)(font_montserrat_regular_24_bin_end -
-                             font_montserrat_regular_24_bin_start);
-  if (!font_montserrat_regular_24 && sz24 > 0) {
-    font_montserrat_regular_24 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_regular_24_bin_start, sz24);
-  }
 
   /* Fallback de seguranca caso o carregamento da memoria falhe */
   bool bin_loaded = (font_montserrat_regular_12 && font_montserrat_regular_14 &&
-                     font_montserrat_regular_16 && font_montserrat_regular_20 &&
-                     font_montserrat_regular_24);
+                     font_montserrat_regular_16 && font_montserrat_regular_20);
   if (!font_montserrat_regular_12)
     font_montserrat_regular_12 = (lv_font_t *)&lv_font_montserrat_12;
   if (!font_montserrat_regular_14)
@@ -974,8 +1059,6 @@ esp_err_t display_create_app_ui(void) {
     font_montserrat_regular_16 = (lv_font_t *)&lv_font_montserrat_16;
   if (!font_montserrat_regular_20)
     font_montserrat_regular_20 = (lv_font_t *)&lv_font_montserrat_20;
-  if (!font_montserrat_regular_24)
-    font_montserrat_regular_24 = (lv_font_t *)&lv_font_montserrat_24;
 
   ESP_LOGI(TAG, "Status do carregamento das fontes: %s (suporte a acentos: %s)",
            bin_loaded ? "Binarias da memoria Flash OK"

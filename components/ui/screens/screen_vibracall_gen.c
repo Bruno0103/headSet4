@@ -135,22 +135,40 @@ lv_obj_t * screen_vibracall_create(void)
         lv_obj_t * row_4 = row_create(column_0, 0, 0, 0, 0, 8, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_set_width(row_4, lv_pct(100));
         lv_obj_set_height(row_4, LV_SIZE_CONTENT);
-        lv_obj_t * tile_0 = tile_create(row_4, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, false);
-        lv_obj_set_style_pad_column(tile_0, 0, 0);
-        lv_obj_set_width(tile_0, 0);
-        lv_obj_set_height(tile_0, 36);
-        lv_obj_set_flex_grow(tile_0, 1);
-        lv_obj_t * label_8 = label_create(tile_0);
+        lv_obj_t * button_1 = button_create(row_4);
+        lv_obj_set_flex_flow(button_1, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_flex_main_place(button_1, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_cross_place(button_1, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_track_place(button_1, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_pad_hor(button_1, 8, 0);
+        lv_obj_set_style_pad_ver(button_1, 0, 0);
+        lv_obj_set_style_pad_column(button_1, 0, 0);
+        lv_obj_set_width(button_1, 0);
+        lv_obj_set_height(button_1, 36);
+        lv_obj_set_flex_grow(button_1, 1);
+        lv_obj_set_style_bg_color(button_1, lv_color_hex(0x252D35), 0);
+        lv_obj_set_style_radius(button_1, 4, 0);
+        lv_obj_set_style_clip_corner(button_1, true, 0);
+        lv_obj_t * label_8 = label_create(button_1);
         lv_label_set_text(label_8, "Ativar");
         lv_obj_set_style_text_font(label_8, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_8, lv_color_hex(0xF2F5F7), 0);
 
-        lv_obj_t * tile_1 = tile_create(row_4, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, false);
-        lv_obj_set_style_pad_column(tile_1, 0, 0);
-        lv_obj_set_width(tile_1, 0);
-        lv_obj_set_height(tile_1, 36);
-        lv_obj_set_flex_grow(tile_1, 1);
-        lv_obj_t * label_9 = label_create(tile_1);
+        lv_obj_t * button_2 = button_create(row_4);
+        lv_obj_set_flex_flow(button_2, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_flex_main_place(button_2, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_cross_place(button_2, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_flex_track_place(button_2, LV_FLEX_ALIGN_CENTER, 0);
+        lv_obj_set_style_pad_hor(button_2, 8, 0);
+        lv_obj_set_style_pad_ver(button_2, 0, 0);
+        lv_obj_set_style_pad_column(button_2, 0, 0);
+        lv_obj_set_width(button_2, 0);
+        lv_obj_set_height(button_2, 36);
+        lv_obj_set_flex_grow(button_2, 1);
+        lv_obj_set_style_bg_color(button_2, lv_color_hex(0x252D35), 0);
+        lv_obj_set_style_radius(button_2, 4, 0);
+        lv_obj_set_style_clip_corner(button_2, true, 0);
+        lv_obj_t * label_9 = label_create(button_2);
         lv_label_set_text(label_9, "Desativar");
         lv_obj_set_style_text_font(label_9, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_9, lv_color_hex(0xF2F5F7), 0);
@@ -182,7 +200,7 @@ lv_obj_t * screen_vibracall_create(void)
         lv_obj_set_style_text_font(label_11, font_montserrat_regular_14, 0);
         lv_obj_set_style_text_color(label_11, lv_color_hex(0x67D5E8), 0);
 
-        cont_slider_toque_b_create(container_0, &subject_g_subj_vibracall_intensidade);
+        cont_slider_toque_d_create(container_0, &subject_g_subj_vibracall_intensidade);
 
         lv_obj_t * container_2 = container_create(container_0);
         lv_obj_set_flex_flow(container_2, LV_FLEX_FLOW_ROW);
@@ -203,13 +221,6 @@ lv_obj_t * screen_vibracall_create(void)
         lv_label_set_text(label_13, "100%");
         lv_obj_set_style_text_font(label_13, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_13, lv_color_hex(0xABB6BF), 0);
-
-        lv_obj_t * label_14 = label_create(column_0);
-        lv_obj_set_width(label_14, lv_pct(100));
-        lv_label_set_text(label_14, "Ajuste da vibração.\nFaixa de intensidade: 0–100%.");
-        lv_obj_set_style_text_font(label_14, font_montserrat_regular_12, 0);
-        lv_obj_set_style_text_line_space(label_14, 4, 0);
-        lv_obj_set_style_text_color(label_14, lv_color_hex(0xABB6BF), 0);
 
         the_root = lv_obj_0;
     }

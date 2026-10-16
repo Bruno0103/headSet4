@@ -162,7 +162,7 @@ lv_obj_t * screen_status_create(void)
         lv_obj_set_width(row_5, lv_pct(100));
         lv_obj_set_height(row_5, 18);
         lv_obj_t * label_11 = label_create(row_5);
-        lv_label_set_text(label_11, "Fone A (1)");
+        lv_label_bind_text(label_11, &subject_g_subj_bt_nome_1, NULL);
         lv_obj_set_style_text_font(label_11, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_11, lv_color_hex(0xABB6BF), 0);
 
@@ -176,9 +176,9 @@ lv_obj_t * screen_status_create(void)
 
         lv_obj_t * row_6 = row_create(column_1, 0, 0, 0, 0, 4, 0, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_width(row_6, lv_pct(100));
-        lv_obj_set_height(row_6, 18);
+        lv_obj_set_height(row_6, LV_SIZE_CONTENT);
         lv_obj_t * label_13 = label_create(row_6);
-        lv_label_set_text(label_13, "Fone B (2)");
+        lv_label_bind_text(label_13, &subject_g_subj_bt_nome_2, NULL);
         lv_obj_set_style_text_font(label_13, font_montserrat_regular_12, 0);
         lv_obj_set_style_text_color(label_13, lv_color_hex(0xABB6BF), 0);
 

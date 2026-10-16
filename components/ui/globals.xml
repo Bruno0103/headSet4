@@ -57,11 +57,11 @@
     <string name="subject_g_subj_display_ligado" value="Ligado" />
     <int name="subject_g_subj_display_timeout_segundos" value="70" />
     <int name="subject_g_subj_orelhas_angulo_maximo" value="90" />
-    <string name="subject_g_subj_orelhas_status_texto" value="Pronto" />
+    <string name="subject_g_subj_orelhas_status_texto" value="Desativado" />
     <int name="subject_g_subj_proximidade_sensibilidade" value="80" />
-    <string name="subject_g_subj_proximidade_status_texto" value="Pronto" />
+    <string name="subject_g_subj_proximidade_status_texto" value="Desativado" />
     <int name="subject_g_subj_vibracall_intensidade" value="60" />
-    <string name="subject_g_subj_vibracall_status_texto" value="Pronto" />
+    <string name="subject_g_subj_vibracall_status_texto" value="Desativado" />
     <int name="subject_subj_battery_percent" value="82" />
 
     <!-- ────────────────── <lvgl-figma-flow end="subjects"/> ─────────────────── -->
@@ -72,19 +72,7 @@
     <!-- ────────────────── <lvgl-figma-flow begin="images"/> ───────────────────
          Regenerated on each export. Add your own entries outside the fence. -->
 
-    <data
-      name="image_cont_midia_imagem"
-      src_path="images/cont_midia_imagem.png"
-      color_format="rgb565a8" />
-    <data name="image_cont_main" src_path="images/cont_main.png" color_format="rgb565a8" />
-    <data
-      name="image_cont_midia_imagem_vec"
-      src_path="images/cont_midia_imagem.png"
-      color_format="rgb565a8" />
-    <data
-      name="image_cont_midia_imagem_vec_6146"
-      src_path="images/cont_midia_imagem.png"
-      color_format="rgb565a8" />
+    <data name="image_image" src_path="images/image.png" color_format="rgb565a8" />
 
     <!-- ─────────────────── <lvgl-figma-flow end="images"/> ──────────────────── -->
     <!-- Add <file> or <data> tags here -->
@@ -143,13 +131,6 @@
       as_file="true"
       src_path="fonts/Montserrat-Italic.ttf"
       range="0x20-0x7F" />
-    <bin
-      name="font_montserrat_regular_24"
-      size="24"
-      bpp="4"
-      as_file="true"
-      src_path="fonts/Montserrat-Regular.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
 
     <!-- ──────────────────── <lvgl-figma-flow end="fonts"/> ──────────────────── -->
     <!-- Add <bin> , <tiny_ttf>, <freetype> tags here -->

@@ -1,10 +1,10 @@
 {
   "id": "61:36",
-  "name": "screen_main",
+  "name": "screen_main_cover_art",
   "pageName": "Page 1",
   "node": {
     "id": "61:36",
-    "name": "screen_main",
+    "name": "screen_main_cover_art",
     "type": "FRAME",
     "visible": true,
     "locked": false,
@@ -1036,7 +1036,7 @@
         "minHeight": null,
         "maxHeight": null,
         "layoutSizingHorizontal": "FILL",
-        "layoutSizingVertical": "FIXED",
+        "layoutSizingVertical": "FILL",
         "relativeTransform": [
           [
             1,
@@ -1122,7 +1122,7 @@
           "counterAxisSizingMode": "FIXED",
           "itemSpacing": 0
         },
-        "layoutGrow": 0,
+        "layoutGrow": 1,
         "layoutAlign": "STRETCH",
         "layoutPositioning": "AUTO",
         "opacity": 1,
@@ -1159,7 +1159,7 @@
         "children": [
           {
             "id": "61:45",
-            "name": "cont_midia_imagem",
+            "name": "cont_midia_cover_art",
             "type": "FRAME",
             "visible": true,
             "locked": false,
@@ -1297,7 +1297,7 @@
             "children": [
               {
                 "id": "61:46",
-                "name": "cont_midia_imagem",
+                "name": "cont_midia_cover_art",
                 "type": "FRAME",
                 "visible": true,
                 "locked": false,
@@ -1431,15 +1431,133 @@
                 "isMask": false,
                 "maskType": "ALPHA",
                 "effects": [],
-                "annotations": {
-                  "widgetType": "lv_image"
-                },
                 "devStatus": null,
-                "children": []
+                "children": [
+                  {
+                    "id": "64:63",
+                    "name": "cover_art",
+                    "type": "RECTANGLE",
+                    "visible": true,
+                    "locked": false,
+                    "width": 200,
+                    "height": 200,
+                    "x": 0,
+                    "y": 0,
+                    "rotation": 0,
+                    "minWidth": null,
+                    "maxWidth": null,
+                    "minHeight": null,
+                    "maxHeight": null,
+                    "layoutSizingHorizontal": "FIXED",
+                    "layoutSizingVertical": "FIXED",
+                    "relativeTransform": [
+                      [
+                        1,
+                        0,
+                        0
+                      ],
+                      [
+                        0,
+                        1,
+                        0
+                      ]
+                    ],
+                    "absoluteTransform": [
+                      [
+                        1,
+                        0,
+                        -381
+                      ],
+                      [
+                        0,
+                        1,
+                        -121
+                      ]
+                    ],
+                    "absoluteBoundingBox": {
+                      "x": -381,
+                      "y": -121,
+                      "width": 200,
+                      "height": 200
+                    },
+                    "absoluteRenderBounds": {
+                      "x": -381,
+                      "y": -121,
+                      "width": 200,
+                      "height": 200
+                    },
+                    "targetAspectRatio": {
+                      "x": 200,
+                      "y": 200
+                    },
+                    "constraints": {
+                      "horizontal": "MIN",
+                      "vertical": "MIN"
+                    },
+                    "fills": [
+                      {
+                        "type": "IMAGE",
+                        "hash": "dff32a36d996befa72ca467422c0ccae42199d86",
+                        "scaleMode": "FILL",
+                        "imageTransform": [
+                          [
+                            1,
+                            0,
+                            0
+                          ],
+                          [
+                            0,
+                            1,
+                            0
+                          ]
+                        ],
+                        "scalingFactor": 0.5,
+                        "rotation": 0,
+                        "filters": {
+                          "exposure": 0,
+                          "contrast": 0,
+                          "saturation": 0,
+                          "temperature": 0,
+                          "tint": 0,
+                          "highlights": 0,
+                          "shadows": 0
+                        },
+                        "opacity": 1,
+                        "blendMode": "NORMAL"
+                      }
+                    ],
+                    "strokes": [],
+                    "strokeWeight": 1,
+                    "strokeAlign": "INSIDE",
+                    "strokeJoin": "MITER",
+                    "strokeCap": "NONE",
+                    "strokeMiterLimit": 4,
+                    "dashPattern": [],
+                    "fillGeometry": [
+                      {
+                        "windingRule": "NONZERO",
+                        "data": "M0 0 L200 0 L200 200 L0 200 L0 0 Z"
+                      }
+                    ],
+                    "cornerRadius": 0,
+                    "cornerSmoothing": 0,
+                    "layoutGrow": 0,
+                    "layoutAlign": "INHERIT",
+                    "layoutPositioning": "AUTO",
+                    "opacity": 1,
+                    "blendMode": "PASS_THROUGH",
+                    "isMask": false,
+                    "maskType": "ALPHA",
+                    "effects": [],
+                    "annotations": {
+                      "widgetType": "lv_image"
+                    }
+                  }
+                ]
               },
               {
                 "id": "61:47",
-                "name": "lbl_midia_tipo",
+                "name": "lbl_music_tipo",
                 "type": "TEXT",
                 "visible": true,
                 "locked": false,
@@ -1566,7 +1684,7 @@
               },
               {
                 "id": "61:48",
-                "name": "lbl_midia_nome",
+                "name": "lbl_music_nome",
                 "type": "TEXT",
                 "visible": true,
                 "locked": false,
@@ -1693,7 +1811,7 @@
               },
               {
                 "id": "61:49",
-                "name": "lbl_midia_artist",
+                "name": "lbl_music_artist",
                 "type": "TEXT",
                 "visible": true,
                 "locked": false,

@@ -22,6 +22,7 @@
 #include "hs_events.h"
 #include "settings.h"
 #include "ui_gen.h"
+#include "display.h"
 
 static const char *TAG = "ui_model";
 
@@ -200,6 +201,12 @@ static void update_string_subjects_internal(void)
     lv_subject_copy_string(&subject_g_subj_orelhas_status_texto, s_buf_orelhas_status);
     lv_subject_set_int(&subject_subj_battery_percent, s_model.battery_percent);
     lv_subject_set_int(&subject_g_subj_bateria_tensao_mv, s_model.battery_mv);
+
+    /* Sincroniza o status textual do display ("Ligado" ou "Desligado") com o subject da tela */
+    lv_subject_copy_string(&subject_g_subj_display_ligado, s_model.display_on ? "Ligado" : "Desligado");
+
+    /* Sincroniza o modo de alternância Bluetooth ("Automática" ou "Manual") para telemetria/status */
+    lv_subject_copy_string(&subject_g_subj_bt_alternancia_ativa, s_model.bt_auto_switch ? "Automática" : "Manual");
 }
 
 void ui_model_sync_ui_gen(void)
@@ -441,7 +448,8 @@ void ui_model_drain_updates(void)
                 needs_string_update = true;
                 break;
 
-            case UI_UPDATE_DISPLAY_CONFIG:
+            case UI_UPDATE_DISPLAY_CONFIG: {
+                bool state_changed = (s_model.display_on != msg.payload.display_cfg.on);
                 s_model.display_on = msg.payload.display_cfg.on;
                 s_model.display_brightness = msg.payload.display_cfg.brightness;
                 s_model.display_timeout_sec = msg.payload.display_cfg.timeout_sec;
@@ -454,7 +462,17 @@ void ui_model_drain_updates(void)
                     lv_subject_set_int(&subject_g_subj_display_brilho, s_model.display_brightness);
                     lv_subject_set_int(&subject_g_subj_display_timeout_segundos, s_model.display_timeout_sec);
                 }
+                /* Se houve alteração intencional de ligar/desligar a tela, aciona hardware */
+                if (state_changed) {
+                    if (s_model.display_on) {
+                        display_backlight_wake();
+                    } else {
+                        display_backlight_sleep();
+                    }
+                }
+                needs_string_update = true;
                 break;
+            }
 
             case UI_UPDATE_AUDIO_STATE:
                 s_model.audio_volume = msg.payload.audio_state.volume;

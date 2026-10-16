@@ -57,8 +57,6 @@ lv_obj_t * cont_slider_toque_d_create(lv_obj_t * parent, lv_subject_t * value)
         lv_obj_set_name_static(slider_0, "cont_slider_toque_d_#");
         lv_obj_set_width(slider_0, 216);
         lv_obj_set_height(slider_0, 12);
-        lv_slider_set_min_value(slider_0, 5);
-        lv_slider_set_max_value(slider_0, 120);
         lv_slider_bind_value(slider_0, value);
 
         lv_obj_add_style(slider_0, &style_base, 0);

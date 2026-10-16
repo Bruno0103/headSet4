@@ -168,7 +168,7 @@
             style_text_font="font_montserrat_regular_14"
             style_text_color="0x67D5E8" />
         </container>
-        <cont_slider_toque_b value="subject_g_subj_vibracall_intensidade" />
+        <cont_slider_toque_d value="subject_g_subj_vibracall_intensidade" />
         <!-- lv_slider: no distinct indicator child — indicator inherits the <slider> base accent color -->
         <!-- lv_slider: no knob layer found (named "knob", an ellipse, or a small square handle) — knob inherits the <slider> base color -->
         <container

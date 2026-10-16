@@ -6,6 +6,7 @@ list(
   ${CMAKE_CURRENT_LIST_DIR}/components/base/card/card_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/column/column_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/container/container_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/components/base/image/image_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/label/label_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/panel/panel_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/base/row/row_gen.c
@@ -20,11 +21,13 @@ list(
   ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_4/tile_4_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile_5/tile_5_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/components/derived/tile/tile_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/images/image_image_data.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_apps_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_bluetooth_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_display_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_galeria_gifs_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_galeria_imagens_gen.c
+  ${CMAKE_CURRENT_LIST_DIR}/screens/screen_main_cover_art_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_main_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_main_gif_gen.c
   ${CMAKE_CURRENT_LIST_DIR}/screens/screen_orelhas_gen.c

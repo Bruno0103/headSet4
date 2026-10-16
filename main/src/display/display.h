@@ -57,8 +57,9 @@
 #define TOUCH_ACTIVE_MIN_Y 16
 #define TOUCH_ACTIVE_MAX_Y 286
 
-/* Inicializa SPI, ILI9341, Touch CST816S e o LVGL base (drivers e buffers).
- * Chame uma unica vez a partir da main.c. */
+/* Inicializa o barramento SPI3 (VSPI nativo), LCD ILI9341 (40 MHz), Touch XPT2046 (1 MHz),
+ * buffers DMA em RAM interna e o motor gráfico LVGL 9 base.
+ * Chame uma única vez a partir da main.c durante o boot do sistema. */
 esp_err_t display_init(void);
 
 /* Inicializa a interface grafica gerada (ui) e carrega a tela screen_main.

@@ -161,7 +161,7 @@
             style_text_font="font_montserrat_regular_14"
             style_text_color="0x67D5E8" />
         </row>
-        <cont_slider_toque_e value="subject_g_subj_display_brilho" />
+        <cont_slider_toque value="subject_g_subj_display_brilho" />
         <!-- lv_slider: no distinct indicator child — indicator inherits the <slider> base accent color -->
         <!-- lv_slider: no knob layer found (named "knob", an ellipse, or a small square handle) — knob inherits the <slider> base color -->
       </container>
@@ -181,7 +181,7 @@
             style_text_font="font_montserrat_regular_14"
             style_text_color="0x67D5E8" />
         </row>
-        <cont_slider_toque_d value="subject_g_subj_display_timeout_segundos" />
+        <cont_slider_toque_b value="subject_g_subj_display_timeout_segundos" />
         <!-- lv_slider: no distinct indicator child — indicator inherits the <slider> base accent color -->
         <!-- lv_slider: no knob layer found (named "knob", an ellipse, or a small square handle) — knob inherits the <slider> base color -->
       </column>
