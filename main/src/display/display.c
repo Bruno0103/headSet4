@@ -621,28 +621,57 @@ static void bind_control_action(lv_obj_t *obj, ui_action_id_t action) {
 }
 
 /**
+ * @brief Obtém o container principal de conteúdo de uma tela de forma determinística e segura.
+ *
+ * Princípio Arquitetural (AGENTS.md §2 e §3.5):
+ * O LVGL Pro gera no HeadSet4 estruturas de tela determinísticas e invariantes:
+ *
+ * 1. Telas Secundárias (screen_bluetooth, screen_display, screen_proximidade, screen_vibracall,
+ *    screen_orelhas, screen_galeria_imagens, screen_galeria_gifs, screen_status, screen_apps, screen_settings):
+ *    - child 0: panel_0 (Barra superior de status com BT e Bateria, 24 px)
+ *    - child 1: row_2 (Cabeçalho de navegação com botão voltar '<' e título, 44 px)
+ *    - child 2: column_0 (Coluna principal de conteúdo e ações da tela, 252 px)
+ *
+ * 2. Telas Principais (screen_main, screen_main_cover_art, screen_main_gif):
+ *    - child 0: panel_0 (Barra superior de status com BT e Bateria, 24 px)
+ *    - child 1: column_0 ou container_0 (Container principal da capa/imagem/GIF e botão Apps)
+ *
+ * Este helper elimina em definitivo loops cegos que buscavam "filhos com contagem >= 2",
+ * os quais colidiam erroneamente com o panel_0 da barra superior gerando acessos inválidos de memória.
+ *
+ * @param screen Ponteiro para a tela ativa (the_root).
+ * @return lv_obj_t* Ponteiro para o contêiner de conteúdo principal ou NULL se inválido.
+ */
+static lv_obj_t *get_screen_content_container(lv_obj_t *screen) {
+  if (!screen) return NULL;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+
+  /* Telas secundárias: barra de status + barra de navegação + coluna de conteúdo */
+  if (scr_cnt >= 3) {
+    return lv_obj_get_child(screen, 2);
+  }
+
+  /* Telas principais: barra de status + container principal */
+  if (scr_cnt == 2) {
+    return lv_obj_get_child(screen, 1);
+  }
+
+  return NULL;
+}
+
+/**
  * @brief Mapeia os botões da tela de Bluetooth usando a estrutura hierárquica gerada.
  *
  * Estrutura determinística do LVGL Pro para screen_bluetooth:
- * - content_col:
- *   - child 0: tile_4 (Slot 1) -> seu child 1 é o card (Botão Desconectar Slot 1)
- *   - child 1: tile_4 (Slot 2) -> seu child 1 é o card (Botão Desconectar Slot 2)
+ * - content_col (child 2 da tela):
+ *   - child 0: tile_5 (Slot 1) -> seu child 1 é o card (Botão Desconectar Slot 1)
+ *   - child 1: tile_5 (Slot 2) -> seu child 1 é o card (Botão Desconectar Slot 2)
  *   - child 2: container (Alternância) -> seu child 1 é o botão de alternar Auto-Switch
  *   - child 3: container (Slot Ativo) -> seu child 1 é o botão de alternar Slot Ativo
  */
 static void bind_bluetooth_controls(lv_obj_t *screen) {
-  lv_obj_t *content_col = NULL;
-  uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  for (uint32_t i = 0; i < scr_cnt; i++) {
-    lv_obj_t *c = lv_obj_get_child(screen, i);
-    if (c && lv_obj_get_child_count(c) >= 3) {
-      content_col = c;
-      break;
-    }
-  }
-  if (!content_col && scr_cnt > 2) {
-    content_col = lv_obj_get_child(screen, 2);
-  }
+  if (!screen) return;
+  lv_obj_t *content_col = get_screen_content_container(screen);
   if (!content_col) {
     ESP_LOGW(TAG, "Coluna de conteudo nao encontrada em screen_bluetooth");
     return;
@@ -691,6 +720,7 @@ static void bind_bluetooth_controls(lv_obj_t *screen) {
   }
 
   /* Cabeçalho da tela: toque no título 'Bluetooth' ativa modo de pareamento manual (Google Fast Pair / Classic) */
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
   if (scr_cnt > 1) {
     lv_obj_t *header_row = lv_obj_get_child(screen, 1);
     if (header_row && lv_obj_get_child_count(header_row) > 1) {
@@ -708,29 +738,14 @@ static void bind_bluetooth_controls(lv_obj_t *screen) {
  *
  * Em todas as telas periféricas (Display, Proximidade, Vibracall, Orelhas), o LVGL Pro
  * gera a coluna principal de conteúdo contendo uma linha de botões de ação (action row)
- * com exatamente 2 tiles lado a lado:
+ * com exatamente 2 botões lado a lado:
  * - child 0 da linha = Botão "Ativar" (True)
  * - child 1 da linha = Botão "Desativar" (False)
  */
 static void bind_toggle_screen_controls(lv_obj_t *screen, ui_action_id_t action_enable,
                                        ui_action_id_t action_disable, const char *screen_name) {
   if (!screen) return;
-  lv_obj_t *content_col = NULL;
-  uint32_t scr_cnt = lv_obj_get_child_count(screen);
-
-  /* A coluna de conteúdo é o child 2 (após a barra superior panel_0 e o cabeçalho row_2) */
-  if (scr_cnt > 2) {
-    content_col = lv_obj_get_child(screen, 2);
-  }
-  if (!content_col) {
-    for (uint32_t i = 0; i < scr_cnt; i++) {
-      lv_obj_t *c = lv_obj_get_child(screen, i);
-      if (c && lv_obj_get_child_count(c) >= 3) {
-        content_col = c;
-        break;
-      }
-    }
-  }
+  lv_obj_t *content_col = get_screen_content_container(screen);
   if (!content_col) {
     ESP_LOGW(TAG, "Coluna de conteudo nao encontrada na tela '%s'", screen_name);
     return;
@@ -773,20 +788,7 @@ static void bind_vibracall_controls(lv_obj_t *screen) {
   bind_toggle_screen_controls(screen, UI_ACTION_VIB_ENABLE, UI_ACTION_VIB_DISABLE, "Vibracall");
 
   /* Mapeia a linha de status inicial (child 0 de content_col) para disparar teste ao toque */
-  lv_obj_t *content_col = NULL;
-  uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  if (scr_cnt > 2) {
-    content_col = lv_obj_get_child(screen, 2);
-  }
-  if (!content_col) {
-    for (uint32_t i = 0; i < scr_cnt; i++) {
-      lv_obj_t *c = lv_obj_get_child(screen, i);
-      if (c && lv_obj_get_child_count(c) >= 3) {
-        content_col = c;
-        break;
-      }
-    }
-  }
+  lv_obj_t *content_col = get_screen_content_container(screen);
   if (content_col && lv_obj_get_child_count(content_col) > 0) {
     lv_obj_t *status_row = lv_obj_get_child(content_col, 0);
     if (status_row) {
@@ -803,27 +805,21 @@ static void bind_vibracall_controls(lv_obj_t *screen) {
  * - the_root:
  *   - child 0: panel_0 (barra superior BT + BAT)
  *   - child 1: row_2 (cabeçalho com botão '<' e título)
- *   - child 2: column_0 (coluna de conteúdo):
+ *   - child 2: column_0 (coluna de conteúdo, obtida via get_screen_content_container):
  *     - child 0: row_3 (labels "Principal: —" e "0 / 8")
  *     - child 1: column_1 (container com os 8 botões button_subtle_0..7)
  *
- * Correção crítica: Ignora a row_3 (que possui apenas 2 labels informativos) e busca
- * o container column_1 que contém a lista dos 8 botões reais de seleção de mídia.
+ * Correção crítica: Utiliza get_screen_content_container() para acessar column_0 diretamente,
+ * ignorando a barra superior panel_0 e a linha row_3 de labels informativos, ligando
+ * exclusivamente o container column_1 que abriga os 8 botões interativos de mídia.
  */
 static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
-  lv_obj_t *content_col = NULL;
-  uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  for (uint32_t i = 0; i < scr_cnt; i++) {
-    lv_obj_t *c = lv_obj_get_child(screen, i);
-    if (c && lv_obj_get_child_count(c) >= 2) {
-      content_col = c;
-      break;
-    }
+  if (!screen) return;
+  lv_obj_t *content_col = get_screen_content_container(screen);
+  if (!content_col) {
+    ESP_LOGW(TAG, "Coluna de conteudo nao encontrada na Galeria (%s)", is_gif ? "GIF" : "Imagens");
+    return;
   }
-  if (!content_col && scr_cnt > 2) {
-    content_col = lv_obj_get_child(screen, 2);
-  }
-  if (!content_col) return;
 
   uint32_t col_cnt = lv_obj_get_child_count(content_col);
   lv_obj_t *items_container = NULL;
@@ -862,10 +858,10 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
 /**
  * @brief Mapeia controles na tela de Cover Art (screen_main_cover_art).
  *
- * Estrutura determinística do LVGL Pro:
+ * Estrutura determinística do LVGL Pro para screen_main_cover_art:
  * - the_root:
- *   - child 0: panel_0 (barra superior)
- *   - child 1: container_0:
+ *   - child 0: panel_0 (barra superior BT + BAT)
+ *   - child 1: container_0 (container principal obtido via get_screen_content_container):
  *     - child 0: card_0 (card com imagem da capa e labels de artista/música)
  *     - child 1: button_0 (botão "Apps")
  *
@@ -874,16 +870,18 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
  */
 static void bind_main_cover_art_controls(lv_obj_t *screen) {
   if (!screen) return;
-  uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  for (uint32_t i = 0; i < scr_cnt; i++) {
-    lv_obj_t *c = lv_obj_get_child(screen, i);
-    if (c && lv_obj_get_child_count(c) >= 2) {
-      lv_obj_t *card = lv_obj_get_child(c, 0);
-      if (card) {
-        bind_control_action(card, UI_ACTION_MEDIA_PLAY_PAUSE);
-        ESP_LOGI(TAG, "Mapeado controle estrutural: Cover Art toque na Capa -> Play/Pause AVRCP");
-      }
-      break;
+  lv_obj_t *content = get_screen_content_container(screen);
+  if (!content) {
+    ESP_LOGW(TAG, "Container de conteudo nao encontrado em screen_main_cover_art");
+    return;
+  }
+
+  /* card_0 é o primeiro filho do container principal de cover art */
+  if (lv_obj_get_child_count(content) > 0) {
+    lv_obj_t *card = lv_obj_get_child(content, 0);
+    if (card) {
+      bind_control_action(card, UI_ACTION_MEDIA_PLAY_PAUSE);
+      ESP_LOGI(TAG, "Mapeado controle estrutural: Cover Art toque na Capa -> Play/Pause AVRCP");
     }
   }
 }
@@ -891,23 +889,33 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
 /**
  * @brief Mapeia e ajusta elementos da tela de Status Geral (screen_status).
  *
- * Remove o rótulo provisório de template 'Exemplos · não são leituras reais'
- * substituindo-o por 'Telemetria do Sistema em Tempo Real', confirmando ao usuário
- * que todos os dados exibidos nos subjects observáveis são leituras autênticas de hardware.
+ * Substitui com segurança o rótulo provisório de template 'Exemplos · não são leituras reais'
+ * por 'Telemetria do Sistema em Tempo Real', confirmando ao usuário que os dados
+ * exibidos nos subjects observáveis são leituras de telemetria autênticas do firmware.
+ *
+ * Blindagem Crítica contra Guru Meditation Error (LoadProhibited):
+ * 1. Utiliza get_screen_content_container() para acessar column_0 (child 2 da tela),
+ *    evitando capturar erroneamente panel_0 (child 0, barra superior) como ocorria no loop anterior.
+ * 2. Aplica validação mandante de tipo com lv_obj_check_type(child, &lv_label_class).
+ *    Apenas invoca lv_label_set_text() se o objeto for garantidamente da classe lv_label,
+ *    eliminando qualquer risco de de-referência em ponteiros espúrios do heap TLSF.
  */
 static void bind_status_controls(lv_obj_t *screen) {
   if (!screen) return;
-  uint32_t scr_cnt = lv_obj_get_child_count(screen);
-  for (uint32_t i = 0; i < scr_cnt; i++) {
-    lv_obj_t *c = lv_obj_get_child(screen, i);
-    if (c && lv_obj_get_child_count(c) >= 2) {
-      /* column_0 é a coluna de conteúdo; seu primeiro filho é o label informativo */
-      lv_obj_t *lbl_info = lv_obj_get_child(c, 0);
-      if (lbl_info) {
-        lv_label_set_text(lbl_info, "Telemetria do Sistema em Tempo Real");
-        lv_obj_set_style_text_color(lbl_info, lv_color_hex(0x67D5E8), 0);
-        ESP_LOGI(TAG, "Tela Status: subtitulo atualizado para telemetria em tempo real");
-      }
+  lv_obj_t *content_col = get_screen_content_container(screen);
+  if (!content_col) {
+    ESP_LOGW(TAG, "Coluna de conteudo nao encontrada em screen_status");
+    return;
+  }
+
+  /* Em screen_status_gen.c, o label informativo 'Exemplos...' é o primeiro filho de column_0 */
+  uint32_t col_cnt = lv_obj_get_child_count(content_col);
+  for (uint32_t i = 0; i < col_cnt; i++) {
+    lv_obj_t *child = lv_obj_get_child(content_col, i);
+    if (child && lv_obj_check_type(child, &lv_label_class)) {
+      lv_label_set_text(child, "Telemetria do Sistema em Tempo Real");
+      lv_obj_set_style_text_color(child, lv_color_hex(0x67D5E8), 0);
+      ESP_LOGI(TAG, "Tela Status: subtitulo atualizado para telemetria em tempo real com sucesso");
       break;
     }
   }

@@ -274,9 +274,18 @@ bool ui_bridge_vibracall_set_ativar(bool enable)
     };
     ui_model_post_update(&msg);
 
-    /* Se ativado, confirma com vibração breve de feedback */
-    if (enable && snap.vibracall_intensity > 0) {
-        actuators_vibrate(50, snap.vibracall_intensity);
+    /*
+     * Ao ativar o vibracall, vibra usando a intensidade definida no slider.
+     * Fornece confirmação tátil clara (250 ms) no nível de potência selecionado.
+     */
+    if (enable) {
+        uint8_t intens = snap.vibracall_intensity;
+        if (intens == 0) {
+            settings_get_u8(SETTINGS_KEY_HAPTIC_INTENS, &intens, 70);
+        }
+        if (intens > 0) {
+            actuators_vibrate(250, intens);
+        }
     }
     return true;
 }
@@ -311,14 +320,7 @@ bool ui_bridge_vibracall_set_intensidade(int intensidade)
     };
     ui_model_post_update(&msg);
 
-    /*
-     * Resposta háptica imediata ao interagir com o slider (seja pelo display ou pelo app android).
-     * O headset devolve uma resposta vibratória de 50 ms com a nova intensidade selecionada.
-     */
-    if (snap.vibracall_enabled && intensidade > 0) {
-        actuators_vibrate(50, (uint8_t)intensidade);
-    }
-
+    /* Retorno de vibração ao interagir com o slider foi removido conforme solicitado pelo usuário */
     return true;
 }
 

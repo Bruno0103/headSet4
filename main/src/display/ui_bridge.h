@@ -200,6 +200,7 @@ void ui_bridge_vibracall_get_status(char *out_status, size_t max_len);
 
 /**
  * @brief Ativa as notificações por vibração do fone.
+ * Ao ativar, emite uma vibração de confirmação utilizando a intensidade configurada no slider.
  *
  * @param[in] enable true para habilitar o módulo de vibração.
  * @return true se a operação teve sucesso.
@@ -227,7 +228,6 @@ int ui_bridge_vibracall_get_intensidade(void);
  * API Universal compartilhada entre o slider do display ILI9341 e comandos do aplicativo companion Android:
  * - Persiste a nova intensidade no NVS.
  * - Atualiza os subjects reativos do LVGL 9 no ui_model.
- * - Dispara automaticamente um pulso háptico de feedback (50 ms) para confirmação tátil imediata.
  *
  * @param[in] intensidade Valor entre 0 e 100%.
  * @return true se a intensidade foi aplicada com sucesso.
