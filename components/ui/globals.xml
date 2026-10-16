@@ -48,11 +48,11 @@
     <int name="subject_g_subj_bateria_tensao_mv" value="3980" />
     <string name="subject_g_subj_bt_active_slot" value="Conectado" />
     <string name="subject_g_subj_bt_alternancia_ativa" value="Manual" />
-    <string name="subject_g_subj_bt_nome_1" value="Fone A" />
-    <string name="subject_g_subj_bt_nome_2" value="Fone B" />
+    <string name="subject_g_subj_bt_nome_1" value="Dispositivo 1" />
+    <string name="subject_g_subj_bt_nome_2" value="Dispositivo 2" />
     <string name="subject_g_subj_bt_status_1" value="Conectado" />
     <string name="subject_g_subj_bt_status_2" value="Desconectado" />
-    <string name="subject_g_subj_bt_status_alternancia" value="Alternar ativo" />
+    <string name="subject_g_subj_bt_status_alternancia" value="Alternância: Manual" />
     <int name="subject_g_subj_display_brilho" value="70" />
     <string name="subject_g_subj_display_ligado" value="Ligado" />
     <int name="subject_g_subj_display_timeout_segundos" value="70" />
@@ -72,7 +72,19 @@
     <!-- ────────────────── <lvgl-figma-flow begin="images"/> ───────────────────
          Regenerated on each export. Add your own entries outside the fence. -->
 
-    <!-- No image assets found -->
+    <data
+      name="image_cont_midia_imagem"
+      src_path="images/cont_midia_imagem.png"
+      color_format="rgb565a8" />
+    <data name="image_cont_main" src_path="images/cont_main.png" color_format="rgb565a8" />
+    <data
+      name="image_cont_midia_imagem_vec"
+      src_path="images/cont_midia_imagem.png"
+      color_format="rgb565a8" />
+    <data
+      name="image_cont_midia_imagem_vec_6146"
+      src_path="images/cont_midia_imagem.png"
+      color_format="rgb565a8" />
 
     <!-- ─────────────────── <lvgl-figma-flow end="images"/> ──────────────────── -->
     <!-- Add <file> or <data> tags here -->
@@ -110,6 +122,27 @@
       as_file="true"
       src_path="fonts/Montserrat-Regular.ttf"
       range="0x20-0x7F, 0xA0-0xFF" />
+    <bin
+      name="font_montserrat_italic_12"
+      size="12"
+      bpp="4"
+      as_file="true"
+      src_path="fonts/Montserrat-Italic.ttf"
+      range="0x20-0x7F, 0xA0-0xFF, 0x2000-0x206F" />
+    <bin
+      name="font_montserrat_italic_14"
+      size="14"
+      bpp="4"
+      as_file="true"
+      src_path="fonts/Montserrat-Italic.ttf"
+      range="0x20-0x7F" />
+    <bin
+      name="font_montserrat_italic_20"
+      size="20"
+      bpp="4"
+      as_file="true"
+      src_path="fonts/Montserrat-Italic.ttf"
+      range="0x20-0x7F" />
     <bin
       name="font_montserrat_regular_24"
       size="24"

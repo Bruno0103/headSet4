@@ -191,12 +191,6 @@
             style_text_color="0xABB6BF" />
         </container>
       </container>
-      <label
-        width="100%"
-        text="Ajuste da vibração.&#10;Faixa de intensidade: 0–100%."
-        style_text_font="font_montserrat_regular_12"
-        style_text_line_space="4"
-        style_text_color="0xABB6BF" />
     </column>
   </view>
 </screen>

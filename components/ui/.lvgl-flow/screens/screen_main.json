@@ -356,6 +356,31 @@
             "isMask": false,
             "maskType": "ALPHA",
             "effects": [],
+            "reactions": [
+              {
+                "trigger": {
+                  "type": "ON_CLICK"
+                },
+                "actions": [
+                  {
+                    "type": "NODE",
+                    "destinationId": "6:1756",
+                    "navigation": "NAVIGATE",
+                    "transition": {
+                      "type": "SLIDE_IN",
+                      "duration": 0.30000001192092896,
+                      "easing": "EASE_OUT",
+                      "easingDetail": {
+                        "type": "EASE_OUT"
+                      },
+                      "direction": "TOP",
+                      "matchLayers": false
+                    },
+                    "resetVideoPosition": false
+                  }
+                ]
+              }
+            ],
             "devStatus": null,
             "children": [
               {

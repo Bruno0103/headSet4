@@ -447,11 +447,19 @@ typedef enum {
   UI_ACTION_PROX_DISABLE,
   UI_ACTION_VIB_ENABLE,
   UI_ACTION_VIB_DISABLE,
+  UI_ACTION_VIB_TEST,
   UI_ACTION_EARS_ENABLE,
   UI_ACTION_EARS_DISABLE,
   UI_ACTION_BT_DISCONNECT_1,
   UI_ACTION_BT_DISCONNECT_2,
   UI_ACTION_BT_TOGGLE_AUTOSWITCH,
+  UI_ACTION_BT_TOGGLE_ACTIVE_SLOT,
+  UI_ACTION_BT_START_PAIRING,
+  UI_ACTION_MEDIA_PLAY_PAUSE,
+  UI_ACTION_MEDIA_NEXT,
+  UI_ACTION_MEDIA_PREV,
+  UI_ACTION_SELECT_WALLPAPER_BASE = 100,
+  UI_ACTION_SELECT_GIF_BASE = 200,
 } ui_action_id_t;
 
 /**
@@ -494,6 +502,16 @@ static void on_action_control_clicked(lv_event_t *e) {
       break;
     }
 
+    case UI_ACTION_BT_TOGGLE_ACTIVE_SLOT:
+      ESP_LOGI(TAG, "Acao: Alternar Slot Ativo Bluetooth");
+      ui_bridge_bt_toggle_active_slot();
+      break;
+
+    case UI_ACTION_BT_START_PAIRING:
+      ESP_LOGI(TAG, "Acao: Iniciar Pareamento Bluetooth (120 s)");
+      ui_bridge_bt_start_pairing();
+      break;
+
     case UI_ACTION_DISP_ENABLE:
       ESP_LOGI(TAG, "Acao: Ativar Display");
       ui_bridge_display_set_ativar(true);
@@ -524,6 +542,11 @@ static void on_action_control_clicked(lv_event_t *e) {
       ui_bridge_vibracall_set_desativar(true);
       break;
 
+    case UI_ACTION_VIB_TEST:
+      ESP_LOGI(TAG, "Acao: Teste de Vibracao Haptica");
+      ui_bridge_vibracall_trigger_test(200, 0);
+      break;
+
     case UI_ACTION_EARS_ENABLE:
       ESP_LOGI(TAG, "Acao: Ativar Orelhas Animatronicas");
       ui_bridge_orelhas_set_ativar(true);
@@ -534,8 +557,33 @@ static void on_action_control_clicked(lv_event_t *e) {
       ui_bridge_orelhas_set_desativar(true);
       break;
 
+    case UI_ACTION_MEDIA_PLAY_PAUSE:
+      ESP_LOGI(TAG, "Acao: Midia Play/Pause via AVRCP");
+      ui_bridge_media_play_pause();
+      break;
+
+    case UI_ACTION_MEDIA_NEXT:
+      ESP_LOGI(TAG, "Acao: Midia Proxima Faixa via AVRCP");
+      ui_bridge_media_next();
+      break;
+
+    case UI_ACTION_MEDIA_PREV:
+      ESP_LOGI(TAG, "Acao: Midia Faixa Anterior via AVRCP");
+      ui_bridge_media_prev();
+      break;
+
     default:
-      ESP_LOGW(TAG, "Acao de controle desconhecida: %d", action);
+      if (action >= UI_ACTION_SELECT_WALLPAPER_BASE && action < UI_ACTION_SELECT_WALLPAPER_BASE + 20) {
+        int idx = (int)(action - UI_ACTION_SELECT_WALLPAPER_BASE);
+        ESP_LOGI(TAG, "Acao: Selecionar Wallpaper Imagem indice %d", idx);
+        ui_bridge_display_set_imagem_principal(idx);
+      } else if (action >= UI_ACTION_SELECT_GIF_BASE && action < UI_ACTION_SELECT_GIF_BASE + 20) {
+        int idx = (int)(action - UI_ACTION_SELECT_GIF_BASE);
+        ESP_LOGI(TAG, "Acao: Selecionar GIF indice %d", idx);
+        ui_bridge_display_set_gif_principal(idx);
+      } else {
+        ESP_LOGW(TAG, "Acao de controle desconhecida: %d", action);
+      }
       break;
   }
 }
@@ -577,9 +625,10 @@ static void bind_control_action(lv_obj_t *obj, ui_action_id_t action) {
  *
  * Estrutura determinística do LVGL Pro para screen_bluetooth:
  * - content_col:
- *   - child 0: tile_5_0 (Slot 1) -> seu child 1 é o card_0 (Botão Desconectar Slot 1)
- *   - child 1: tile_5_1 (Slot 2) -> seu child 1 é o card_1 (Botão Desconectar Slot 2)
- *   - child 2: container_0 (Alternância) -> seu child 1 é o tile_0 (Botão Alternar)
+ *   - child 0: tile_4 (Slot 1) -> seu child 1 é o card (Botão Desconectar Slot 1)
+ *   - child 1: tile_4 (Slot 2) -> seu child 1 é o card (Botão Desconectar Slot 2)
+ *   - child 2: container (Alternância) -> seu child 1 é o botão de alternar Auto-Switch
+ *   - child 3: container (Slot Ativo) -> seu child 1 é o botão de alternar Slot Ativo
  */
 static void bind_bluetooth_controls(lv_obj_t *screen) {
   lv_obj_t *content_col = NULL;
@@ -628,6 +677,16 @@ static void bind_bluetooth_controls(lv_obj_t *screen) {
       lv_obj_t *btn_toggle = lv_obj_get_child(toggle_box, 1);
       bind_control_action(btn_toggle, UI_ACTION_BT_TOGGLE_AUTOSWITCH);
       ESP_LOGI(TAG, "Mapeado controle estrutural: Bluetooth Alternância Auto-Switch");
+    }
+  }
+
+  /* Slot Ativo: child 3 -> child 1 é o botão de alternar slot ativo (select_slot) */
+  if (col_cnt > 3) {
+    lv_obj_t *slot_box = lv_obj_get_child(content_col, 3);
+    if (slot_box && lv_obj_get_child_count(slot_box) > 1) {
+      lv_obj_t *btn_slot = lv_obj_get_child(slot_box, 1);
+      bind_control_action(btn_slot, UI_ACTION_BT_TOGGLE_ACTIVE_SLOT);
+      ESP_LOGI(TAG, "Mapeado controle estrutural: Bluetooth Alternar Slot Ativo");
     }
   }
 }
@@ -686,6 +745,72 @@ static void bind_toggle_screen_controls(lv_obj_t *screen, ui_action_id_t action_
 }
 
 /**
+ * @brief Mapeia os controles da tela de Vibracall (Ativar, Desativar e Toque para Testar).
+ */
+static void bind_vibracall_controls(lv_obj_t *screen) {
+  bind_toggle_screen_controls(screen, UI_ACTION_VIB_ENABLE, UI_ACTION_VIB_DISABLE, "Vibracall");
+
+  /* Mapeia a linha de status inicial (child 0 de content_col) para disparar teste ao toque */
+  lv_obj_t *content_col = NULL;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+  for (uint32_t i = 0; i < scr_cnt; i++) {
+    lv_obj_t *c = lv_obj_get_child(screen, i);
+    if (c && lv_obj_get_child_count(c) >= 2) {
+      content_col = c;
+      break;
+    }
+  }
+  if (!content_col && scr_cnt > 2) {
+    content_col = lv_obj_get_child(screen, 2);
+  }
+  if (content_col && lv_obj_get_child_count(content_col) > 0) {
+    lv_obj_t *status_row = lv_obj_get_child(content_col, 0);
+    if (status_row) {
+      bind_control_action(status_row, UI_ACTION_VIB_TEST);
+      ESP_LOGI(TAG, "Mapeado controle estrutural: Vibracall Toque no Status para Teste Háptico");
+    }
+  }
+}
+
+/**
+ * @brief Mapeia os itens interativos das galerias de imagens e GIFs.
+ */
+static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
+  lv_obj_t *content_col = NULL;
+  uint32_t scr_cnt = lv_obj_get_child_count(screen);
+  for (uint32_t i = 0; i < scr_cnt; i++) {
+    lv_obj_t *c = lv_obj_get_child(screen, i);
+    if (c && lv_obj_get_child_count(c) >= 2) {
+      content_col = c;
+      break;
+    }
+  }
+  if (!content_col && scr_cnt > 2) {
+    content_col = lv_obj_get_child(screen, 2);
+  }
+  if (!content_col) return;
+
+  uint32_t col_cnt = lv_obj_get_child_count(content_col);
+  for (uint32_t i = 0; i < col_cnt; i++) {
+    lv_obj_t *sub_col = lv_obj_get_child(content_col, i);
+    if (sub_col && lv_obj_get_child_count(sub_col) > 1) {
+      uint32_t item_cnt = lv_obj_get_child_count(sub_col);
+      for (uint32_t k = 0; k < item_cnt && k < 10; k++) {
+        lv_obj_t *btn_item = lv_obj_get_child(sub_col, k);
+        if (btn_item) {
+          ui_action_id_t action = is_gif ? (ui_action_id_t)(UI_ACTION_SELECT_GIF_BASE + k)
+                                         : (ui_action_id_t)(UI_ACTION_SELECT_WALLPAPER_BASE + k);
+          bind_control_action(btn_item, action);
+        }
+      }
+      ESP_LOGI(TAG, "Mapeados controles estruturais para Galeria (%s, %ld itens)",
+               is_gif ? "GIF" : "Imagens", (long)item_cnt);
+      break;
+    }
+  }
+}
+
+/**
  * @brief Identifica a tela carregada pelo seu identificador estático e vincula seus controles.
  *
  * Utiliza lv_obj_get_name(screen) ("screen_bluetooth_#", "screen_display_#", etc.)
@@ -709,9 +834,13 @@ static void bind_screen_controls(lv_obj_t *screen) {
   } else if (strstr(name, "proximidade")) {
     bind_toggle_screen_controls(screen, UI_ACTION_PROX_ENABLE, UI_ACTION_PROX_DISABLE, "Proximidade");
   } else if (strstr(name, "vibracall")) {
-    bind_toggle_screen_controls(screen, UI_ACTION_VIB_ENABLE, UI_ACTION_VIB_DISABLE, "Vibracall");
+    bind_vibracall_controls(screen);
   } else if (strstr(name, "orelhas")) {
     bind_toggle_screen_controls(screen, UI_ACTION_EARS_ENABLE, UI_ACTION_EARS_DISABLE, "Orelhas");
+  } else if (strstr(name, "galeria_imagens")) {
+    bind_gallery_controls(screen, false);
+  } else if (strstr(name, "galeria_gifs")) {
+    bind_gallery_controls(screen, true);
   }
 }
 

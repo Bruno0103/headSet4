@@ -427,6 +427,143 @@ int ui_bridge_bateria_get_status_porcentagem(void);
  */
 int ui_bridge_bateria_get_status_tencao(void);
 
+/* ============================================================================
+ * 7. ÁUDIO, CODEC E MÍDIA (AVRCP / CODEC WM8960)
+ * ============================================================================
+ */
+
+/**
+ * @brief Alterna entre Play e Pause da faixa multimídia via protocolo Bluetooth AVRCP.
+ * Despacha comando assíncrono para a pilha de Bluetooth sem bloquear a task do LVGL.
+ *
+ * @return true se o comando foi aceito e despachado.
+ */
+bool ui_bridge_media_play_pause(void);
+
+/**
+ * @brief Avança para a próxima música via Bluetooth AVRCP Passthrough (Forward).
+ *
+ * @return true se o comando foi despachado com sucesso.
+ */
+bool ui_bridge_media_next(void);
+
+/**
+ * @brief Retorna para a música anterior via Bluetooth AVRCP Passthrough (Backward).
+ *
+ * @return true se o comando foi despachado com sucesso.
+ */
+bool ui_bridge_media_prev(void);
+
+/**
+ * @brief Ajusta o volume master do codec de hardware WM8960 (0 a 100%).
+ * Atualiza o hardware de áudio, salva nas configurações NVS com debounce e notifica o modelo reativo.
+ *
+ * @param[in] volume Valor linear perceptual entre 0 e 100%.
+ * @return true se o comando foi aceito e enfileirado para o ator de áudio.
+ */
+bool ui_bridge_audio_set_volume(uint8_t volume);
+
+/**
+ * @brief Obtém o volume master atual gravado no modelo de dados (0 a 100%).
+ *
+ * @return uint8_t Volume atual.
+ */
+uint8_t ui_bridge_audio_get_volume(void);
+
+/**
+ * @brief Muta ou desmuta a saída estéreo de áudio do headset.
+ *
+ * @param[in] mute true para mutar, false para restaurar o som.
+ * @return true se a operação teve sucesso.
+ */
+bool ui_bridge_audio_set_mute(bool mute);
+
+/**
+ * @brief Retorna se o áudio está mutado no momento.
+ *
+ * @return true se mutado, false caso contrário.
+ */
+bool ui_bridge_audio_get_mute(void);
+
+/**
+ * @brief Aplica um preset pré-definido de equalizador de hardware do codec WM8960.
+ *
+ * @param[in] preset_id 0=Flat, 1=Bass Boost, 2=Vocal Boost, 3=Treble Boost.
+ * @return true se o preset foi aplicado com sucesso.
+ */
+bool ui_bridge_audio_set_eq_preset(uint8_t preset_id);
+
+/**
+ * @brief Obtém o preset de equalizador atualmente ativo.
+ *
+ * @return uint8_t ID do preset ativo (0 a 3, ou 0xFF para customizado).
+ */
+uint8_t ui_bridge_audio_get_eq_preset(void);
+
+/**
+ * @brief Ajusta os ganhos das 5 bandas individuais do equalizador de hardware.
+ *
+ * @param[in] gains_db Vetor de 5 posições com valores entre -12 dB e +12 dB.
+ * @return true se os ganhos foram validados e enviados ao codec.
+ */
+bool ui_bridge_audio_set_eq_gains(const int8_t gains_db[5]);
+
+/* ============================================================================
+ * 8. EXTENSÕES DE BLUETOOTH MULTIPONTO & FAST PAIR
+ * ============================================================================
+ */
+
+/**
+ * @brief Seleciona explicitamente qual slot Bluetooth será o receptor ativo de áudio.
+ *
+ * @param[in] slot 0 para Dispositivo 1, 1 para Dispositivo 2.
+ * @return true se o comando foi despachado para o act_bt_link.
+ */
+bool ui_bridge_bt_select_slot(uint8_t slot);
+
+/**
+ * @brief Alterna o slot ativo entre 0 e 1 de forma circular (toggle).
+ * Lê o snapshot do modelo e inverte o slot atual.
+ *
+ * @return true se a alternância foi despachada com sucesso.
+ */
+bool ui_bridge_bt_toggle_active_slot(void);
+
+/**
+ * @brief Abre o modo de pareamento manual Bluetooth Classic e BLE por 120 segundos.
+ * Permite conexão de novos smartphones, computadores ou ativação via Google Fast Pair.
+ *
+ * @return true se o modo de pareamento foi iniciado.
+ */
+bool ui_bridge_bt_start_pairing(void);
+
+/**
+ * @brief Dispara pulso de teste no motor de vibração háptico (Vibracall no GPIO 15).
+ * Útil para feedback de toque, notificação remota de smartphone ou calibração de intensidade.
+ *
+ * @param[in] duration_ms Duração em milissegundos (ex: 200 ms).
+ * @param[in] intensity Intensidade de 0 a 100% (se 0, usa a intensidade configurada).
+ * @return true se o pulso foi disparado com sucesso.
+ */
+bool ui_bridge_vibracall_trigger_test(uint16_t duration_ms, uint8_t intensity);
+
+/**
+ * @brief Consulta a string hexadecimal do Google Fast Pair Model ID (3 bytes / 6 chars hex).
+ *
+ * @param[out] out_hex Buffer de destino para a string hex (ex: "F52A3B").
+ * @param[in] max_len Tamanho máximo do buffer de destino (mínimo 7 bytes).
+ * @return true se consultado com sucesso.
+ */
+bool ui_bridge_fastpair_get_model_id(char *out_hex, size_t max_len);
+
+/**
+ * @brief Atualiza o Google Fast Pair Model ID no NVS e reinicia o Advertising dinâmico.
+ *
+ * @param[in] hex_str String hexadecimal com exatamente 6 dígitos hexadecimais (ex: "F52A3B").
+ * @return true se atualizado e gravado com sucesso.
+ */
+bool ui_bridge_fastpair_set_model_id(const char *hex_str);
+
 #ifdef __cplusplus
 }
 #endif

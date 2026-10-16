@@ -19,6 +19,9 @@
 
 #include "esp_log.h"
 #include "audio.h"
+#include "actuators.h"
+#include "bt_avrcp.h"
+#include "bt_fastpair.h"
 #include "bt_link_mgr.h"
 #include "hs_actor.h"
 #include "hs_cmds.h"
@@ -577,4 +580,234 @@ int ui_bridge_bateria_get_status_tencao(void)
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
     return snap.battery_mv;
+}
+
+/* ============================================================================
+ * 7. ÁUDIO, CODEC E MÍDIA (AVRCP / CODEC WM8960)
+ * ============================================================================
+ */
+
+bool ui_bridge_media_play_pause(void)
+{
+    /* Despacho assíncrono via Bluetooth AVRCP */
+    ESP_LOGI(TAG, "Comando de mídia acionado: Play/Pause via AVRCP");
+    /* Alterna play/pause */
+    esp_err_t err = bt_avrcp_send_play();
+    return (err == ESP_OK);
+}
+
+bool ui_bridge_media_next(void)
+{
+    ESP_LOGI(TAG, "Comando de mídia acionado: Próxima Faixa (Forward) via AVRCP");
+    esp_err_t err = bt_avrcp_send_next();
+    return (err == ESP_OK);
+}
+
+bool ui_bridge_media_prev(void)
+{
+    ESP_LOGI(TAG, "Comando de mídia acionado: Faixa Anterior (Backward) via AVRCP");
+    esp_err_t err = bt_avrcp_send_prev();
+    return (err == ESP_OK);
+}
+
+bool ui_bridge_audio_set_volume(uint8_t volume)
+{
+    if (volume > 100) volume = 100;
+
+    /* Envia comando assíncrono para o ator de áudio configurar o ganho do codec WM8960 */
+    audio_cmd_set_volume_send(volume);
+
+    /* Persiste configuração no NVS com proteção de coalescência */
+    settings_set_u8(SETTINGS_KEY_VOL_SLOT0, volume);
+
+    /* Notifica o modelo reativo de UI */
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+
+    ui_model_update_msg_t msg = {
+        .type = UI_UPDATE_AUDIO_STATE,
+        .payload.audio_state = {
+            .volume = volume,
+            .muted = snap.audio_muted,
+            .eq_preset = snap.audio_eq_preset,
+        }
+    };
+    ui_model_post_update(&msg);
+    return true;
+}
+
+uint8_t ui_bridge_audio_get_volume(void)
+{
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+    return snap.audio_volume;
+}
+
+bool ui_bridge_audio_set_mute(bool mute)
+{
+    audio_cmd_set_mute_send(mute);
+
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+
+    ui_model_update_msg_t msg = {
+        .type = UI_UPDATE_AUDIO_STATE,
+        .payload.audio_state = {
+            .volume = snap.audio_volume,
+            .muted = mute,
+            .eq_preset = snap.audio_eq_preset,
+        }
+    };
+    ui_model_post_update(&msg);
+    return true;
+}
+
+bool ui_bridge_audio_get_mute(void)
+{
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+    return snap.audio_muted;
+}
+
+bool ui_bridge_audio_set_eq_preset(uint8_t preset_id)
+{
+    if (preset_id > 3 && preset_id != 0xFF) return false;
+
+    /* Aplica o preset de EQ no hardware codec */
+    audio_cmd_set_eq_send(preset_id, NULL);
+
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+
+    ui_model_update_msg_t msg = {
+        .type = UI_UPDATE_AUDIO_STATE,
+        .payload.audio_state = {
+            .volume = snap.audio_volume,
+            .muted = snap.audio_muted,
+            .eq_preset = preset_id,
+        }
+    };
+    ui_model_post_update(&msg);
+    return true;
+}
+
+uint8_t ui_bridge_audio_get_eq_preset(void)
+{
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+    return snap.audio_eq_preset;
+}
+
+bool ui_bridge_audio_set_eq_gains(const int8_t gains_db[5])
+{
+    if (!gains_db) return false;
+
+    /* Aplica as 5 bandas customizadas */
+    audio_cmd_set_eq_send(0xFF, gains_db);
+
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+
+    ui_model_update_msg_t msg = {
+        .type = UI_UPDATE_AUDIO_STATE,
+        .payload.audio_state = {
+            .volume = snap.audio_volume,
+            .muted = snap.audio_muted,
+            .eq_preset = 0xFF,
+        }
+    };
+    ui_model_post_update(&msg);
+    return true;
+}
+
+/* ============================================================================
+ * 8. EXTENSÕES DE BLUETOOTH MULTIPONTO & FAST PAIR
+ * ============================================================================
+ */
+
+bool ui_bridge_bt_select_slot(uint8_t slot)
+{
+    if (slot > 1) return false;
+
+    hs_actor_t *bt_act = bt_link_actor_get();
+    if (bt_act) {
+        bt_cmd_select_slot_t cmd = { .slot = slot };
+        esp_err_t err = hs_actor_send(bt_act, BT_CMD_SELECT_SLOT, &cmd, sizeof(cmd), pdMS_TO_TICKS(50));
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Slot Bluetooth %u selecionado com sucesso via Bridge", slot);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ui_bridge_bt_toggle_active_slot(void)
+{
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+    uint8_t next_slot = (snap.bt_active_slot == 0) ? 1 : 0;
+    return ui_bridge_bt_select_slot(next_slot);
+}
+
+bool ui_bridge_bt_start_pairing(void)
+{
+    hs_actor_t *bt_act = bt_link_actor_get();
+    if (bt_act) {
+        bt_cmd_start_pairing_t cmd = { .duration_sec = 120 };
+        esp_err_t err = hs_actor_send(bt_act, BT_CMD_START_PAIRING, &cmd, sizeof(cmd), pdMS_TO_TICKS(50));
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Modo de pareamento iniciado (120 s) via Bridge");
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ui_bridge_vibracall_trigger_test(uint16_t duration_ms, uint8_t intensity)
+{
+    if (duration_ms == 0) duration_ms = 200;
+    if (intensity == 0) {
+        ui_model_data_t snap;
+        ui_model_get_snapshot(&snap);
+        intensity = snap.vibracall_intensity > 0 ? snap.vibracall_intensity : 80;
+    }
+    ESP_LOGI(TAG, "Disparando teste de vibracao: %u ms com intensidade %u%%", duration_ms, intensity);
+    actuators_vibrate(duration_ms, intensity);
+    return true;
+}
+
+bool ui_bridge_fastpair_get_model_id(char *out_hex, size_t max_len)
+{
+    if (!out_hex || max_len < 7) return false;
+    uint8_t mid[3] = {0};
+    if (bt_fastpair_get_model_id(mid) == ESP_OK) {
+        snprintf(out_hex, max_len, "%02X%02X%02X", mid[0], mid[1], mid[2]);
+        return true;
+    }
+    return false;
+}
+
+bool ui_bridge_fastpair_set_model_id(const char *hex_str)
+{
+    if (!hex_str) return false;
+    const char *s = hex_str;
+    if (strncmp(s, "0x", 2) == 0 || strncmp(s, "0X", 2) == 0) {
+        s += 2;
+    }
+    if (strlen(s) != 6) return false;
+
+    uint8_t new_id[3] = {0};
+    char byte_str[3] = {0};
+    for (int i = 0; i < 3; i++) {
+        byte_str[0] = s[i * 2];
+        byte_str[1] = s[i * 2 + 1];
+        byte_str[2] = '\0';
+        char *endptr = NULL;
+        long val = strtol(byte_str, &endptr, 16);
+        if (endptr == byte_str) return false;
+        new_id[i] = (uint8_t)val;
+    }
+
+    esp_err_t err = bt_fastpair_set_model_id(new_id);
+    return (err == ESP_OK);
 }

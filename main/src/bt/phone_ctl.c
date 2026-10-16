@@ -24,6 +24,7 @@
 
 #include "actuators.h"
 #include "audio.h"
+#include "bt_avrcp.h"
 #include "bt_ctl_service.h"
 #include "bt_fastpair.h"
 #include "bt_link_mgr.h"
@@ -470,6 +471,58 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                          "{\"status\":\"error\",\"cmd\":\"set_model_id\",\"reason\":\"len_not_6\"}");
             }
         }
+    }
+    /* --- Comandos de Controle de Transporte Multimídia (AVRCP) --- */
+    else if (strcmp(cmd, "media_play_pause") == 0) {
+        ESP_LOGI(TAG, "Comando BLE: Play/Pause");
+        bt_avrcp_send_play();
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
+    }
+    else if (strcmp(cmd, "media_play") == 0) {
+        ESP_LOGI(TAG, "Comando BLE: Play");
+        bt_avrcp_send_play();
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
+    }
+    else if (strcmp(cmd, "media_pause") == 0) {
+        ESP_LOGI(TAG, "Comando BLE: Pause");
+        bt_avrcp_send_pause();
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
+    }
+    else if (strcmp(cmd, "media_next") == 0) {
+        ESP_LOGI(TAG, "Comando BLE: Next Track");
+        bt_avrcp_send_next();
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
+    }
+    else if (strcmp(cmd, "media_prev") == 0) {
+        ESP_LOGI(TAG, "Comando BLE: Previous Track");
+        bt_avrcp_send_prev();
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
+    }
+    /* --- Comandos de Equalizador Paramétrico (Codec WM8960) --- */
+    else if (strcmp(cmd, "set_eq_preset") == 0) {
+        cJSON *p_item = cJSON_GetObjectItem(root, "preset");
+        if (!p_item) p_item = cJSON_GetObjectItem(root, "val");
+        if (p_item && cJSON_IsNumber(p_item)) {
+            uint8_t preset = (uint8_t)p_item->valueint;
+            audio_cmd_set_eq_send(preset, NULL);
+            snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\",\"preset\":%u}", cmd, preset);
+        }
+    }
+    else if (strcmp(cmd, "set_eq_gains") == 0) {
+        cJSON *gains_arr = cJSON_GetObjectItem(root, "gains");
+        if (gains_arr && cJSON_IsArray(gains_arr) && cJSON_GetArraySize(gains_arr) == 5) {
+            int8_t gains[5];
+            for (int i = 0; i < 5; i++) {
+                cJSON *g = cJSON_GetArrayItem(gains_arr, i);
+                gains[i] = g ? (int8_t)g->valueint : 0;
+            }
+            audio_cmd_set_eq_send(0xFF, gains);
+            snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
+        }
+    }
+    /* --- Comandos de Consulta Rápida & Diagnóstico --- */
+    else if (strcmp(cmd, "ping") == 0) {
+        snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"ping\",\"pong\":true}");
     }
     else {
         snprintf(resp_buf, sizeof(resp_buf), "{\"error\":\"unknown_cmd\",\"cmd\":\"%s\"}", cmd);

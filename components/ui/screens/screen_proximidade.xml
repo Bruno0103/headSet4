@@ -175,12 +175,6 @@
             style_text_color="0xABB6BF" />
         </row>
       </column>
-      <label
-        width="100%"
-        text="Faixa e unidade a confirmar.&#10;10–200 é apenas ilustrativo."
-        style_text_font="font_montserrat_regular_12"
-        style_text_line_space="4"
-        style_text_color="0xABB6BF" />
     </column>
   </view>
 </screen>

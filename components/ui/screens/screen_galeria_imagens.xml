@@ -21,21 +21,18 @@
       height="24"
       style_bg_color="0x1A2026">
       <row gap="4" cross_align="center" grow="1" width="0" height="content">
-        <label text="BT" style_text_font="font_montserrat_regular_12" style_text_color="0x67D5E8" />
+        <label text="BT" style_text_font="font_montserrat_italic_12" style_text_color="0x67D5E8" />
         <label
           bind_text="subject_g_subj_bt_active_slot"
-          style_text_font="font_montserrat_regular_12"
+          style_text_font="font_montserrat_italic_12"
           style_text_color="0x67D5E8" />
       </row>
       <row gap="4" cross_align="center" width="content" height="content">
-        <label
-          text="BAT"
-          style_text_font="font_montserrat_regular_12"
-          style_text_color="0xABB6BF" />
+        <label text="BAT" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         <label
           bind_text="subject_subj_battery_percent"
           bind_text-fmt="%d%%"
-          style_text_font="font_montserrat_regular_12"
+          style_text_font="font_montserrat_italic_12"
           style_text_color="0xF2F5F7" />
       </row>
     </panel>
@@ -64,7 +61,7 @@
         style_clip_corner="true">
         <label
           text="&lt;"
-          style_text_font="font_montserrat_regular_14"
+          style_text_font="font_montserrat_italic_14"
           style_text_color="0xF2F5F7" />
         <screen_create_event
           trigger="clicked"
@@ -76,7 +73,7 @@
         width="0"
         flex_grow="1"
         text="Imagens"
-        style_text_font="font_montserrat_regular_20"
+        style_text_font="font_montserrat_italic_20"
         style_text_color="0xF2F5F7" />
     </row>
 
@@ -94,12 +91,12 @@
           height="16"
           flex_grow="1"
           text="Principal: —"
-          style_text_font="font_montserrat_regular_12"
+          style_text_font="font_montserrat_italic_12"
           style_text_color="0xABB6BF" />
         <label
           height="16"
           text="0 / 8"
-          style_text_font="font_montserrat_regular_12"
+          style_text_font="font_montserrat_italic_12"
           style_text_color="0xABB6BF" />
       </row>
       <column width="100%" height="content">
@@ -119,12 +116,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 0 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
         <button_subtle
           flex_flow="row"
@@ -142,12 +136,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 1 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
         <button_subtle
           flex_flow="row"
@@ -165,12 +156,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 2 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
         <button_subtle
           flex_flow="row"
@@ -188,12 +176,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 3 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
         <button_subtle
           flex_flow="row"
@@ -211,12 +196,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 4 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
         <button_subtle
           flex_flow="row"
@@ -234,12 +216,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 5 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
         <button_subtle
           flex_flow="row"
@@ -257,35 +236,9 @@
             width="0"
             flex_grow="1"
             text="Imagem 6 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
+            style_text_font="font_montserrat_italic_12"
             style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
-        </button_subtle>
-        <button_subtle
-          flex_flow="row"
-          style_flex_cross_place="center"
-          style_flex_track_place="center"
-          style_pad_hor="8"
-          style_pad_ver="0"
-          style_pad_column="8"
-          width="100%"
-          height="28"
-          style_border_color="0x39444E"
-          style_border_width="1"
-          style_border_side="bottom">
-          <label
-            width="0"
-            flex_grow="1"
-            text="Imagem 7 · sem recurso"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
-          <label
-            text="—"
-            style_text_font="font_montserrat_regular_12"
-            style_text_color="0xABB6BF" />
+          <label text="—" style_text_font="font_montserrat_italic_12" style_text_color="0xABB6BF" />
         </button_subtle>
       </column>
     </column>
