@@ -65,6 +65,12 @@ static ui_model_data_t s_model = {
     .audio_volume = 70,
     .audio_muted = false,
     .audio_eq_preset = 0,
+
+    .track_title = "Nome da musica",
+    .track_artist = "Artista",
+    .track_album = "Album / Playlist",
+    .has_cover_art = false,
+    .cover_art_dsc = NULL,
 };
 
 /* Subjects reativos do LVGL 9 */
@@ -485,6 +491,25 @@ void ui_model_drain_updates(void)
                 }
                 break;
 
+            case UI_UPDATE_COVER_ART:
+                s_model.has_cover_art = (msg.payload.cover_art.dsc != NULL);
+                s_model.cover_art_dsc = msg.payload.cover_art.dsc;
+                display_update_cover_art(msg.payload.cover_art.dsc);
+                break;
+
+            case UI_UPDATE_TRACK_METADATA:
+                if (strlen(msg.payload.track_meta.title) > 0) {
+                    strncpy(s_model.track_title, msg.payload.track_meta.title, sizeof(s_model.track_title) - 1);
+                }
+                if (strlen(msg.payload.track_meta.artist) > 0) {
+                    strncpy(s_model.track_artist, msg.payload.track_meta.artist, sizeof(s_model.track_artist) - 1);
+                }
+                if (strlen(msg.payload.track_meta.album) > 0) {
+                    strncpy(s_model.track_album, msg.payload.track_meta.album, sizeof(s_model.track_album) - 1);
+                }
+                display_update_track_metadata(s_model.track_title, s_model.track_artist, s_model.track_album);
+                break;
+
             default:
                 break;
         }
@@ -610,6 +635,10 @@ static void on_bt_event(void *handler_args, esp_event_base_t base, int32_t id, v
             .payload.bt_pair = { .pairing = ev->active }
         };
         ui_model_post_update(&msg);
+    } else if (id == BT_EVT_STREAMING && event_data) {
+        bt_streaming_evt_t *ev = (bt_streaming_evt_t *)event_data;
+        /* Inibe o touch XPT2046 durante o streaming para eliminar toques fantasmas causados por ruído de RF */
+        display_touch_set_audio_streaming(ev->streaming);
     }
 }
 
@@ -729,4 +758,33 @@ esp_err_t ui_model_register_events(void)
 
     ESP_LOGI(TAG, "UI Model inscrito nos eventos do sistema (SENSOR_EVT, BT_EVT, AUDIO_EVT, CFG_EVT)");
     return ESP_OK;
+}
+
+esp_err_t ui_model_post_cover_art(const lv_image_dsc_t *dsc)
+{
+    ui_model_update_msg_t msg = {
+        .type = UI_UPDATE_COVER_ART,
+        .payload.cover_art.dsc = dsc,
+    };
+    return ui_model_post_update(&msg);
+}
+
+esp_err_t ui_model_post_track_metadata(const char *title, const char *artist, const char *album)
+{
+    ui_model_update_msg_t msg = {
+        .type = UI_UPDATE_TRACK_METADATA,
+    };
+    if (title) {
+        strncpy(msg.payload.track_meta.title, title, sizeof(msg.payload.track_meta.title) - 1);
+        msg.payload.track_meta.title[sizeof(msg.payload.track_meta.title) - 1] = '\0';
+    }
+    if (artist) {
+        strncpy(msg.payload.track_meta.artist, artist, sizeof(msg.payload.track_meta.artist) - 1);
+        msg.payload.track_meta.artist[sizeof(msg.payload.track_meta.artist) - 1] = '\0';
+    }
+    if (album) {
+        strncpy(msg.payload.track_meta.album, album, sizeof(msg.payload.track_meta.album) - 1);
+        msg.payload.track_meta.album[sizeof(msg.payload.track_meta.album) - 1] = '\0';
+    }
+    return ui_model_post_update(&msg);
 }

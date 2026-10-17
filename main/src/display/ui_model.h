@@ -71,6 +71,13 @@ typedef struct {
     uint8_t audio_volume;
     bool audio_muted;
     uint8_t audio_eq_preset;
+
+    /* --- Metadados de Mídia & Capa --- */
+    char track_title[UI_MODEL_STR_MAX_LEN];
+    char track_artist[UI_MODEL_STR_MAX_LEN];
+    char track_album[UI_MODEL_STR_MAX_LEN];
+    bool has_cover_art;
+    const lv_image_dsc_t *cover_art_dsc;
 } ui_model_data_t;
 
 /* ============================================================================
@@ -182,6 +189,8 @@ typedef enum {
     UI_UPDATE_ORELHAS_CONFIG,
     UI_UPDATE_DISPLAY_CONFIG,
     UI_UPDATE_AUDIO_STATE,
+    UI_UPDATE_COVER_ART,
+    UI_UPDATE_TRACK_METADATA,
 } ui_model_update_type_t;
 
 typedef struct {
@@ -239,6 +248,14 @@ typedef struct {
             bool muted;
             uint8_t eq_preset;
         } audio_state;
+        struct {
+            const lv_image_dsc_t *dsc;
+        } cover_art;
+        struct {
+            char title[UI_MODEL_STR_MAX_LEN];
+            char artist[UI_MODEL_STR_MAX_LEN];
+            char album[UI_MODEL_STR_MAX_LEN];
+        } track_meta;
     } payload;
 } ui_model_update_msg_t;
 
@@ -249,6 +266,24 @@ typedef struct {
  * @return esp_err_t ESP_OK se postada na fila com sucesso.
  */
 esp_err_t ui_model_post_update(const ui_model_update_msg_t *msg);
+
+/**
+ * @brief Envia notificação de nova capa de álbum decodificada para a interface.
+ *
+ * @param dsc Ponteiro para o descritor lv_image_dsc_t pronto em PSRAM.
+ * @return esp_err_t ESP_OK se postado com sucesso.
+ */
+esp_err_t ui_model_post_cover_art(const lv_image_dsc_t *dsc);
+
+/**
+ * @brief Envia metadados textuais da faixa (título, artista, álbum) para a UI.
+ *
+ * @param title Nome da música.
+ * @param artist Nome do artista.
+ * @param album Nome do álbum ou playlist.
+ * @return esp_err_t ESP_OK se postado com sucesso.
+ */
+esp_err_t ui_model_post_track_metadata(const char *title, const char *artist, const char *album);
 
 #ifdef __cplusplus
 }

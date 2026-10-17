@@ -10,6 +10,7 @@ idf_component_register(
          "src/bt/bt_gap.c"
          "src/bt/bt_a2dp.c"
          "src/bt/bt_avrcp.c"
+         "src/bt/cover_art.c"
          "src/bt/bt_hfp.c"
          "src/bt/bt_ble.c"
          "src/bt/bt_fastpair.c"

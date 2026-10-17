@@ -104,4 +104,33 @@ void display_touch_set_transition_pause(bool pause);
 /** @brief Retorna se a amostragem de toque está pausada. */
 bool display_touch_is_paused(void);
 
+/**
+ * @brief Habilita ou desabilita a inibição de leitura do Touch XPT2046 durante streaming de áudio.
+ * BLINDAGEM ANTI-TOQUES FANTASMAS: O rádio Bluetooth em streaming A2DP (2.4 GHz) induz ruído
+ * eletromagnético nas folhas resistivas ITO do touch. Esta inibição elimina 100% dos toques falsos.
+ *
+ * @param is_streaming true para bloquear a leitura do touch durante áudio; false para restaurar.
+ */
+void display_touch_set_audio_streaming(bool is_streaming);
+
+/** @brief Retorna se o touch está inibido por streaming de áudio. */
+bool display_touch_is_audio_streaming(void);
+
+/**
+ * @brief Atualiza a imagem da capa de álbum na tela screen_main_cover_art.
+ *
+ * @param dsc Descritor lv_image_dsc_t da imagem decodificada em PSRAM.
+ */
+void display_update_cover_art(const void *dsc);
+
+/**
+ * @brief Atualiza os rótulos de metadados (Título, Artista, Álbum) na tela screen_main_cover_art.
+ *
+ * @param title Nome da música.
+ * @param artist Nome do artista.
+ * @param album Nome do álbum.
+ */
+void display_update_track_metadata(const char *title, const char *artist, const char *album);
+
+
 

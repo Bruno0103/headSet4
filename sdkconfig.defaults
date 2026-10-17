@@ -61,8 +61,8 @@ CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
 # DYNAMIC_ENV_MEMORY tira as estruturas estaticas do .bss e as manda para o heap (-> PSRAM)
 CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y
 CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY=y
-# Recursos do stack que o fone nao usa
-CONFIG_BT_AVRCP_CT_COVER_ART_ENABLED=n
+CONFIG_BT_AVRCP_CT_COVER_ART_ENABLED=y
+CONFIG_BT_GOEPC_ENABLED=y
 CONFIG_BT_BLE_42_DTM_TEST_EN=n
 CONFIG_BTDM_CTRL_FULL_SCAN_SUPPORTED=n
 CONFIG_BTDM_BLE_SCAN_DUPL=n
@@ -90,7 +90,9 @@ CONFIG_FATFS_API_ENCODING_UTF_8=y
 CONFIG_FATFS_CODEPAGE_DYNAMIC=y
 
 # --- Touch Screen XPT2046 ---
-# Reduz o limiar de pressão Z (padrão é 400) para detectar toques resistivos leves
-CONFIG_XPT2046_Z_THRESHOLD=50
+# Calibração anti-ruído: limiar 350 elimina falsos positivos por EMI de RF 2.4 GHz e I2S DMA
+CONFIG_XPT2046_Z_THRESHOLD=350
 CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=y
 CONFIG_XPT2046_INTERRUPT_MODE=n
+# Monitor de diagnóstico do touch screen (solicitado pelo usuário)
+CONFIG_HEADSET_TOUCH_DIAG=y

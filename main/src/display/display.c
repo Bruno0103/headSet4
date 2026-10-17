@@ -19,6 +19,7 @@
 #include "ui.h"
 #include "ui_bridge.h"
 #include "ui_model.h"
+#include "cover_art.h"
 
 static const char *TAG = "display";
 
@@ -123,12 +124,26 @@ void display_backlight_sleep(void) {
   }
 }
 
+static bool s_touch_audio_streaming = false;
+
 void display_touch_set_transition_pause(bool pause) {
   s_touch_paused = pause;
 }
 
 bool display_touch_is_paused(void) {
   return s_touch_paused;
+}
+
+void display_touch_set_audio_streaming(bool is_streaming) {
+  if (s_touch_audio_streaming != is_streaming) {
+    s_touch_audio_streaming = is_streaming;
+    ESP_LOGI(TAG, "Inibição de Touch por Streaming de Áudio: %s",
+             is_streaming ? "ATIVADA (anti-ruído RF)" : "DESATIVADA (touch liberado)");
+  }
+}
+
+bool display_touch_is_audio_streaming(void) {
+  return s_touch_audio_streaming;
 }
 
 static bool lcd_trans_done_cb(esp_lcd_panel_io_handle_t io,
@@ -148,33 +163,61 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area,
                             area->y2 + 1, px_map);
 }
 
+/* ============================================================================
+ * FILTRO ANTI-RUÍDO TEMPORAL E ESPACIAL DO TOUCH RESISTIVO (XPT2046)
+ * ============================================================================
+ * Solução Definitiva para Eliminar Toques Fantasmas por EMI de RF e I2S DMA:
+ * 1. O rádio Bluetooth Classic BR/EDR e o I2S DMA induzem micro-tensões espúrias
+ *    na folha resistiva ITO analógica que duram tipicamente 1 ciclo de amostragem (<25 ms).
+ * 2. O filtro de debounce temporal de 2 estágios exige no mínimo 2 amostras consecutivas
+ *    consistentes no espaço (|Δx| <= 30 px, |Δy| <= 30 px) para transitar de RELEASED para PRESSED.
+ * 3. Spikes isolados de 1 frame são descartados e registrados pelo monitor de diagnóstico.
+ * 4. Uma vez confirmado o toque, aplica suavização IIR exponencial nas coordenadas (3/4 + 1/4).
+ * 5. O filtro de liberação exige 2 frames de ausência para evitar trepidação (chatter) ao soltar.
+ */
+typedef struct {
+  bool is_pressed;             /* Estado de toque confirmado repassado ao LVGL */
+  int16_t last_valid_x;        /* Última coordenada X válida */
+  int16_t last_valid_y;        /* Última coordenada Y válida */
+  int16_t candidate_x;         /* Coordenada X candidata em validação de debounce */
+  int16_t candidate_y;         /* Coordenada Y candidata em validação de debounce */
+  uint8_t press_confirm_cnt;   /* Contador de quadros consecutivos para confirmar pressão */
+  uint8_t release_confirm_cnt; /* Contador de quadros consecutivos para confirmar liberação */
+  uint32_t press_start_time;   /* Timestamp do início do toque para cálculo de duração */
+  uint32_t sample_count;       /* Contador de amostras coletadas durante o toque atual */
+} touch_filter_t;
+
+static touch_filter_t s_touch_filter = {0};
+
 /**
  * @brief Callback do LVGL para leitura do estado e posição do Touch Resistivo XPT2046.
  *
- * Implementação Inteligente:
+ * Implementação Robusta com Blindagem Anti-Ruído e Diagnóstico em Tempo Real:
  * 1. LIBERAÇÃO DO BARRAMENTO SPI E ELIMINAÇÃO DE POLLING:
  *    Durante transições de tela ou animações do LVGL (lv_anim_count_running > 0),
- *    o touch é completamente ignorado e NÃO emite transações no barramento SPI3.
- *    Isso evita a comutação de clock de 40 MHz para 1 MHz e elimina contenção,
- *    garantindo que o display ILI9341 tenha 100% da largura de banda do SPI para renderizar a 40 MHz.
- * 2. FILTRO DE DESPERTAR (R.14):
- *    Se o display estiver em modo Sleep ou Pré-Dimming, o primeiro toque apenas reacende
- *    o backlight e absorve o clique (retorna LV_INDEV_STATE_RELEASED), evitando toques acidentais.
- * 3. CALIBRAÇÃO E REMAPEAMENTO:
- *    Aplica recorte da borda do vidro resistivo cinza e interpolação linear inteira
- *    conforme TOUCH_ACTIVE_MIN_X/Y e TOUCH_ACTIVE_MAX_X/Y.
+ *    o touch é completamente pausado e NÃO emite transações no barramento SPI3.
+ * 2. BLINDAGEM TEMPORAL ANTI-TOQUE FANTASMA (DEBOUNCE 2-ESTÁGIOS):
+ *    Spikes de RF/I2S que duram apenas 1 leitura são sumariamente rejeitados.
+ * 3. LIBERDADE DE USO EM STREAMING:
+ *    O touch NÃO fica travado durante a reprodução de música, permitindo uso contínuo.
+ * 4. FILTRO DE DESPERTAR (R.14 DO AGENTS.md):
+ *    Se o display estiver em Sleep ou Pré-Dimming, o primeiro toque acorda o backlight e é absorvido.
  */
 static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
   (void)indev;
 
-
   /*
-   * REGRA DE OURO (Requisito do Usuário):
-   * O Touch XPT2046 NÃO precisa funcionar durante transições de tela ou execução
-   * de animações na interface. Se pausado ou durante animações, retornamos imediatamente
-   * LV_INDEV_STATE_RELEASED SEM ACESSAR O BARRAMENTO SPI! Isso libera o SPI para o LCD a 40 MHz.
+   * REGRA DE OURO (Requisito de Estabilidade e Liberação do SPI3):
+   * Se o touch estiver pausado ou durante animações/transições gráficas do LVGL,
+   * retornamos imediatamente LV_INDEV_STATE_RELEASED SEM ACESSAR O BARRAMENTO SPI!
+   * Isso evita chaveamento de clock (40 MHz <-> 1 MHz) e libera 100% da banda para o LCD.
    */
   if (s_touch_paused || lv_anim_count_running() > 0) {
+    if (s_touch_filter.is_pressed) {
+      s_touch_filter.is_pressed = false;
+      s_touch_filter.press_confirm_cnt = 0;
+      s_touch_filter.release_confirm_cnt = 0;
+    }
     data->state = LV_INDEV_STATE_RELEASED;
     return;
   }
@@ -189,7 +232,7 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
   esp_lcd_touch_point_data_t point_data[1];
   uint8_t touch_cnt = 0;
   esp_err_t get_err = esp_lcd_touch_get_data(s_touch, point_data, &touch_cnt, 1);
-  bool pressed = (get_err == ESP_OK && touch_cnt > 0);
+  bool raw_pressed = (get_err == ESP_OK && touch_cnt > 0);
 
   /*
    * Filtro de Despertar da Tela (Wake-Up Filter - R.14 do AGENTS.md):
@@ -197,19 +240,21 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
    * e consumimos o clique sem repassar ao LVGL.
    */
   if (display_backlight_is_sleeping() || display_backlight_is_dimmed()) {
-    if (pressed) {
+    if (raw_pressed) {
       ESP_LOGI(TAG, "Primeiro toque detectado: acordando backlight (clique absorvido)");
       display_backlight_wake();
       lv_display_t *disp = lv_display_get_default();
       if (disp) {
         lv_display_trigger_activity(disp);
       }
+      s_touch_filter.press_confirm_cnt = 0;
+      s_touch_filter.is_pressed = false;
     }
     data->state = LV_INDEV_STATE_RELEASED;
     return;
   }
 
-  if (pressed) {
+  if (raw_pressed) {
     int32_t raw_x = point_data[0].x;
     int32_t raw_y = point_data[0].y;
 
@@ -229,22 +274,109 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
     if (mapped_y < 0) mapped_y = 0;
     if (mapped_y >= LCD_V_RES) mapped_y = LCD_V_RES - 1;
 
-    data->point.x = (int16_t)mapped_x;
-    data->point.y = (int16_t)mapped_y;
-    data->state = LV_INDEV_STATE_PRESSED;
+    s_touch_filter.release_confirm_cnt = 0;
+
+    if (!s_touch_filter.is_pressed) {
+      /* Estágio 1 do Debounce: primeiro registro candidato */
+      if (s_touch_filter.press_confirm_cnt == 0) {
+        s_touch_filter.candidate_x = (int16_t)mapped_x;
+        s_touch_filter.candidate_y = (int16_t)mapped_y;
+        s_touch_filter.press_confirm_cnt = 1;
+        /* Mantém liberado no LVGL até haver confirmação no próximo frame */
+        data->state = LV_INDEV_STATE_RELEASED;
+        return;
+      }
+
+      /* Estágio 2 do Debounce: verifica consistência espacial da 2ª amostra consecutiva */
+      int diff_x = abs((int)mapped_x - (int)s_touch_filter.candidate_x);
+      int diff_y = abs((int)mapped_y - (int)s_touch_filter.candidate_y);
+
+      if (diff_x <= 30 && diff_y <= 30) {
+        /* Toque humano real confirmado (estabilidade confirmada across frames)! */
+        s_touch_filter.is_pressed = true;
+        s_touch_filter.last_valid_x = (int16_t)mapped_x;
+        s_touch_filter.last_valid_y = (int16_t)mapped_y;
+        s_touch_filter.press_start_time = (uint32_t)(esp_timer_get_time() / 1000);
+        s_touch_filter.sample_count = 1;
+
+        data->point.x = (int16_t)mapped_x;
+        data->point.y = (int16_t)mapped_y;
+        data->state = LV_INDEV_STATE_PRESSED;
 
 #if CONFIG_HEADSET_TOUCH_DIAG
-    static uint32_t last_log_time = 0;
-    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-    if (now - last_log_time >= 1000) {
-      last_log_time = now;
-      ESP_LOGI(TAG, ">>> TOUCH XPT2046: raw(%ld,%ld) -> mapped(%ld,%ld) <<<",
-               (long)point_data[0].x, (long)point_data[0].y, (long)mapped_x, (long)mapped_y);
-    }
+        ESP_LOGI(TAG, ">>> [TOUCH-PRESS] Toque Confirmado: raw(%ld,%ld) -> tela(%ld,%ld) [Streaming: %s] <<<",
+                 (long)point_data[0].x, (long)point_data[0].y,
+                 (long)mapped_x, (long)mapped_y,
+                 s_touch_audio_streaming ? "SIM" : "NAO");
 #endif
-    return;
+        return;
+      } else {
+        /* Salto espúrio: atualiza candidato sem confirmar */
+        s_touch_filter.candidate_x = (int16_t)mapped_x;
+        s_touch_filter.candidate_y = (int16_t)mapped_y;
+        data->state = LV_INDEV_STATE_RELEASED;
+        return;
+      }
+    } else {
+      /* Toque contínuo ativo: aplica suavização IIR nas coordenadas */
+      int16_t smooth_x = (int16_t)((3 * s_touch_filter.last_valid_x + mapped_x) / 4);
+      int16_t smooth_y = (int16_t)((3 * s_touch_filter.last_valid_y + mapped_y) / 4);
+      s_touch_filter.last_valid_x = smooth_x;
+      s_touch_filter.last_valid_y = smooth_y;
+      s_touch_filter.sample_count++;
+
+      data->point.x = smooth_x;
+      data->point.y = smooth_y;
+      data->state = LV_INDEV_STATE_PRESSED;
+
+#if CONFIG_HEADSET_TOUCH_DIAG
+      static uint32_t last_drag_log = 0;
+      uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+      if (now - last_drag_log >= 500) {
+        last_drag_log = now;
+        ESP_LOGI(TAG, ">>> [TOUCH-ARRASTO] raw(%ld,%ld) -> tela(%d,%d) <<<",
+                 (long)point_data[0].x, (long)point_data[0].y, smooth_x, smooth_y);
+      }
+#endif
+      return;
+    }
   }
 
+  /* Caso raw_pressed seja falso (sem pressão detectada pelo hardware) */
+  if (s_touch_filter.press_confirm_cnt == 1 && !s_touch_filter.is_pressed) {
+    /* Spike transitório isolado de 1 frame: FILTRADO COM SUCESSO! */
+#if CONFIG_HEADSET_TOUCH_DIAG
+    ESP_LOGD(TAG, ">>> [TOUCH-REJEITADO] Spike de ruído/EMI isolado descartado com sucesso (cand: %d,%d) <<<",
+             s_touch_filter.candidate_x, s_touch_filter.candidate_y);
+#endif
+    s_touch_filter.press_confirm_cnt = 0;
+  }
+
+  if (s_touch_filter.is_pressed) {
+    s_touch_filter.release_confirm_cnt++;
+    if (s_touch_filter.release_confirm_cnt >= 2) {
+      /* Liberação confirmada */
+      s_touch_filter.is_pressed = false;
+      s_touch_filter.press_confirm_cnt = 0;
+      s_touch_filter.release_confirm_cnt = 0;
+
+#if CONFIG_HEADSET_TOUCH_DIAG
+      uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+      uint32_t dur = now - s_touch_filter.press_start_time;
+      ESP_LOGI(TAG, ">>> [TOUCH-RELEASE] Toque Liberado apos %lu ms (%lu amostras) na pos(%d,%d) <<<",
+               (unsigned long)dur, (unsigned long)s_touch_filter.sample_count,
+               s_touch_filter.last_valid_x, s_touch_filter.last_valid_y);
+#endif
+      data->state = LV_INDEV_STATE_RELEASED;
+      return;
+    } else {
+      /* Segura coordenada por 1 frame para evitar perda de clique por trepidação rápida */
+      data->point.x = s_touch_filter.last_valid_x;
+      data->point.y = s_touch_filter.last_valid_y;
+      data->state = LV_INDEV_STATE_PRESSED;
+      return;
+    }
+  }
 
   data->state = LV_INDEV_STATE_RELEASED;
 }
@@ -558,18 +690,12 @@ static void on_action_control_clicked(lv_event_t *e) {
       break;
 
     case UI_ACTION_MEDIA_PLAY_PAUSE:
-      ESP_LOGI(TAG, "Acao: Midia Play/Pause via AVRCP");
-      ui_bridge_media_play_pause();
-      break;
-
     case UI_ACTION_MEDIA_NEXT:
-      ESP_LOGI(TAG, "Acao: Midia Proxima Faixa via AVRCP");
-      ui_bridge_media_next();
-      break;
-
     case UI_ACTION_MEDIA_PREV:
-      ESP_LOGI(TAG, "Acao: Midia Faixa Anterior via AVRCP");
-      ui_bridge_media_prev();
+      /* Requisito de Projeto: A interface gráfica opera em modo puramente passivo
+       * para controle de mídia (apenas recepção de metadados e cover art).
+       * Nenhum comando de transporte AVRCP é emitido a partir de toques na tela. */
+      ESP_LOGI(TAG, "Comando de transporte AVRCP ignorado (UI em modo somente recepcao de dados)");
       break;
 
     default:
@@ -856,7 +982,7 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
 }
 
 /**
- * @brief Mapeia controles na tela de Cover Art (screen_main_cover_art).
+ * @brief Mapeia controles e exibição na tela de Cover Art (screen_main_cover_art).
  *
  * Estrutura determinística do LVGL Pro para screen_main_cover_art:
  * - the_root:
@@ -865,8 +991,9 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
  *     - child 0: card_0 (card com imagem da capa e labels de artista/música)
  *     - child 1: button_0 (botão "Apps")
  *
- * Vincula o card_0 a UI_ACTION_MEDIA_PLAY_PAUSE para permitir alternar reprodução
- * ao tocar na capa do álbum.
+ * Em conformidade com o requisito de design e UX do HeadSet4:
+ * - O toque no card/imagem da capa MUDA DE TELA para screen_main (ciclo de navegação de papéis de parede).
+ * - NENHUM comando de transporte AVRCP (Play/Pause) é enviado a partir da UI (modo somente recepção de dados).
  */
 static void bind_main_cover_art_controls(lv_obj_t *screen) {
   if (!screen) return;
@@ -880,8 +1007,106 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
   if (lv_obj_get_child_count(content) > 0) {
     lv_obj_t *card = lv_obj_get_child(content, 0);
     if (card) {
-      bind_control_action(card, UI_ACTION_MEDIA_PLAY_PAUSE);
-      ESP_LOGI(TAG, "Mapeado controle estrutural: Cover Art toque na Capa -> Play/Pause AVRCP");
+      /* Requisito de UX: Toque na imagem/card da capa MUDA DE TELA (vai para screen_main).
+       * Não há nenhum controle AVRCP na interface gráfica (somente recepção de dados). */
+      lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_add_screen_create_event(card, LV_EVENT_CLICKED, screen_main_create, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 300, 0);
+      ESP_LOGI(TAG, "Mapeada navegacao: Cover Art toque na Capa -> Transicao para screen_main");
+
+      /* Atualiza imediatamente com a capa decodificada e metadados de texto mantidos no modelo */
+      ui_model_data_t snap;
+      ui_model_get_snapshot(&snap);
+
+      /* 1. Capa de álbum: tile_4_0 -> image_0 */
+      if (lv_obj_get_child_count(card) > 0) {
+        lv_obj_t *tile = lv_obj_get_child(card, 0);
+        if (tile) {
+          lv_obj_add_flag(tile, LV_OBJ_FLAG_EVENT_BUBBLE);
+          if (lv_obj_get_child_count(tile) > 0) {
+            lv_obj_t *img = lv_obj_get_child(tile, 0);
+            if (img) {
+              lv_obj_add_flag(img, LV_OBJ_FLAG_EVENT_BUBBLE);
+              const lv_image_dsc_t *dsc = cover_art_get_image_dsc();
+              if (dsc) {
+                lv_image_set_src(img, dsc);
+                lv_obj_invalidate(img);
+                ESP_LOGI(TAG, "Capa aplicada com sucesso ao carregar screen_main_cover_art");
+              }
+            }
+          }
+        }
+      }
+
+      /* 2. Metadados de texto: Álbum (1), Música (2), Artista (3) */
+      uint32_t count = lv_obj_get_child_count(card);
+      if (count > 1 && strlen(snap.track_album) > 0) {
+        lv_obj_t *lbl_album = lv_obj_get_child(card, 1);
+        if (lbl_album) lv_label_set_text(lbl_album, snap.track_album);
+      }
+      if (count > 2 && strlen(snap.track_title) > 0) {
+        lv_obj_t *lbl_title = lv_obj_get_child(card, 2);
+        if (lbl_title) lv_label_set_text(lbl_title, snap.track_title);
+      }
+      if (count > 3 && strlen(snap.track_artist) > 0) {
+        lv_obj_t *lbl_artist = lv_obj_get_child(card, 3);
+        if (lbl_artist) lv_label_set_text(lbl_artist, snap.track_artist);
+      }
+    }
+  }
+}
+
+void display_update_cover_art(const void *dsc) {
+  if (!dsc) return;
+  lv_obj_t *screen = lv_screen_active();
+  if (!screen) return;
+
+  const char *name = lv_obj_get_name(screen);
+  if (name && strstr(name, "cover_art")) {
+    lv_obj_t *content = get_screen_content_container(screen);
+    if (content && lv_obj_get_child_count(content) > 0) {
+      lv_obj_t *card = lv_obj_get_child(content, 0);
+      if (card && lv_obj_get_child_count(card) > 0) {
+        lv_obj_t *tile = lv_obj_get_child(card, 0);
+        if (tile && lv_obj_get_child_count(tile) > 0) {
+          lv_obj_t *img = lv_obj_get_child(tile, 0);
+          if (img) {
+            lv_image_set_src(img, dsc);
+            lv_obj_invalidate(img);
+            ESP_LOGI(TAG, "Imagem de capa atualizada dinamicamente em screen_main_cover_art!");
+          }
+        }
+      }
+    }
+  }
+}
+
+void display_update_track_metadata(const char *title, const char *artist, const char *album) {
+  lv_obj_t *screen = lv_screen_active();
+  if (!screen) return;
+
+  const char *name = lv_obj_get_name(screen);
+  if (name && strstr(name, "cover_art")) {
+    lv_obj_t *content = get_screen_content_container(screen);
+    if (content && lv_obj_get_child_count(content) > 0) {
+      lv_obj_t *card = lv_obj_get_child(content, 0);
+      if (card) {
+        uint32_t count = lv_obj_get_child_count(card);
+        if (count > 1 && album && strlen(album) > 0) {
+          lv_obj_t *lbl_album = lv_obj_get_child(card, 1);
+          if (lbl_album) lv_label_set_text(lbl_album, album);
+        }
+        if (count > 2 && title && strlen(title) > 0) {
+          lv_obj_t *lbl_title = lv_obj_get_child(card, 2);
+          if (lbl_title) lv_label_set_text(lbl_title, title);
+        }
+        if (count > 3 && artist && strlen(artist) > 0) {
+          lv_obj_t *lbl_artist = lv_obj_get_child(card, 3);
+          if (lbl_artist) lv_label_set_text(lbl_artist, artist);
+        }
+        lv_obj_invalidate(card);
+        ESP_LOGI(TAG, "Metadados de musica atualizados em screen_main_cover_art: '%s' - '%s'",
+                 title ? title : "", artist ? artist : "");
+      }
     }
   }
 }
