@@ -294,18 +294,35 @@ bool ui_bridge_orelhas_set_angulo_maximo(int angulo);
 bool ui_bridge_display_get_status(void);
 
 /**
- * @brief Ativa / Acende o display e o backlight.
+ * @brief Retorna o status operacional do temporizador de desligamento de tela.
  *
- * @param[in] enable true para ligar a tela.
+ * @return true se o temporizador estiver ativo (Modo "Ligado por timer"),
+ *         false se estiver desativado (Modo "Manter ligado").
+ */
+bool ui_bridge_display_get_timer_enabled(void);
+
+/**
+ * @brief Configura o estado do temporizador de desligamento de tela e persiste no NVS.
+ *
+ * @param[in] enabled true para ativar o temporizador (Modo "Ligado por timer"),
+ *                    false para desativar o temporizador (Modo "Manter ligado").
+ * @return true se a configuração foi despachada com sucesso.
+ */
+bool ui_bridge_display_set_timer_enabled(bool enabled);
+
+/**
+ * @brief Configura o modo de display para "Ligado por timer" (Temporizador ativado).
+ *
+ * @param[in] enable true para ativar o temporizador de inatividade.
  * @return true se acionado com sucesso.
  */
 bool ui_bridge_display_set_ativar(bool enable);
 
 /**
- * @brief Desativa / Apaga o backlight da tela para economia de energia.
+ * @brief Configura o modo de display para "Manter ligado" (Temporizador desativado).
  *
- * @param[in] disable true para desligar a tela.
- * @return true se desligado com sucesso.
+ * @param[in] disable true para desativar o temporizador (display always-on).
+ * @return true se acionado com sucesso.
  */
 bool ui_bridge_display_set_desativar(bool disable);
 

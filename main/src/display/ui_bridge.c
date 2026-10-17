@@ -400,18 +400,29 @@ bool ui_bridge_display_get_status(void)
 {
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
-    return snap.display_on;
+    return snap.display_timer_enabled;
 }
 
-bool ui_bridge_display_set_ativar(bool enable)
+bool ui_bridge_display_get_timer_enabled(void)
 {
+    ui_model_data_t snap;
+    ui_model_get_snapshot(&snap);
+    return snap.display_timer_enabled;
+}
+
+bool ui_bridge_display_set_timer_enabled(bool enabled)
+{
+    /* Persiste no NVS o estado do temporizador (1 = ligado, 0 = desligado/manter ligado) */
+    settings_set_u8(SETTINGS_KEY_DISP_TIMER_EN, enabled ? 1 : 0);
+
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
 
     ui_model_update_msg_t msg = {
         .type = UI_UPDATE_DISPLAY_CONFIG,
         .payload.display_cfg = {
-            .on = enable,
+            .on = true,
+            .timer_enabled = enabled,
             .brightness = snap.display_brightness,
             .timeout_sec = snap.display_timeout_sec,
             .img_idx = snap.display_selected_img_idx,
@@ -422,9 +433,22 @@ bool ui_bridge_display_set_ativar(bool enable)
     return true;
 }
 
+bool ui_bridge_display_set_ativar(bool enable)
+{
+    /*
+     * Botão Ativar na UI: configura o modo "Ligado por timer" (Temporizador ativado).
+     * O display entra em pré-dimming e apaga após a inatividade configurada.
+     */
+    return ui_bridge_display_set_timer_enabled(true);
+}
+
 bool ui_bridge_display_set_desativar(bool disable)
 {
-    return ui_bridge_display_set_ativar(!disable);
+    /*
+     * Botão Desativar na UI: configura o modo "Manter ligado" (Temporizador desativado).
+     * O display permanece ligado indefinidamente, eliminando o desligamento por inatividade.
+     */
+    return ui_bridge_display_set_timer_enabled(false);
 }
 
 int ui_bridge_display_get_brilho(void)
@@ -447,6 +471,7 @@ bool ui_bridge_display_set_brilho(int brilho)
         .type = UI_UPDATE_DISPLAY_CONFIG,
         .payload.display_cfg = {
             .on = (brilho > 0),
+            .timer_enabled = snap.display_timer_enabled,
             .brightness = (uint8_t)brilho,
             .timeout_sec = snap.display_timeout_sec,
             .img_idx = snap.display_selected_img_idx,
@@ -477,6 +502,7 @@ bool ui_bridge_display_set_tempo_tela(int segundos)
         .type = UI_UPDATE_DISPLAY_CONFIG,
         .payload.display_cfg = {
             .on = snap.display_on,
+            .timer_enabled = snap.display_timer_enabled,
             .brightness = snap.display_brightness,
             .timeout_sec = (uint16_t)segundos,
             .img_idx = snap.display_selected_img_idx,
@@ -519,6 +545,7 @@ bool ui_bridge_display_set_imagem_principal(int index)
         .type = UI_UPDATE_DISPLAY_CONFIG,
         .payload.display_cfg = {
             .on = snap.display_on,
+            .timer_enabled = snap.display_timer_enabled,
             .brightness = snap.display_brightness,
             .timeout_sec = snap.display_timeout_sec,
             .img_idx = index,
@@ -561,6 +588,7 @@ bool ui_bridge_display_set_gif_principal(int index)
         .type = UI_UPDATE_DISPLAY_CONFIG,
         .payload.display_cfg = {
             .on = snap.display_on,
+            .timer_enabled = snap.display_timer_enabled,
             .brightness = snap.display_brightness,
             .timeout_sec = snap.display_timeout_sec,
             .img_idx = snap.display_selected_img_idx,

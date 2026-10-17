@@ -62,6 +62,7 @@ typedef struct {
 
     /* --- Display & Backlight --- */
     bool display_on;
+    bool display_timer_enabled;
     uint8_t display_brightness;
     uint16_t display_timeout_sec;
     int display_selected_img_idx;
@@ -238,6 +239,7 @@ typedef struct {
         } orelhas_cfg;
         struct {
             bool on;
+            bool timer_enabled;
             uint8_t brightness;
             uint16_t timeout_sec;
             int img_idx;

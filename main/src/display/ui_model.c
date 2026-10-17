@@ -208,8 +208,8 @@ static void update_string_subjects_internal(void)
     lv_subject_set_int(&subject_subj_battery_percent, s_model.battery_percent);
     lv_subject_set_int(&subject_g_subj_bateria_tensao_mv, s_model.battery_mv);
 
-    /* Sincroniza o status textual do display ("Ligado" ou "Desligado") com o subject da tela */
-    lv_subject_copy_string(&subject_g_subj_display_ligado, s_model.display_on ? "Ligado" : "Desligado");
+    /* Sincroniza o status textual do temporizador de display ("Temporizador ligado" ou "Temporizador desligado") com o subject da tela */
+    lv_subject_copy_string(&subject_g_subj_display_ligado, s_model.display_timer_enabled ? "Temporizador ligado" : "Temporizador desligado");
 
     /* Sincroniza o modo de alternância Bluetooth ("Automática" ou "Manual") para telemetria/status */
     lv_subject_copy_string(&subject_g_subj_bt_alternancia_ativa, s_model.bt_auto_switch ? "Automática" : "Manual");
@@ -253,6 +253,12 @@ esp_err_t ui_model_init(void)
     if (settings_get_u16(SETTINGS_KEY_DISP_TIMEOUT, &u16_val, 30) == ESP_OK) {
         s_model.display_timeout_sec = u16_val;
     }
+    if (settings_get_u8(SETTINGS_KEY_DISP_TIMER_EN, &u8_val, 1) == ESP_OK) {
+        s_model.display_timer_enabled = (u8_val != 0);
+    } else {
+        s_model.display_timer_enabled = true;
+    }
+    s_model.display_on = true;
     if (settings_get_u8(SETTINGS_KEY_HAPTIC_ENABLE, &u8_val, 1) == ESP_OK) {
         s_model.vibracall_enabled = (u8_val != 0);
     }
@@ -456,20 +462,24 @@ void ui_model_drain_updates(void)
 
             case UI_UPDATE_DISPLAY_CONFIG: {
                 bool state_changed = (s_model.display_on != msg.payload.display_cfg.on);
+                bool timer_changed = (s_model.display_timer_enabled != msg.payload.display_cfg.timer_enabled);
                 s_model.display_on = msg.payload.display_cfg.on;
+                s_model.display_timer_enabled = msg.payload.display_cfg.timer_enabled;
                 s_model.display_brightness = msg.payload.display_cfg.brightness;
                 s_model.display_timeout_sec = msg.payload.display_cfg.timeout_sec;
                 s_model.display_selected_img_idx = msg.payload.display_cfg.img_idx;
                 s_model.display_selected_gif_idx = msg.payload.display_cfg.gif_idx;
                 if (s_subjects_initialized) {
-                    lv_subject_set_int(&g_subj_display_ligado, s_model.display_on ? 1 : 0);
+                    lv_subject_set_int(&g_subj_display_ligado, s_model.display_timer_enabled ? 1 : 0);
                     lv_subject_set_int(&g_subj_display_brilho, s_model.display_brightness);
                     lv_subject_set_int(&g_subj_display_timeout_segundos, s_model.display_timeout_sec);
                     lv_subject_set_int(&subject_g_subj_display_brilho, s_model.display_brightness);
                     lv_subject_set_int(&subject_g_subj_display_timeout_segundos, s_model.display_timeout_sec);
                 }
-                /* Se houve alteração intencional de ligar/desligar a tela, aciona hardware */
-                if (state_changed) {
+                /* Se o temporizador acabou de ser desativado (modo 'Manter ligado'), restaura o display imediatamente */
+                if (timer_changed && !s_model.display_timer_enabled) {
+                    display_backlight_wake();
+                } else if (state_changed) {
                     if (s_model.display_on) {
                         display_backlight_wake();
                     } else {
@@ -682,7 +692,24 @@ static void on_cfg_event(void *handler_args, esp_event_base_t base, int32_t id, 
                     .type = UI_UPDATE_DISPLAY_CONFIG,
                     .payload.display_cfg = {
                         .on = (ev->value_u8 > 0),
+                        .timer_enabled = s_model.display_timer_enabled,
                         .brightness = ev->value_u8,
+                        .timeout_sec = s_model.display_timeout_sec,
+                        .img_idx = s_model.display_selected_img_idx,
+                        .gif_idx = s_model.display_selected_gif_idx,
+                    }
+                };
+                ui_model_post_update(&msg);
+            }
+        } else if (strcmp(ev->key, SETTINGS_KEY_DISP_TIMER_EN) == 0) {
+            bool new_timer = (ev->value_u8 != 0);
+            if (s_model.display_timer_enabled != new_timer) {
+                ui_model_update_msg_t msg = {
+                    .type = UI_UPDATE_DISPLAY_CONFIG,
+                    .payload.display_cfg = {
+                        .on = s_model.display_on,
+                        .timer_enabled = new_timer,
+                        .brightness = s_model.display_brightness,
                         .timeout_sec = s_model.display_timeout_sec,
                         .img_idx = s_model.display_selected_img_idx,
                         .gif_idx = s_model.display_selected_gif_idx,

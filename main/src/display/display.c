@@ -645,12 +645,12 @@ static void on_action_control_clicked(lv_event_t *e) {
       break;
 
     case UI_ACTION_DISP_ENABLE:
-      ESP_LOGI(TAG, "Acao: Ativar Display");
+      ESP_LOGI(TAG, "Acao: Ativar Temporizador do Display (Modo 'Ligado por timer')");
       ui_bridge_display_set_ativar(true);
       break;
 
     case UI_ACTION_DISP_DISABLE:
-      ESP_LOGI(TAG, "Acao: Desativar Display");
+      ESP_LOGI(TAG, "Acao: Desativar Temporizador do Display (Modo 'Manter ligado')");
       ui_bridge_display_set_desativar(true);
       break;
 
@@ -1430,16 +1430,20 @@ void display_task(void *arg) {
 
 
     /*
-     * Backlight Inteligente por Duty (2 Estágios de Economia):
-     * - Estágio 1: Pré-dimming a 70% do tempo de inatividade (reduz para 15% de duty perceptual)
-     * - Estágio 2: Sleep total a 100% do timeout (desliga backlight, ILI9341 SLPIN, CST816S sleep)
-     * Multiplica a autonomia da bateria em mais de 2x ao eliminar desperdício de energia.
+     * Backlight Inteligente por Duty & Modo Temporizador (AGENTS.md §0.1 e §5.2 A6):
+     * - Se o temporizador estiver ativo (Modo "Ligado por timer") e timeout_sec > 0:
+     *   - Estágio 1: Pré-dimming a 70% do tempo de inatividade (reduz para 15% de duty perceptual)
+     *   - Estágio 2: Sleep total a 100% do timeout (desliga backlight, ILI9341 SLPIN)
+     * - Se o temporizador estiver desativado (Modo "Manter ligado"):
+     *   - O display permanece sempre acordado no nível de brilho definido pelo usuário.
+     *   - Caso o display estivesse suspenso ou atenuado, restaura imediatamente ao nível normal.
      */
     if (disp != NULL) {
-      uint32_t inactive_ms = lv_display_get_inactive_time(disp);
+      bool timer_enabled = ui_bridge_display_get_timer_enabled();
       int timeout_sec = ui_bridge_display_get_tempo_tela();
 
-      if (timeout_sec > 0) {
+      if (timer_enabled && timeout_sec > 0) {
+        uint32_t inactive_ms = lv_display_get_inactive_time(disp);
         uint32_t total_timeout_ms = (uint32_t)timeout_sec * 1000;
         uint32_t dim_timeout_ms = (total_timeout_ms * 70) / 100;
 
@@ -1454,7 +1458,7 @@ void display_task(void *arg) {
             ESP_LOGI(TAG, "Display em pre-dimming inteligente de economia (15%%)");
           }
         } else {
-          /* Atividade detectada: restaura brilho e estado operacional */
+          /* Atividade detectada dentro do período de timeout: restaura brilho normal */
           if (s_is_sleeping) {
             display_backlight_wake();
             ESP_LOGI(TAG, "Display acordado de Sleep total por atividade");
@@ -1462,6 +1466,15 @@ void display_task(void *arg) {
             display_backlight_wake();
             ESP_LOGI(TAG, "Display restaurado de pre-dimming por atividade");
           }
+        }
+      } else {
+        /* Modo Manter Ligado (temporizador desativado): garante tela acordada e operacional */
+        if (s_is_sleeping) {
+          display_backlight_wake();
+          ESP_LOGI(TAG, "Modo Manter Ligado: display acordado de Sleep para operacao continua");
+        } else if (s_is_dimmed) {
+          display_backlight_wake();
+          ESP_LOGI(TAG, "Modo Manter Ligado: display restaurado de pre-dimming para operacao continua");
         }
       }
     }

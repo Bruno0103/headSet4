@@ -270,12 +270,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         if (val && cJSON_IsNumber(val)) {
             int b = val->valueint;
             if (b >= 0 && b <= 100) {
-                settings_set_u8(SETTINGS_KEY_DISP_BRIGHT, (uint8_t)b);
-                ui_model_update_msg_t umsg = {
-                    .type = UI_UPDATE_DISPLAY_CONFIG,
-                    .payload.display_cfg = { .on = (b > 0), .brightness = (uint8_t)b, .timeout_sec = 60 }
-                };
-                ui_model_post_update(&umsg);
+                ui_bridge_display_set_brilho(b);
             }
         }
     }
@@ -379,21 +374,13 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
     else if (strcmp(cmd, "set_wallpaper_idx") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
-            ui_model_update_msg_t umsg = {
-                .type = UI_UPDATE_DISPLAY_CONFIG,
-                .payload.display_cfg = { .img_idx = val->valueint }
-            };
-            ui_model_post_update(&umsg);
+            ui_bridge_display_set_imagem_principal(val->valueint);
         }
     }
     else if (strcmp(cmd, "set_gif_idx") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
-            ui_model_update_msg_t umsg = {
-                .type = UI_UPDATE_DISPLAY_CONFIG,
-                .payload.display_cfg = { .gif_idx = val->valueint }
-            };
-            ui_model_post_update(&umsg);
+            ui_bridge_display_set_gif_principal(val->valueint);
         }
     }
     /* --- Comandos de Fast Pair (Model ID) --- */
