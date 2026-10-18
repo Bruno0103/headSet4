@@ -54,13 +54,43 @@ O firmware ajusta os parâmetros de anúncio BLE dinamicamente com base no estad
   - *Modo Repouso / Standby (`BT_BLE_ADV_SLEEP`):* 1,28 s (economia profunda de energia).
 - **Negociação de MTU:** O firmware aceita MTU estendido de até **512 bytes**. O app Android deve obrigatoriamente chamar `gatt.requestMtu(512)` logo após conectar (`onConnectionStateChange`) para viabilizar envio e recebimento de payloads JSON em pacote único sem fragmentação.
 
-### 1.2 Segurança Criptográfica Mandatória (SMP / Bonding)
-- A característica de comando RX possui permissão restrita: **`ESP_GATT_PERM_WRITE_ENCRYPTED`**.
-- Se o smartphone tentar enviar comandos sem link autenticado, o ESP32 rejeitará a operação retornando o erro GATT **`0x0F` (`ESP_GATT_INSUF_ENCRYPTION`)**.
-- **Comportamento e Fluxo Obrigatório no Android:**
-  1. O aplicativo deve iniciar o pareamento seguro chamando `device.createBond()` ou tratar o erro `GATT_INSUFFICIENT_ENCRYPTION` iniciando a autenticação.
-  2. O ESP32 responde automaticamente aos eventos de segurança aceitando o vínculo com `ESP_BLE_SM_AUTH_GEN_BOND` e IO Capability `None` (Just Works) ou com confirmação no display.
-  3. Somente após a confirmação do vínculo (`BluetoothDevice.BOND_BONDED`), as requisições de escrita serão aceitas pelo microcontrolador.
+### 1.3 Sequência de Conexão, Autenticação e Handshake Bidirecional
+
+Para que o aplicativo Android tenha certeza absoluta de que a conexão foi homologada e que o canal BLE de comandos está ativo e seguro, o sistema adota um fluxo de handshake de duas etapas:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor App as 📱 Aplicativo Android Companion
+    participant BT as 📡 bt_ctl_service (GATT)
+    participant Act as 🧠 act_phone_ctl (Actor)
+
+    Note over App,BT: Conexão Física & Camada GATT
+    App->>BT: connectGatt() + requestMtu(512)
+    BT-->>App: onMtuChanged(512, GATT_SUCCESS)
+    App->>BT: discoverServices()
+    BT-->>App: onServicesDiscovered(GATT_SUCCESS)
+
+    Note over App,BT: Habilitação de Notificações
+    App->>BT: writeDescriptor(CCCD 0x2902, 0x0001)
+    BT->>Act: phone_ctl_notify_connect(conn_id)
+    Act-->>App: 🔔 Push Proativo: evt: "app.connected" (Status Ready)
+
+    Note over App,Act: Handshake Formal & Negociação de Recursos
+    App->>BT: writeCharacteristic(RX): {"cmd":"app_connect","id":1,"client":"android"}
+    BT->>Act: Enfileira comando no Actor
+    Act-->>App: 🔔 Notify(TX): {"status":"ok","cmd":"app_connect","id":1,"connected":true,...}
+```
+
+1. **Confirmação Proativa de Boas-Vindas (`evt: "app.connected"`):**
+   - Disparado automaticamente pelo headset no exato instante em que o aplicativo grava `0x0001` no descritor CCCD (`0x2902`) da característica TX (`5E0A1C02-...`).
+   - O payload informa que o canal de notificação está operacional:
+     ```json
+     {"evt":"app.connected","data":{"status":"ready","name":"HeadSet4","fw_version":"1.0.0","api_version":1,"mtu":512}}
+     ```
+2. **Handshake Explícito do Aplicativo (`cmd: "app_connect"`):**
+   - O aplicativo se identifica formalmente enviando sua versão e plataforma.
+   - O headset valida a comunicação bidirecional e responde confirmando a conexão com os recursos suportados de hardware (`features`).
 
 ---
 
@@ -112,26 +142,77 @@ Todos os UUIDs de 128-bits utilizam a base proprietária `5E0A1Cxx-4D2F-4A7B-9C3
 
 ## 3. Protocolo JSON de Mensagens
 
-Todas as comunicações no canal de Controle (`5E0A1C01` / `5E0A1C02`) utilizam JSON delimitado por quebra de linha (`\n`) ou pelo fechamento de chaves (`}`).
+Todas as comunicações no canal de Controle (`5E0A1C01` / `5E0A1C02`) utilizam JSON delimitado por quebra de linha (`\n`) ou pelo fechamento de chaves (`}`). O protocolo é estritamente tipado, determinístico e imune a condições de corrida graças ao suporte a Correlation ID (`id`).
 
 ### 3.1 Padrão de Requisição (`App -> Fone`)
 ```json
-{"cmd": "<nome_do_comando>", "<param1>": <valor>, ...}\n
+{
+  "cmd": "<nome_do_comando>",
+  "id": 101,
+  "<param1>": <valor>,
+  ...
+}\n
 ```
+- `cmd` *(obrigatório, string)*: Identificador da operação a ser executada.
+- `id` *(opcional, número ou string)*: Correlation ID ou Transaction Tag único gerado pelo app. Quando enviado, o headset **obrigatoriamente ecoa o mesmo `id`** na resposta (seja ela de sucesso ou erro), permitindo ao Android resolver Promises/CompletableDeferred de forma imediata sem ambiguidade.
+- Parâmetros adicionais (`val`, `enable`, `slot`, etc.): Conforme especificado para cada comando.
 
-### 3.2 Padrão de Resposta Imediata (`Fone -> App`)
+### 3.2 Padrão de Confirmação de Sucesso (`Fone -> App`)
 ```json
-{"status": "ok", "cmd": "<nome_do_comando>", ...}
+{
+  "status": "ok",
+  "cmd": "<nome_do_comando>",
+  "id": 101,
+  "<campo_confirmado>": <valor_aplicado>,
+  ...
+}
 ```
-Em caso de falha de validação ou parâmetro ausente/inválido:
-```json
-{"error": "motivo_do_erro", "cmd": "<nome_do_comando>"}
-```
+- `status`: Sempre `"ok"`.
+- `cmd`: Nome do comando executado.
+- `id`: Eco exato do identificador enviado na requisição (se houver).
+- Campos adicionais: Confirmação com eco dos valores aceitos e configurados no hardware (ex: `"val": 75` em `set_volume`, `"slot": 1` em `select_slot`).
 
-### 3.3 Padrão de Evento de Telemetria Push (`Fone -> App`)
-Transmitido automaticamente via GATT Notify quando ocorrem alterações físicas ou de estado no fone:
+### 3.3 Padrão de Erro ou Rejeição (`Fone -> App`)
 ```json
-{"evt": "<categoria>.<nome_do_evento>", "data": { ... }}
+{
+  "status": "error",
+  "cmd": "<nome_do_comando>",
+  "id": 101,
+  "reason": "<codigo_do_erro>",
+  "detail": "<descricao_legivel_do_motivo>"
+}
+```
+- `status`: Sempre `"error"`.
+- `cmd`: Nome do comando rejeitado.
+- `id`: Eco do `id` do comando rejeitado (se houver).
+- `reason`: Código de máquina padronizado indicando o tipo de falha.
+- `detail`: Descrição explicativa para facilitar diagnóstico durante o desenvolvimento e nos logs.
+
+### 3.4 Tabela Canônica de Códigos de Erro (`reason`)
+
+| Código `reason` | Descrição Técnica | Exemplo de Causa no App |
+| :--- | :--- | :--- |
+| `invalid_json` | Erro de sintaxe JSON | JSON malformado, chaves abertas, aspas faltando |
+| `missing_cmd` | Chave `"cmd"` ausente ou nula | `{ "val": 80 }` enviado sem `"cmd"` |
+| `unknown_cmd` | Comando não reconhecido pelo firmware | `{ "cmd": "ajustar_bass" }` ao invés de `set_eq_preset` |
+| `missing_arg` | Parâmetro obrigatório omitido | `set_volume` sem passar o parâmetro `"val"` |
+| `invalid_type` | Tipo de dado incompatível | Enviar `"val": "alto"` quando esperado número inteiro |
+| `out_of_range` | Valor numérico além dos limites de hardware | `set_volume` com `val: 120` (limite é 0..100) |
+| `invalid_args` | Argumentos compostos inconsistentes | Array `gains` com quantidade diferente de 5 bandas |
+| `actor_unavailable`| Ator FreeRTOS destino indisponível | Falha temporária no enfileiramento interno |
+| `no_session` | Operação exige sessão prévia ativa | Envio de `media_chunk` sem chamar `media_upload_start` |
+| `incomplete_data` | Faltam bytes para completar o upload | Chamar `media_upload_finish` antes de enviar todos os chunks |
+| `crc_mismatch` | Falha na verificação de integridade CRC32 | Arquivo corrompido durante o transporte BLE |
+| `no_mem` | Memória insuficiente para alocação | Falha de alocação de buffer na PSRAM |
+| `fastpair_disabled`| Subsistema de Fast Pair desativado | Leitura ou escrita de Model ID com módulo desabilitado |
+
+### 3.5 Padrão de Evento de Telemetria Push (`Fone -> App`)
+Transmitido automaticamente via GATT Notify quando ocorrem alterações físicas ou de estado no fone (independentemente de requisição prévia):
+```json
+{
+  "evt": "<categoria>.<nome_do_evento>",
+  "data": { ... }
+}
 ```
 
 ---
@@ -323,6 +404,7 @@ Toda tela navegável no display LCD TFT de 2,8" possui comandos correspondentes 
 +--------------------+------------------------------+-------------------------------+
 | Tela do Display    | Informação / Controle Físico | Comando JSON / Método GATT    |
 +--------------------+------------------------------+-------------------------------+
+| Conexão Inicial    | Handshake e Negociação       | cmd: "app_connect"            |
 | screen_status      | Snapshot completo do sistema | cmd: "get_all_status"         |
 | screen_bluetooth   | Status slots 1 e 2           | Telemetria bt.link_up/down    |
 | screen_bluetooth   | Desconectar Dispositivo 1    | cmd: "disconnect_slot",slot:0 |
@@ -352,17 +434,44 @@ Toda tela navegável no display LCD TFT de 2,8" possui comandos correspondentes 
 
 ## 6. Catálogo Detalhado de Comandos JSON (App -> HeadSet4)
 
-### 6.1 Consulta Global de Estado: `get_all_status`
-Solicita instantaneamente um snapshot completo de todas as variáveis do modelo de dados (`ui_model`). Ideal para chamar assim que o app completa a negociação de MTU e descoberta de serviços.
+### 6.0 Handshake de Conexão do Companion App: `app_connect`
+Enviado pelo aplicativo logo após descobrir os serviços GATT e habilitar as notificações no CCCD. Confirma o enlace bidirecional e retorna as funcionalidades suportadas pelo hardware.
 
 **Envio do App:**
 ```json
-{"cmd": "get_all_status"}\n
+{"cmd": "app_connect", "id": 1, "app_version": "1.0.0", "client": "android"}\n
 ```
 
-**Resposta do Headset:**
+**Confirmação do Headset (Sucesso):**
 ```json
 {
+  "status": "ok",
+  "cmd": "app_connect",
+  "id": 1,
+  "connected": true,
+  "headset": "HeadSet4",
+  "fw_version": "1.0.0",
+  "api_version": 1,
+  "features": ["eq5", "media_upload", "dual_slot", "haptics", "proximity"]
+}
+```
+
+---
+
+### 6.1 Consulta Global de Estado: `get_all_status`
+Solicita instantaneamente um snapshot completo de todas as variáveis do modelo de dados (`ui_model`).
+
+**Envio do App:**
+```json
+{"cmd": "get_all_status", "id": 2}\n
+```
+
+**Resposta do Headset (Sucesso):**
+```json
+{
+  "status": "ok",
+  "cmd": "get_all_status",
+  "id": 2,
   "bt1": "Galaxy S23 Ultra",
   "bt2": "Notebook Dell",
   "st1": "Conectado",
@@ -372,7 +481,9 @@ Solicita instantaneamente um snapshot completo de todas as variáveis do modelo 
   "bat": 92,
   "disp": true,
   "brilho": 80,
-  "vol": 65
+  "vol": 65,
+  "img": 0,
+  "gif": 0
 }
 ```
 
@@ -383,39 +494,66 @@ Solicita instantaneamente um snapshot completo de todas as variáveis do modelo 
 #### 1. Ajustar Volume Master: `set_volume`
 Ajusta linearmente o ganho do codec WM8960 e atualiza o display:
 ```json
-{"cmd": "set_volume", "val": 75}\n
+{"cmd": "set_volume", "id": 3, "val": 75}\n
 ```
 - `val`: Número inteiro de `0` a `100`.
 
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_volume", "id": 3, "val": 75}
+```
+**Rejeição / Erro (ex: parâmetro ausente ou fora de faixa):**
+```json
+{"status": "error", "cmd": "set_volume", "id": 3, "reason": "out_of_range", "detail": "val must be between 0 and 100"}
+```
+
 #### 2. Mutar ou Desmutar Áudio: `set_mute`
 ```json
-{"cmd": "set_mute", "mute": true}\n
+{"cmd": "set_mute", "id": 4, "mute": true}\n
 ```
 - `mute`: `true` para mutar o codec, `false` para desmutar.
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_mute", "id": 4, "mute": true}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_mute", "id": 4, "reason": "invalid_type", "detail": "mute must be boolean"}
+```
 
 #### 3. Controle de Reprodução Multimídia (AVRCP Passthrough)
 Permite ao app Android enviar ordens de transporte de mídia que são despachadas via AVRCP para o reprodutor ativo do smartphone ou computador conectado via Bluetooth Classic:
 
 - **Play/Pause Toggle:**
   ```json
-  {"cmd": "media_play_pause"}\n
+  {"cmd": "media_play_pause", "id": 5}\n
   ```
+  *Resposta:* `{"status":"ok","cmd":"media_play_pause","id":5,"action":"play_pause"}`
+
 - **Play (Iniciar Reprodução):**
   ```json
-  {"cmd": "media_play"}\n
+  {"cmd": "media_play", "id": 6}\n
   ```
+  *Resposta:* `{"status":"ok","cmd":"media_play","id":6,"action":"play"}`
+
 - **Pause (Pausar Reprodução):**
   ```json
-  {"cmd": "media_pause"}\n
+  {"cmd": "media_pause", "id": 7}\n
   ```
+  *Resposta:* `{"status":"ok","cmd":"media_pause","id":7,"action":"pause"}`
+
 - **Próxima Faixa (Next Track):**
   ```json
-  {"cmd": "media_next"}\n
+  {"cmd": "media_next", "id": 8}\n
   ```
+  *Resposta:* `{"status":"ok","cmd":"media_next","id":8,"action":"next"}`
+
 - **Faixa Anterior (Previous Track):**
   ```json
-  {"cmd": "media_prev"}\n
+  {"cmd": "media_prev", "id": 9}\n
   ```
+  *Resposta:* `{"status":"ok","cmd":"media_prev","id":9,"action":"prev"}`
 
 ---
 
@@ -424,26 +562,58 @@ Permite ao app Android enviar ordens de transporte de mídia que são despachada
 #### 1. Selecionar Slot de Áudio Ativo: `select_slot`
 Define qual dos dispositivos pareados enviará áudio para o fone:
 ```json
-{"cmd": "select_slot", "slot": 0}\n
+{"cmd": "select_slot", "id": 10, "slot": 0}\n
 ```
 - `slot`: `0` para Slot 1, `1` para Slot 2.
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "select_slot", "id": 10, "slot": 0}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "select_slot", "id": 10, "reason": "out_of_range", "detail": "slot must be 0 or 1"}
+```
 
 #### 2. Desconectar Slot Manualmente: `disconnect_slot`
 Equivalente a tocar no botão "Desconectar" na tela `screen_bluetooth`:
 ```json
-{"cmd": "disconnect_slot", "slot": 1}\n
+{"cmd": "disconnect_slot", "id": 11, "slot": 1}\n
+```
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "disconnect_slot", "id": 11, "slot": 1, "disconnected": true}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "disconnect_slot", "id": 11, "reason": "out_of_range", "detail": "slot must be 0 or 1"}
 ```
 
 #### 3. Iniciar Modo de Pareamento: `start_pairing`
 Abre visibilidade e descoberta Bluetooth Classic e BLE por 120 segundos para conectar novo dispositivo:
 ```json
-{"cmd": "start_pairing"}\n
+{"cmd": "start_pairing", "id": 12}\n
+```
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "start_pairing", "id": 12, "duration_sec": 120, "pairing": true}
 ```
 
 #### 4. Alternar Troca Automática Inteligente: `set_auto_switch`
 Ativa ou desativa o recurso que comuta o slot automaticamente ao receber chamadas telefônicas:
 ```json
-{"cmd": "set_auto_switch", "enable": true}\n
+{"cmd": "set_auto_switch", "id": 13, "enable": true}\n
+```
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_auto_switch", "id": 13, "enable": true}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_auto_switch", "id": 13, "reason": "invalid_type", "detail": "enable must be boolean"}
 ```
 
 ---
@@ -453,22 +623,49 @@ Ativa ou desativa o recurso que comuta o slot automaticamente ao receber chamada
 #### 1. Ajustar Brilho do Display: `set_brightness`
 Ajusta o ciclo de trabalho do PWM LEDC de 5 kHz no GPIO 13 com curva perceptual quadrática:
 ```json
-{"cmd": "set_brightness", "val": 70}\n
+{"cmd": "set_brightness", "id": 14, "val": 70}\n
 ```
 - `val`: `0` a `100`%.
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_brightness", "id": 14, "val": 70}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_brightness", "id": 14, "reason": "out_of_range", "detail": "val must be between 0 and 100"}
+```
 
 #### 2. Ligar ou Desligar Display (Modo Sleep): `set_display_state`
 Suspende a renderização do display e desliga o backlight para economia máxima de bateria:
 ```json
-{"cmd": "set_display_state", "enable": false}\n
+{"cmd": "set_display_state", "id": 15, "enable": false}\n
+```
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_display_state", "id": 15, "enable": false}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_display_state", "id": 15, "reason": "invalid_type", "detail": "enable must be boolean"}
 ```
 
 #### 3. Tempo de Inatividade de Tela: `set_display_timeout`
 Configura o tempo em segundos até a tela diminuir o brilho e suspender:
 ```json
-{"cmd": "set_display_timeout", "val": 30}\n
+{"cmd": "set_display_timeout", "id": 16, "val": 30}\n
 ```
 - `val`: Segundos (`0` = tela sempre acesa, `15`, `30`, `60`, etc.).
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_display_timeout", "id": 16, "val": 30}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_display_timeout", "id": 16, "reason": "out_of_range", "detail": "val must be >= 0"}
+```
 
 ---
 
@@ -476,15 +673,33 @@ Configura o tempo em segundos até a tela diminuir o brilho e suspender:
 
 #### 1. Habilitar Detecção no Ouvido: `set_prox_enable`
 ```json
-{"cmd": "set_prox_enable", "enable": true}\n
+{"cmd": "set_prox_enable", "id": 17, "enable": true}\n
+```
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_prox_enable", "id": 17, "enable": true}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_prox_enable", "id": 17, "reason": "invalid_type", "detail": "enable must be boolean"}
 ```
 
 #### 2. Ajustar Limiar / Sensibilidade: `set_prox_sensitivity`
 Define a contagem de reflexão infravermelha necessária para detectar contato com a orelha:
 ```json
-{"cmd": "set_prox_sensitivity", "val": 160}\n
+{"cmd": "set_prox_sensitivity", "id": 18, "val": 160}\n
 ```
-- `val`: Valor numérico de `0` a `1023` (Padrão de calibração: `150` a `200`). O firmware aplica automaticamente histerese dinâmica de 40% ($th_{\text{off}} = 0{,}6 \cdot th_{\text{on}}$).
+- `val`: Valor numérico de `0` a `1023` (Padrão: `150` a `200`). Histerese dinâmica de 40% ($th_{\text{off}} = 0{,}6 \cdot th_{\text{on}}$).
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_prox_sensitivity", "id": 18, "val": 160}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_prox_sensitivity", "id": 18, "reason": "out_of_range", "detail": "val must be between 0 and 1023"}
+```
 
 ---
 
@@ -492,23 +707,37 @@ Define a contagem de reflexão infravermelha necessária para detectar contato c
 
 #### 1. Configurar Habilitação e Intensidade Padrão: `set_vibracall`
 ```json
-{"cmd": "set_vibracall", "enable": true, "val": 85}\n
+{"cmd": "set_vibracall", "id": 19, "enable": true, "val": 85}\n
 ```
-- `enable`: `true` ou `false`.
-- `val`: Intensidade PWM de `0` a `100`%.
+- `enable`: `true` ou `false` (opcional).
+- `val`: Intensidade PWM de `0` a `100`% (opcional).
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_vibracall", "id": 19, "enable": true, "val": 85}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_vibracall", "id": 19, "reason": "missing_arg", "detail": "enable or val is required"}
+```
 
 #### 2. Disparar Vibração por Notificação Remota: `trigger_vibrate` ou `notification`
 Permite que o aplicativo Android dispare envelopes de vibração no fone quando o smartphone receber mensagens ou alertas (WhatsApp, SMS, Chamada, Alarme):
 ```json
 {
   "cmd": "trigger_vibrate",
+  "id": 20,
   "duration_ms": 300,
   "intensity": 90
 }\n
 ```
-- `duration_ms`: Duração do pulso em milissegundos (ex: 200 ms para clique/notificação, 800 ms para alarme).
-- `intensity`: Intensidade PWM (`0` a `100`%). Se `0`, utiliza a intensidade padrão salva nas configurações.
-- **Resposta:** `{"status":"ok","cmd":"trigger_vibrate","vibrated":true}`
+- `duration_ms`: Duração do pulso em milissegundos (ex: 200 ms clique, 800 ms alarme).
+- `intensity`: Intensidade PWM (`0` a `100`%). Se `0`, utiliza a intensidade salva.
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "trigger_vibrate", "id": 20, "vibrated": true, "duration_ms": 300, "intensity": 90}
+```
 
 ---
 
@@ -516,80 +745,174 @@ Permite que o aplicativo Android dispare envelopes de vibração no fone quando 
 
 #### 1. Habilitar / Desabilitar Movimento das Orelhas: `set_ears_enable`
 ```json
-{"cmd": "set_ears_enable", "enable": true}\n
+{"cmd": "set_ears_enable", "id": 21, "enable": true}\n
+```
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_ears_enable", "id": 21, "enable": true}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_ears_enable", "id": 21, "reason": "invalid_type", "detail": "enable must be boolean"}
 ```
 
 #### 2. Ajustar Ângulo Máximo de Expressividade: `set_ears_angle`
 ```json
-{"cmd": "set_ears_angle", "val": 90}\n
+{"cmd": "set_ears_angle", "id": 22, "val": 90}\n
 ```
 - `val`: Ângulo em graus de `0` a `180`.
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_ears_angle", "id": 22, "val": 90}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_ears_angle", "id": 22, "reason": "out_of_range", "detail": "val must be between 0 and 180"}
+```
 
 ---
 
 ### 6.8 Personalização Visual (Wallpapers, Animações e Upload de Mídia)
 
-> Para especificação detalhada de empacotamento, formatos RGB565/GIF89a e código Kotlin, consulte:  
+> Para especificação detalhada de empacotamento, formatos RGB565/GIF89a e protocolo de chunking, consulte:  
 > 🔗 [PROTOCOLO_TRANSFERENCIA_MIDIA_BLE.md](file:///a:/BackupDesktopFileBruno/Estudos/ESP/ESP32/headSet4/docs/PROTOCOLO_TRANSFERENCIA_MIDIA_BLE.md)
 
 #### 1. Selecionar Papel de Parede Ativo (Principal): `set_wallpaper_idx`
 ```json
-{"cmd": "set_wallpaper_idx", "val": 2}\n
+{"cmd": "set_wallpaper_idx", "id": 23, "val": 2}\n
 ```
-- `val`: Índice da imagem na galeria (`0` a `5`). Persiste na Flash NVS e atualiza imediatamente a tela [screen_main](file:///a:/BackupDesktopFileBruno/Estudos/ESP/ESP32/headSet4/components/ui/screens/screen_main.xml).
+- `val`: Índice da imagem na galeria (`0` a `5`).
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_wallpaper_idx", "id": 23, "active_img": 2}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_wallpaper_idx", "id": 23, "reason": "out_of_range", "detail": "val must be between 0 and 5"}
+```
 
 #### 2. Selecionar GIF de Standby Ativo (Principal): `set_gif_idx`
 ```json
-{"cmd": "set_gif_idx", "val": 1}\n
+{"cmd": "set_gif_idx", "id": 24, "val": 1}\n
 ```
-- `val`: Índice do GIF animado na galeria (`0` a `5`). Persiste na Flash NVS e atualiza a tela [screen_main_gif](file:///a:/BackupDesktopFileBruno/Estudos/ESP/ESP32/headSet4/components/ui/screens/screen_main_gif.xml).
+- `val`: Índice do GIF animado na galeria (`0` a `5`).
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_gif_idx", "id": 24, "active_gif": 1}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_gif_idx", "id": 24, "reason": "out_of_range", "detail": "val must be between 0 and 5"}
+```
 
 #### 3. Consultar Informações da Galeria: `get_media_info`
 ```json
-{"cmd": "get_media_info"}\n
+{"cmd": "get_media_info", "id": 25}\n
 ```
-- Retorna os slots ativos (`active_img`, `active_gif`) e o array detalhado dos 6 slots de imagem e 6 slots de GIF com nome, tamanho e flag `has_data`.
+**Confirmação do Headset (Sucesso):**
+```json
+{
+  "status": "ok",
+  "cmd": "get_media_info",
+  "id": 25,
+  "active_img": 0,
+  "active_gif": 0,
+  "images": [
+    {"slot": 0, "has_data": true, "name": "Default", "size": 142080},
+    {"slot": 1, "has_data": false, "name": "", "size": 0},
+    {"slot": 2, "has_data": false, "name": "", "size": 0},
+    {"slot": 3, "has_data": false, "name": "", "size": 0},
+    {"slot": 4, "has_data": false, "name": "", "size": 0},
+    {"slot": 5, "has_data": false, "name": "", "size": 0}
+  ],
+  "gifs": [
+    {"slot": 0, "has_data": true, "name": "Default", "size": 52140},
+    {"slot": 1, "has_data": false, "name": "", "size": 0},
+    {"slot": 2, "has_data": false, "name": "", "size": 0},
+    {"slot": 3, "has_data": false, "name": "", "size": 0},
+    {"slot": 4, "has_data": false, "name": "", "size": 0},
+    {"slot": 5, "has_data": false, "name": "", "size": 0}
+  ]
+}
+```
 
 #### 4. Iniciar Upload de Novo Arquivo: `media_upload_start`
 ```json
-{"cmd": "media_upload_start", "type": "image", "slot": 2, "size": 80000, "crc32": "D4E5F6A7", "name": "Cyberpunk"}\n
+{"cmd": "media_upload_start", "id": 26, "type": "image", "slot": 2, "size": 142080, "crc32": "D4E5F6A7", "name": "Cyberpunk"}\n
 ```
-- Prepara o buffer de recepção na PSRAM e valida tamanho máximo permitido.
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "media_upload_start", "id": 26, "type": "image", "slot": 2, "chunk_size": 480}
+```
 
 #### 5. Enviar Pedaço de Dados (Chunk): `media_chunk`
 ```json
-{"cmd": "media_chunk", "seq": 0, "data": "<base64_string>"}\n
+{"cmd": "media_chunk", "id": 27, "seq": 0, "data": "<base64_string>"}\n
+```
+**Confirmação do Headset (ACK):**
+```json
+{"status": "ack", "cmd": "media_chunk", "id": 27, "seq": 0, "received": 480, "total": 142080}
 ```
 
 #### 6. Finalizar e Gravar na Memória NVS: `media_upload_finish`
 ```json
-{"cmd": "media_upload_finish", "slot": 2}\n
+{"cmd": "media_upload_finish", "id": 28}\n
 ```
-- Valida o checksum CRC32 e comete o blob de mídia na Flash de forma definitiva.
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "media_upload_finish", "id": 28, "type": "image", "slot": 2, "verified": true, "name": "Cyberpunk"}
+```
+**Rejeição / Erro (CRC divergente):**
+```json
+{"status": "error", "cmd": "media_upload_finish", "id": 28, "reason": "crc_mismatch", "detail": "data checksum does not match expected_crc32"}
+```
 
 #### 7. Apagar Mídia de um Slot: `delete_media_slot`
 ```json
-{"cmd": "delete_media_slot", "type": "image", "slot": 2}\n
+{"cmd": "delete_media_slot", "id": 29, "type": "image", "slot": 2}\n
 ```
-
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "delete_media_slot", "id": 29, "type": "image", "slot": 2, "deleted": true}
+```
 
 ---
 
 ### 6.9 Configuração do Equalizador Paramétrico (Codec WM8960)
 
-Além de escrever diretamente nas características binárias do Serviço `5E0A1B00-...`, o app pode utilizar comandos JSON:
-
 #### 1. Selecionar Preset de EQ: `set_eq_preset`
 ```json
-{"cmd": "set_eq_preset", "preset": 1}\n
+{"cmd": "set_eq_preset", "id": 30, "preset": 1}\n
 ```
-- `preset`: `0` = Flat, `1` = Bass Boost, `2` = Vocal Boost, `3` = Treble Boost.
+- `preset`: `0` = Flat, `1` = Bass Boost, `2` = Vocal Boost, `3` = Treble Boost, `255` = Custom.
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_eq_preset", "id": 30, "preset": 1}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_eq_preset", "id": 30, "reason": "out_of_range", "detail": "preset must be 0..3 or 255"}
+```
 
 #### 2. Ajustar Ganhos das 5 Bandas via JSON: `set_eq_gains`
 ```json
-{"cmd": "set_eq_gains", "gains": [4, 2, 0, -2, 6]}\n
+{"cmd": "set_eq_gains", "id": 31, "gains": [4, 2, 0, -2, 6]}\n
 ```
-- `gains`: Array com exatamente 5 números inteiros representando os ganhos em passos de 0.5 dB (-24 a +24).
+- `gains`: Array com exatamente 5 números inteiros (-24 a +24, passos de 0.5 dB).
+
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_eq_gains", "id": 31, "gains": [4, 2, 0, -2, 6]}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_eq_gains", "id": 31, "reason": "invalid_args", "detail": "gains must be an array of 5 numbers (-24 to +24)"}
+```
 
 ---
 
@@ -597,29 +920,35 @@ Além de escrever diretamente nas características binárias do Serviço `5E0A1B
 
 #### 1. Consultar Model ID Atual: `get_model_id`
 ```json
-{"cmd": "get_model_id"}\n
+{"cmd": "get_model_id", "id": 32}\n
 ```
-Resposta:
+**Confirmação do Headset (Sucesso):**
 ```json
-{"status": "ok", "cmd": "get_model_id", "model_id": "F52A3B"}
+{"status": "ok", "cmd": "get_model_id", "id": 32, "model_id": "F52A3B"}
 ```
 
 #### 2. Atualizar Model ID: `set_model_id`
 ```json
-{"cmd": "set_model_id", "val": "F52A3B"}\n
+{"cmd": "set_model_id", "id": 33, "val": "F52A3B"}\n
 ```
-- `val`: String com 6 dígitos hexadecimais (3 bytes) do modelo cadastrado no Google Console.
+**Confirmação do Headset (Sucesso):**
+```json
+{"status": "ok", "cmd": "set_model_id", "id": 33, "model_id": "F52A3B"}
+```
+**Rejeição / Erro:**
+```json
+{"status": "error", "cmd": "set_model_id", "id": 33, "reason": "invalid_len", "detail": "val must have exactly 6 hex characters (3 bytes)"}
+```
 
 ---
 
 ### 6.11 Comando de Diagnóstico e Keepalive: `ping`
-
 ```json
-{"cmd": "ping"}\n
+{"cmd": "ping", "id": 34}\n
 ```
-Resposta:
+**Confirmação do Headset (Sucesso):**
 ```json
-{"status": "ok", "cmd": "ping", "pong": true}
+{"status": "ok", "cmd": "ping", "id": 34, "pong": true}
 ```
 
 ---
@@ -634,3 +963,169 @@ Resposta:
    - O ator `act_settings` consolida escritas com debounce de **1500 ms** antes de gravar na memória Flash física, garantindo vida útil prolongada aos blocos da memória flash do ESP32.
 4. **Fila Sequencial de Operações GATT no Android:**
    - A API nativa `BluetoothGatt` do Android não aceita operações paralelas concorrentes (disparar uma escrita antes da confirmação da anterior resulta em silêncio ou erro `GATT_FAILURE 133`). O app deve adotar uma **fila serializada de comandos GATT** (GattCommandQueue).
+
+---
+
+## 8. Arquitetura e Implementação no Aplicativo Android (Kotlin)
+
+Para integrar de forma reativa e thread-safe com o firmware do **HeadSet4**, o aplicativo Android deve implementar um despachante de comandos baseado em **Kotlin Coroutines (`CompletableDeferred`)** e **Correlation ID**.
+
+### 8.1 Modelos de Dados (Kotlinx Serialization)
+
+```kotlin
+package com.headset4.companion.data.ble
+
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+
+@Serializable
+data class BleCommandRequest(
+    val cmd: String,
+    val id: Long? = null,
+    val val: Int? = null,
+    val enable: Boolean? = null,
+    val slot: Int? = null,
+    val mute: Boolean? = null,
+    val preset: Int? = null,
+    val gains: List<Int>? = null,
+    val duration_ms: Int? = null,
+    val intensity: Int? = null,
+    val client: String? = null,
+    val app_version: String? = null
+)
+
+@Serializable
+data class BleCommandResponse(
+    val status: String,            // "ok", "error" ou "ack"
+    val cmd: String? = null,
+    val id: Long? = null,
+    val reason: String? = null,    // Código de erro quando status == "error"
+    val detail: String? = null,    // Detalhe explicativo legível
+    val val: Int? = null,
+    val enable: Boolean? = null,
+    val slot: Int? = null,
+    val muted: Boolean? = null,
+    val connected: Boolean? = null,
+    val headset: String? = null,
+    val fw_version: String? = null,
+    val api_version: Int? = null,
+    val features: List<String>? = null
+)
+
+@Serializable
+data class BlePushEvent(
+    val evt: String,               // ex: "app.connected", "sensor.battery"
+    val data: JsonElement
+)
+```
+
+### 8.2 Cliente de Comandos com Confirmação Assíncrona (`BleCommandClient`)
+
+```kotlin
+package com.headset4.companion.ble
+
+import com.headset4.companion.data.ble.BleCommandRequest
+import com.headset4.companion.data.ble.BleCommandResponse
+import com.headset4.companion.data.ble.BlePushEvent
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+class BleCommandClient(
+    private val gattWriter: suspend (ByteArray) -> Boolean
+) {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+    private val requestIdGen = AtomicLong(1)
+    private val pendingRequests = ConcurrentHashMap<Long, CompletableDeferred<BleCommandResponse>>()
+    private val writeLock = Mutex()
+
+    private val _eventsFlow = MutableSharedFlow<BlePushEvent>(extraBufferCapacity = 64)
+    val eventsFlow: SharedFlow<BlePushEvent> = _eventsFlow.asSharedFlow()
+
+    /**
+     * Envia um comando JSON com ID único e suspende a Coroutine até que a
+     * notificação correspondente de confirmação com o mesmo 'id' seja devolvida pelo HeadSet4.
+     */
+    suspend fun executeCommand(
+        cmd: String,
+        builder: BleCommandRequest.() -> BleCommandRequest = { this },
+        timeoutMs: Long = 3000L
+    ): Result<BleCommandResponse> = runCatching {
+        val reqId = requestIdGen.getAndIncrement()
+        val deferred = CompletableDeferred<BleCommandResponse>()
+        pendingRequests[reqId] = deferred
+
+        val request = BleCommandRequest(cmd = cmd, id = reqId).builder()
+        val jsonPayload = json.encodeToString(BleCommandRequest.serializer(), request) + "\n"
+
+        writeLock.withLock {
+            val success = gattWriter(jsonPayload.toByteArray(Charsets.UTF_8))
+            if (!success) {
+                pendingRequests.remove(reqId)
+                throw IllegalStateException("Falha física ao escrever na característica GATT RX")
+            }
+        }
+
+        withTimeout(timeoutMs) {
+            val response = deferred.await()
+            if (response.status == "error") {
+                throw BleCommandRejectedException(
+                    cmd = response.cmd ?: cmd,
+                    reason = response.reason ?: "unknown_error",
+                    detail = response.detail ?: "Sem detalhes fornecidos pelo firmware"
+                )
+            }
+            response
+        }
+    }
+
+    /**
+     * Invocado quando uma notificação GATT (TX: 5E0A1C02) é recebida do HeadSet4.
+     */
+    fun onNotificationReceived(data: ByteArray) {
+        val rawString = String(data, Charsets.UTF_8).trim()
+        if (rawString.isEmpty()) return
+
+        // 1. Verifica se é um evento push proativo (ex: "app.connected" ou "sensor.worn")
+        if (rawString.contains("\"evt\"")) {
+            runCatching {
+                val event = json.decodeFromString(BlePushEvent.serializer(), rawString)
+                _eventsFlow.tryEmit(event)
+            }
+            return
+        }
+
+        // 2. É uma resposta a comando (status: "ok" ou "error")
+        runCatching {
+            val resp = json.decodeFromString(BleCommandResponse.serializer(), rawString)
+            val reqId = resp.id
+            if (reqId != null && pendingRequests.containsKey(reqId)) {
+                pendingRequests.remove(reqId)?.complete(resp)
+            }
+        }
+    }
+
+    /**
+     * Executa o Handshake Formal de Conexão.
+     */
+    suspend fun performHandshake(appVersion: String): Result<BleCommandResponse> {
+        return executeCommand("app_connect") {
+            copy(client = "android", app_version = appVersion)
+        }
+    }
+}
+
+class BleCommandRejectedException(
+    val cmd: String,
+    val reason: String,
+    val detail: String
+) : Exception("Comando [$cmd] rejeitado pelo HeadSet4: reason=$reason ($detail)")
+```
+

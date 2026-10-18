@@ -53,6 +53,15 @@ hs_actor_t *phone_ctl_get_actor(void);
 esp_err_t phone_ctl_post_incoming_data(uint16_t conn_id, const uint8_t *data, size_t len);
 
 /**
+ * @brief Notifica que o cliente BLE conectou e habilitou as notificações (CCCD).
+ *
+ * Desperta o ator phone_ctl e envia evento push proativo de boas-vindas ("app.connected").
+ *
+ * @param conn_id ID da conexao conectada.
+ */
+void phone_ctl_notify_connect(uint16_t conn_id);
+
+/**
  * @brief Notifica o encerramento da conexao do cliente BLE para iniciar a contagem de timeout de idle.
  *
  * @param conn_id ID da conexao desconectada.

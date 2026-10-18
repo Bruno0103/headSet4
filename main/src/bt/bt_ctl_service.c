@@ -166,6 +166,13 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             s_notify_enabled = (p->write.len >= 1 && (p->write.value[0] & 0x01));
             ESP_LOGI(TAG, "Telemetria BLE NOTIFY %s para conn_id %u",
                      s_notify_enabled ? "HABILITADA" : "DESABILITADA", p->write.conn_id);
+            if (p->write.need_rsp) {
+                esp_ble_gatts_send_response(gatts_if, p->write.conn_id, p->write.trans_id, ESP_GATT_OK, NULL);
+            }
+            if (s_notify_enabled) {
+                /* Notifica o actor phone_ctl para enviar evento de boas-vindas ("app.connected") */
+                phone_ctl_notify_connect(p->write.conn_id);
+            }
             break;
         }
 

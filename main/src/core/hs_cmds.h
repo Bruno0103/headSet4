@@ -285,6 +285,9 @@ typedef enum {
     /** Solicita processamento de mensagem/pacote recebido do app (payload: phone_cmd_msg_t) */
     PHONE_CMD_PROCESS_MSG = HS_CMD_PHONE_BASE + 1,
 
+    /** Notifica conexão e habilitação do CCCD (notificações ativas) para o ator */
+    PHONE_CMD_CLIENT_CONNECTED,
+
     /** Notifica desconexão ou encerramento de link BLE para o ator */
     PHONE_CMD_CLIENT_DISCONNECTED,
 } phone_cmd_id_t;
