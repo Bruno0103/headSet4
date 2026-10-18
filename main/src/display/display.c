@@ -20,6 +20,7 @@
 #include "ui_bridge.h"
 #include "ui_model.h"
 #include "cover_art.h"
+#include "media_storage.h"
 
 static const char *TAG = "display";
 
@@ -950,7 +951,7 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
   uint32_t col_cnt = lv_obj_get_child_count(content_col);
   lv_obj_t *items_container = NULL;
 
-  /* Varre os filhos de content_col procurando o container que abriga os 8 botões */
+  /* Varre os filhos de content_col procurando o container que abriga os botões */
   for (uint32_t i = 0; i < col_cnt; i++) {
     lv_obj_t *sub = lv_obj_get_child(content_col, i);
     if (sub && lv_obj_get_child_count(sub) >= 4) {
@@ -959,27 +960,137 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
     }
   }
 
-  /* Fallback estrutural: se não identificado por contagem >= 4, adota child 1 */
   if (!items_container && col_cnt > 1) {
     items_container = lv_obj_get_child(content_col, 1);
   }
 
-  if (items_container) {
-    uint32_t item_cnt = lv_obj_get_child_count(items_container);
-    for (uint32_t k = 0; k < item_cnt && k < 10; k++) {
-      lv_obj_t *btn_item = lv_obj_get_child(items_container, k);
-      if (btn_item) {
-        ui_action_id_t action = is_gif ? (ui_action_id_t)(UI_ACTION_SELECT_GIF_BASE + k)
-                                       : (ui_action_id_t)(UI_ACTION_SELECT_WALLPAPER_BASE + k);
-        bind_control_action(btn_item, action);
+  /* 1. Atualiza cabeçalho informativo de topo (row_3: label Principal e contador) */
+  media_catalog_t cat;
+  if (media_storage_get_catalog(&cat) == ESP_OK) {
+    if (col_cnt > 0) {
+      lv_obj_t *header_row = lv_obj_get_child(content_col, 0);
+      if (header_row && lv_obj_get_child_count(header_row) >= 2) {
+        lv_obj_t *lbl_principal = lv_obj_get_child(header_row, 0);
+        lv_obj_t *lbl_count = lv_obj_get_child(header_row, 1);
+        if (lbl_principal) {
+          char hdr_buf[64];
+          uint8_t active_idx = is_gif ? cat.active_gif_idx : cat.active_img_idx;
+          const char *name = is_gif ? cat.gifs[active_idx].name : cat.images[active_idx].name;
+          snprintf(hdr_buf, sizeof(hdr_buf), "Principal: %s", name);
+          lv_label_set_text(lbl_principal, hdr_buf);
+        }
+        if (lbl_count) {
+          lv_label_set_text(lbl_count, "6 / 6");
+        }
       }
     }
-    ESP_LOGI(TAG, "Mapeados controles estruturais para Galeria (%s, %ld itens vinculados)",
-             is_gif ? "GIF" : "Imagens", (long)item_cnt);
-  } else {
-    ESP_LOGW(TAG, "Container de itens da Galeria (%s) nao encontrado", is_gif ? "GIF" : "Imagens");
+
+    /* 2. Mapeia e atualiza os 6 botões interativos */
+    if (items_container) {
+      uint32_t item_cnt = lv_obj_get_child_count(items_container);
+      for (uint32_t k = 0; k < item_cnt && k < MEDIA_STORAGE_MAX_IMAGES; k++) {
+        lv_obj_t *btn_item = lv_obj_get_child(items_container, k);
+        if (btn_item) {
+          ui_action_id_t action = is_gif ? (ui_action_id_t)(UI_ACTION_SELECT_GIF_BASE + k)
+                                         : (ui_action_id_t)(UI_ACTION_SELECT_WALLPAPER_BASE + k);
+          bind_control_action(btn_item, action);
+
+          /* Atualiza labels com nome e status */
+          if (lv_obj_get_child_count(btn_item) >= 2) {
+            lv_obj_t *lbl_name = lv_obj_get_child(btn_item, 0);
+            lv_obj_t *lbl_stat = lv_obj_get_child(btn_item, 1);
+            const char *slot_name = is_gif ? cat.gifs[k].name : cat.images[k].name;
+            bool is_active = is_gif ? (k == cat.active_gif_idx) : (k == cat.active_img_idx);
+
+            if (lbl_name) {
+              lv_label_set_text(lbl_name, slot_name);
+            }
+            if (lbl_stat) {
+              if (is_active) {
+                lv_label_set_text(lbl_stat, "Principal");
+                lv_obj_set_style_text_color(lbl_stat, lv_color_hex(0x67D5E8), 0);
+              } else {
+                lv_label_set_text(lbl_stat, "—");
+                lv_obj_set_style_text_color(lbl_stat, lv_color_hex(0xABB6BF), 0);
+              }
+            }
+          }
+        }
+      }
+      ESP_LOGI(TAG, "Mapeados controles estruturais para Galeria (%s, %ld itens vinculados)",
+               is_gif ? "GIF" : "Imagens", (long)item_cnt);
+    } else {
+      ESP_LOGW(TAG, "Container de itens da Galeria (%s) nao encontrado", is_gif ? "GIF" : "Imagens");
+    }
   }
 }
+
+/**
+ * @brief Mapeia a imagem de papel de parede ativo na tela principal (screen_main).
+ * Ajusta o widget para 240x296 e aplica o descritor RGB565 da PSRAM.
+ */
+static void bind_main_image_controls(lv_obj_t *screen) {
+  if (!screen) return;
+  lv_obj_t *content = get_screen_content_container(screen);
+  if (!content) return;
+
+  if (lv_obj_get_child_count(content) > 0) {
+    lv_obj_t *card = lv_obj_get_child(content, 0);
+    if (card && lv_obj_get_child_count(card) > 0) {
+      lv_obj_t *tile = lv_obj_get_child(card, 0);
+      if (tile && lv_obj_get_child_count(tile) > 0) {
+        lv_obj_t *img = lv_obj_get_child(tile, 0);
+        if (img) {
+          lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
+          const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
+          if (dsc) {
+            lv_image_set_src(img, dsc);
+            lv_obj_invalidate(img);
+            ESP_LOGI(TAG, "Wallpaper 240x296 aplicado com sucesso em screen_main");
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * @brief Mapeia a animação GIF ativa na tela screen_main_gif.
+ * Ajusta o widget para 240x296 e inicializa a reprodução contínua via decodificador LVGL.
+ */
+static void bind_main_gif_controls(lv_obj_t *screen) {
+  if (!screen) return;
+  lv_obj_t *content = get_screen_content_container(screen);
+  if (!content) return;
+
+  if (lv_obj_get_child_count(content) > 0) {
+    lv_obj_t *card = lv_obj_get_child(content, 0);
+    if (card && lv_obj_get_child_count(card) > 0) {
+      lv_obj_t *inner_card = lv_obj_get_child(card, 0);
+      if (inner_card && lv_obj_get_child_count(inner_card) > 0) {
+        lv_obj_t *img = lv_obj_get_child(inner_card, 0);
+        if (img) {
+          lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
+          const lv_image_dsc_t *gif_dsc = media_storage_get_active_gif_dsc();
+          if (gif_dsc && gif_dsc->data_size > 0) {
+            lv_gif_set_color_format(img, LV_COLOR_FORMAT_RGB565);
+            lv_gif_set_src(img, gif_dsc);
+            lv_obj_invalidate(img);
+            ESP_LOGI(TAG, "GIF animado 240x296 (%u bytes) aplicado em screen_main_gif",
+                     (unsigned int)gif_dsc->data_size);
+          } else {
+            const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
+            if (dsc) {
+              lv_image_set_src(img, dsc);
+              lv_obj_invalidate(img);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 
 /**
  * @brief Mapeia controles e exibição na tela de Cover Art (screen_main_cover_art).
@@ -1179,6 +1290,10 @@ static void bind_screen_controls(lv_obj_t *screen) {
     bind_gallery_controls(screen, true);
   } else if (strstr(name, "cover_art")) {
     bind_main_cover_art_controls(screen);
+  } else if (strstr(name, "main_gif")) {
+    bind_main_gif_controls(screen);
+  } else if (strstr(name, "main")) {
+    bind_main_image_controls(screen);
   } else if (strstr(name, "status")) {
     bind_status_controls(screen);
   }
@@ -1260,6 +1375,20 @@ esp_err_t display_create_app_ui(void) {
   extern const uint8_t font_montserrat_regular_20_bin_end[] asm(
       "_binary_font_montserrat_regular_20_bin_end");
 
+  /* Fontes itálicas embutidas (usadas na galeria de imagens e títulos) */
+  extern const uint8_t font_montserrat_italic_12_bin_start[] asm(
+      "_binary_font_montserrat_italic_12_bin_start");
+  extern const uint8_t font_montserrat_italic_12_bin_end[] asm(
+      "_binary_font_montserrat_italic_12_bin_end");
+  extern const uint8_t font_montserrat_italic_14_bin_start[] asm(
+      "_binary_font_montserrat_italic_14_bin_start");
+  extern const uint8_t font_montserrat_italic_14_bin_end[] asm(
+      "_binary_font_montserrat_italic_14_bin_end");
+  extern const uint8_t font_montserrat_italic_20_bin_start[] asm(
+      "_binary_font_montserrat_italic_20_bin_start");
+  extern const uint8_t font_montserrat_italic_20_bin_end[] asm(
+      "_binary_font_montserrat_italic_20_bin_end");
+
   /*
    * Carrega as fontes binárias completas da memória ANTES de ui_init("").
    * Como ui_init() verifica 'if (!font_montserrat_regular_X)', ao definir
@@ -1293,9 +1422,32 @@ esp_err_t display_create_app_ui(void) {
         (void *)font_montserrat_regular_20_bin_start, sz20);
   }
 
-  /* Fallback de seguranca caso o carregamento da memoria falhe */
+  /* Carrega fontes itálicas dos buffers de Flash */
+  uint32_t sz_it12 = (uint32_t)(font_montserrat_italic_12_bin_end -
+                               font_montserrat_italic_12_bin_start);
+  if (!font_montserrat_italic_12 && sz_it12 > 0) {
+    font_montserrat_italic_12 = lv_binfont_create_from_buffer(
+        (void *)font_montserrat_italic_12_bin_start, sz_it12);
+  }
+  uint32_t sz_it14 = (uint32_t)(font_montserrat_italic_14_bin_end -
+                               font_montserrat_italic_14_bin_start);
+  if (!font_montserrat_italic_14 && sz_it14 > 0) {
+    font_montserrat_italic_14 = lv_binfont_create_from_buffer(
+        (void *)font_montserrat_italic_14_bin_start, sz_it14);
+  }
+  uint32_t sz_it20 = (uint32_t)(font_montserrat_italic_20_bin_end -
+                               font_montserrat_italic_20_bin_start);
+  if (!font_montserrat_italic_20 && sz_it20 > 0) {
+    font_montserrat_italic_20 = lv_binfont_create_from_buffer(
+        (void *)font_montserrat_italic_20_bin_start, sz_it20);
+  }
+
+  /* Fallback de seguranca caso o carregamento da memoria flash falhe */
   bool bin_loaded = (font_montserrat_regular_12 && font_montserrat_regular_14 &&
-                     font_montserrat_regular_16 && font_montserrat_regular_20);
+                     font_montserrat_regular_16 && font_montserrat_regular_20 &&
+                     font_montserrat_italic_12 && font_montserrat_italic_14 &&
+                     font_montserrat_italic_20);
+
   if (!font_montserrat_regular_12)
     font_montserrat_regular_12 = (lv_font_t *)&lv_font_montserrat_12;
   if (!font_montserrat_regular_14)
@@ -1305,6 +1457,14 @@ esp_err_t display_create_app_ui(void) {
   if (!font_montserrat_regular_20)
     font_montserrat_regular_20 = (lv_font_t *)&lv_font_montserrat_20;
 
+  /* Fallback defensivo para as itálicas apontando para as regulares */
+  if (!font_montserrat_italic_12)
+    font_montserrat_italic_12 = font_montserrat_regular_12;
+  if (!font_montserrat_italic_14)
+    font_montserrat_italic_14 = font_montserrat_regular_14;
+  if (!font_montserrat_italic_20)
+    font_montserrat_italic_20 = font_montserrat_regular_20;
+
   ESP_LOGI(TAG, "Status do carregamento das fontes: %s (suporte a acentos: %s)",
            bin_loaded ? "Binarias da memoria Flash OK"
                       : "Fallback compilado ASCII",
@@ -1312,6 +1472,15 @@ esp_err_t display_create_app_ui(void) {
 
   /* Inicializacao das variaveis, estilos e temas da UI gerada */
   ui_init("");
+
+  /* Blindagem defensiva pós-ui_init: garante 100% que NENHUM dos 7 ponteiros de fonte fique nulo */
+  if (!font_montserrat_regular_12) font_montserrat_regular_12 = (lv_font_t *)&lv_font_montserrat_12;
+  if (!font_montserrat_regular_14) font_montserrat_regular_14 = (lv_font_t *)&lv_font_montserrat_14;
+  if (!font_montserrat_regular_16) font_montserrat_regular_16 = (lv_font_t *)&lv_font_montserrat_16;
+  if (!font_montserrat_regular_20) font_montserrat_regular_20 = (lv_font_t *)&lv_font_montserrat_20;
+  if (!font_montserrat_italic_12)  font_montserrat_italic_12  = font_montserrat_regular_12;
+  if (!font_montserrat_italic_14)  font_montserrat_italic_14  = font_montserrat_regular_14;
+  if (!font_montserrat_italic_20)  font_montserrat_italic_20  = font_montserrat_regular_20;
 
   /* Sincroniza os subjects reais do fone (bateria, bluetooth, configurações)
    * com os subjects gerados */

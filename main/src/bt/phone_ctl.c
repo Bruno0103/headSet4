@@ -34,8 +34,25 @@
 #include "settings.h"
 #include "ui_model.h"
 #include "ui_bridge.h"
+#include "esp_heap_caps.h"
+#include "mbedtls/base64.h"
+#include "media_storage.h"
 
 static const char *TAG = "act_phone_ctl";
+
+/* Estrutura de controle para recepção de chunks de arquivos de mídia (240x296) */
+typedef struct {
+    bool     active;
+    bool     is_gif;
+    uint8_t  slot;
+    uint32_t expected_size;
+    uint32_t expected_crc32;
+    char     name[MEDIA_NAME_MAX_LEN];
+    uint8_t *buffer;
+    uint32_t received_bytes;
+} media_upload_ctx_t;
+
+static media_upload_ctx_t s_upload_ctx = {0};
 
 #define PHONE_CTL_STACK_SIZE    3584
 #define PHONE_CTL_QUEUE_LEN     16
@@ -205,7 +222,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
     }
 
     const char *cmd = cmd_item->valuestring;
-    char resp_buf[384];
+    char resp_buf[512];
     snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"ok\",\"cmd\":\"%s\"}", cmd);
 
     /* --- Comandos de Consulta de Estado Geral --- */
@@ -215,7 +232,8 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
 
         snprintf(resp_buf, sizeof(resp_buf),
                  "{\"bt1\":\"%s\",\"bt2\":\"%s\",\"st1\":\"%s\",\"st2\":\"%s\","
-                 "\"alt\":%s,\"prox\":%s,\"bat\":%u,\"disp\":%s,\"brilho\":%u,\"vol\":%u}",
+                 "\"alt\":%s,\"prox\":%s,\"bat\":%u,\"disp\":%s,\"brilho\":%u,\"vol\":%u,"
+                 "\"img\":%d,\"gif\":%d}",
                  snap.bt_name_slot0, snap.bt_name_slot1,
                  snap.bt_status_slot0, snap.bt_status_slot1,
                  snap.bt_auto_switch ? "true" : "false",
@@ -223,8 +241,11 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                  (unsigned int)snap.battery_percent,
                  snap.display_on ? "true" : "false",
                  (unsigned int)snap.display_brightness,
-                 (unsigned int)snap.audio_volume);
+                 (unsigned int)snap.audio_volume,
+                 snap.display_selected_img_idx,
+                 snap.display_selected_gif_idx);
     }
+
     /* --- Comandos de Controle de Volume e Audio --- */
     else if (strcmp(cmd, "set_volume") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
@@ -370,19 +391,196 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             audio_cmd_set_mute_send(cJSON_IsTrue(m));
         }
     }
-    /* --- Comandos de Galeria e Wallpapers --- */
+    /* --- Comandos de Galeria, Wallpapers e Mídia (240x296) --- */
+    else if (strcmp(cmd, "get_media_info") == 0) {
+        media_catalog_t cat;
+        if (media_storage_get_catalog(&cat) == ESP_OK) {
+            char *big_resp = (char *)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (big_resp) {
+                int offset = snprintf(big_resp, 1024,
+                                      "{\"status\":\"ok\",\"cmd\":\"get_media_info\",\"active_img\":%u,\"active_gif\":%u,\"images\":[",
+                                      cat.active_img_idx, cat.active_gif_idx);
+                for (int i = 0; i < MEDIA_STORAGE_MAX_IMAGES; i++) {
+                    offset += snprintf(big_resp + offset, 1024 - offset,
+                                       "{\"slot\":%d,\"has_data\":%s,\"name\":\"%s\",\"size\":%" PRIu32 "}%s",
+                                       i, cat.images[i].has_data ? "true" : "false",
+                                       cat.images[i].name, cat.images[i].size,
+                                       (i < MEDIA_STORAGE_MAX_IMAGES - 1) ? "," : "");
+                }
+                offset += snprintf(big_resp + offset, 1024 - offset, "],\"gifs\":[");
+                for (int i = 0; i < MEDIA_STORAGE_MAX_GIFS; i++) {
+                    offset += snprintf(big_resp + offset, 1024 - offset,
+                                       "{\"slot\":%d,\"has_data\":%s,\"name\":\"%s\",\"size\":%" PRIu32 "}%s",
+                                       i, cat.gifs[i].has_data ? "true" : "false",
+                                       cat.gifs[i].name, cat.gifs[i].size,
+                                       (i < MEDIA_STORAGE_MAX_GIFS - 1) ? "," : "");
+                }
+                snprintf(big_resp + offset, 1024 - offset, "]}");
+                bt_ctl_service_send_notify(conn_id, (const uint8_t *)big_resp, strlen(big_resp));
+                heap_caps_free(big_resp);
+                cJSON_Delete(root);
+                return;
+            }
+        }
+    }
     else if (strcmp(cmd, "set_wallpaper_idx") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
             ui_bridge_display_set_imagem_principal(val->valueint);
+            snprintf(resp_buf, sizeof(resp_buf),
+                     "{\"status\":\"ok\",\"cmd\":\"set_wallpaper_idx\",\"active_img\":%d}", val->valueint);
         }
     }
     else if (strcmp(cmd, "set_gif_idx") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (val && cJSON_IsNumber(val)) {
             ui_bridge_display_set_gif_principal(val->valueint);
+            snprintf(resp_buf, sizeof(resp_buf),
+                     "{\"status\":\"ok\",\"cmd\":\"set_gif_idx\",\"active_gif\":%d}", val->valueint);
         }
     }
+    else if (strcmp(cmd, "media_upload_start") == 0) {
+        cJSON *type_item = cJSON_GetObjectItem(root, "type");
+        cJSON *slot_item = cJSON_GetObjectItem(root, "slot");
+        cJSON *size_item = cJSON_GetObjectItem(root, "size");
+        cJSON *crc_item  = cJSON_GetObjectItem(root, "crc32");
+        cJSON *name_item = cJSON_GetObjectItem(root, "name");
+
+        if (!type_item || !slot_item || !size_item || !cJSON_IsNumber(slot_item) || !cJSON_IsNumber(size_item)) {
+            snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_upload_start\",\"reason\":\"invalid_args\"}");
+        } else {
+            bool is_gif = (strcmp(type_item->valuestring, "gif") == 0);
+            int slot = slot_item->valueint;
+            uint32_t size = (uint32_t)size_item->valueint;
+
+            if (slot < 0 || slot >= 6) {
+                snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_upload_start\",\"reason\":\"slot_out_of_range\"}");
+            } else if (!is_gif && size != MEDIA_IMAGE_RGB565_SIZE) {
+                snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_upload_start\",\"reason\":\"invalid_image_size_expected_142080\"}");
+            } else if (is_gif && (size == 0 || size > MEDIA_MAX_GIF_SIZE)) {
+                snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_upload_start\",\"reason\":\"gif_too_large_max_400kb\"}");
+            } else {
+                if (s_upload_ctx.buffer) {
+                    heap_caps_free(s_upload_ctx.buffer);
+                    s_upload_ctx.buffer = NULL;
+                }
+                s_upload_ctx.buffer = (uint8_t *)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (!s_upload_ctx.buffer) {
+                    snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_upload_start\",\"reason\":\"psram_alloc_failed\"}");
+                } else {
+                    s_upload_ctx.active = true;
+                    s_upload_ctx.is_gif = is_gif;
+                    s_upload_ctx.slot = (uint8_t)slot;
+                    s_upload_ctx.expected_size = size;
+                    s_upload_ctx.received_bytes = 0;
+                    s_upload_ctx.expected_crc32 = 0;
+                    if (crc_item && cJSON_IsString(crc_item)) {
+                        s_upload_ctx.expected_crc32 = (uint32_t)strtoul(crc_item->valuestring, NULL, 16);
+                    }
+                    s_upload_ctx.name[0] = '\0';
+                    if (name_item && cJSON_IsString(name_item)) {
+                        strncpy(s_upload_ctx.name, name_item->valuestring, sizeof(s_upload_ctx.name) - 1);
+                        s_upload_ctx.name[sizeof(s_upload_ctx.name) - 1] = '\0';
+                    }
+                    snprintf(resp_buf, sizeof(resp_buf),
+                             "{\"status\":\"ok\",\"cmd\":\"media_upload_start\",\"type\":\"%s\",\"slot\":%d,\"chunk_size\":480}",
+                             is_gif ? "gif" : "image", slot);
+                }
+            }
+        }
+    }
+    else if (strcmp(cmd, "media_chunk") == 0) {
+        if (!s_upload_ctx.active || !s_upload_ctx.buffer) {
+            snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_chunk\",\"reason\":\"no_active_session\"}");
+        } else {
+            cJSON *seq_item = cJSON_GetObjectItem(root, "seq");
+            cJSON *data_item = cJSON_GetObjectItem(root, "data");
+            if (!seq_item || !data_item || !cJSON_IsString(data_item)) {
+                snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_chunk\",\"reason\":\"invalid_chunk_args\"}");
+            } else {
+                int seq = seq_item->valueint;
+                const char *b64_str = data_item->valuestring;
+                size_t b64_len = strlen(b64_str);
+                size_t remain_buf = s_upload_ctx.expected_size - s_upload_ctx.received_bytes;
+                size_t written = 0;
+
+                int b64_err = mbedtls_base64_decode(s_upload_ctx.buffer + s_upload_ctx.received_bytes,
+                                                    remain_buf, &written,
+                                                    (const unsigned char *)b64_str, b64_len);
+                if (b64_err != 0) {
+                    snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_chunk\",\"reason\":\"base64_decode_error\"}");
+                } else {
+                    s_upload_ctx.received_bytes += (uint32_t)written;
+                    snprintf(resp_buf, sizeof(resp_buf),
+                             "{\"status\":\"ack\",\"seq\":%d,\"received\":%" PRIu32 ",\"total\":%" PRIu32 "}",
+                             seq, s_upload_ctx.received_bytes, s_upload_ctx.expected_size);
+                }
+            }
+        }
+    }
+    else if (strcmp(cmd, "media_upload_finish") == 0) {
+        if (!s_upload_ctx.active || !s_upload_ctx.buffer) {
+            snprintf(resp_buf, sizeof(resp_buf), "{\"status\":\"error\",\"cmd\":\"media_upload_finish\",\"reason\":\"no_session\"}");
+        } else if (s_upload_ctx.received_bytes != s_upload_ctx.expected_size) {
+            snprintf(resp_buf, sizeof(resp_buf),
+                     "{\"status\":\"error\",\"cmd\":\"media_upload_finish\",\"reason\":\"incomplete_data\",\"received\":%" PRIu32 ",\"expected\":%" PRIu32 "}",
+                     s_upload_ctx.received_bytes, s_upload_ctx.expected_size);
+        } else {
+            esp_err_t s_err;
+            if (s_upload_ctx.is_gif) {
+                s_err = media_storage_save_gif(s_upload_ctx.slot, s_upload_ctx.name,
+                                               s_upload_ctx.buffer, s_upload_ctx.received_bytes,
+                                               s_upload_ctx.expected_crc32);
+            } else {
+                s_err = media_storage_save_image(s_upload_ctx.slot, s_upload_ctx.name,
+                                                 s_upload_ctx.buffer, s_upload_ctx.received_bytes,
+                                                 s_upload_ctx.expected_crc32);
+            }
+
+            if (s_err == ESP_OK) {
+                snprintf(resp_buf, sizeof(resp_buf),
+                         "{\"status\":\"ok\",\"cmd\":\"media_upload_finish\",\"type\":\"%s\",\"slot\":%u,\"verified\":true,\"name\":\"%s\"}",
+                         s_upload_ctx.is_gif ? "gif" : "image", s_upload_ctx.slot, s_upload_ctx.name);
+            } else if (s_err == ESP_ERR_INVALID_CRC) {
+                snprintf(resp_buf, sizeof(resp_buf),
+                         "{\"status\":\"error\",\"cmd\":\"media_upload_finish\",\"reason\":\"crc_mismatch\"}");
+            } else {
+                snprintf(resp_buf, sizeof(resp_buf),
+                         "{\"status\":\"error\",\"cmd\":\"media_upload_finish\",\"reason\":\"save_nvs_failed\"}");
+            }
+
+            heap_caps_free(s_upload_ctx.buffer);
+            s_upload_ctx.buffer = NULL;
+            s_upload_ctx.active = false;
+        }
+    }
+    else if (strcmp(cmd, "delete_media_slot") == 0) {
+        cJSON *type_item = cJSON_GetObjectItem(root, "type");
+        cJSON *slot_item = cJSON_GetObjectItem(root, "slot");
+        if (type_item && slot_item && cJSON_IsNumber(slot_item)) {
+            bool is_gif = (strcmp(type_item->valuestring, "gif") == 0);
+            int slot = slot_item->valueint;
+            if (slot >= 0 && slot < 6) {
+                media_storage_delete(is_gif, (uint8_t)slot);
+                snprintf(resp_buf, sizeof(resp_buf),
+                         "{\"status\":\"ok\",\"cmd\":\"delete_media_slot\",\"type\":\"%s\",\"slot\":%d}",
+                         is_gif ? "gif" : "image", slot);
+            }
+        }
+    }
+    else if (strcmp(cmd, "erase_all_images") == 0) {
+        /* Apaga todos os slots de papel de parede no NVS restaurando o padrão */
+        media_storage_erase_all_images();
+        snprintf(resp_buf, sizeof(resp_buf),
+                 "{\"status\":\"ok\",\"cmd\":\"erase_all_images\"}");
+    }
+    else if (strcmp(cmd, "format_media") == 0) {
+        /* Formata integralmente a partição de mídia do NVS */
+        media_storage_format();
+        snprintf(resp_buf, sizeof(resp_buf),
+                 "{\"status\":\"ok\",\"cmd\":\"format_media\"}");
+    }
+
     /* --- Comandos de Fast Pair (Model ID) --- */
     else if (strcmp(cmd, "get_model_id") == 0) {
         uint8_t mid[3] = {0};
@@ -547,6 +745,14 @@ static void phone_ctl_on_msg(hs_actor_t *self, const hs_msg_t *msg)
     case PHONE_CMD_CLIENT_DISCONNECTED: {
         xSemaphoreTake(s_ctl_mtx, portMAX_DELAY);
         s_incoming_len = 0;
+        /* Se houver sessao de upload de imagem ou GIF ativa no momento da desconexao,
+         * desaloca imediatamente o buffer na PSRAM para evitar vazamento de memoria. */
+        if (s_upload_ctx.active && s_upload_ctx.buffer) {
+            ESP_LOGW(TAG, "Conexao BLE interrompida durante upload de midia! Desalocando buffer PSRAM.");
+            heap_caps_free(s_upload_ctx.buffer);
+            s_upload_ctx.buffer = NULL;
+            s_upload_ctx.active = false;
+        }
         xSemaphoreGive(s_ctl_mtx);
         ESP_LOGI(TAG, "Cliente desconectado: aguardando timeout de inatividade para encerramento");
         break;
@@ -642,4 +848,30 @@ void phone_ctl_notify_disconnect(uint16_t conn_id)
     if (s_phone_actor) {
         hs_actor_send(s_phone_actor, PHONE_CMD_CLIENT_DISCONNECTED, NULL, 0, 0);
     }
+}
+
+/**
+ * @brief Notifica o aplicativo Android conectado sobre a alteração da mídia ativa (feita no fone).
+ *
+ * Dispara uma notificação GATT com evento estruturado JSON ("display.wallpaper_changed" ou
+ * "display.gif_changed"). Esta notificação informa ao app qual o índice ativo (0..5) e o
+ * nome correspondente do arquivo ou slot, permitindo ao app sincronizar a sua UI em tempo
+ * real quando o usuário troca o papel de parede ou animação diretamente na tela do headset.
+ *
+ * @param is_gif true se for alteração de animação GIF, false se for papel de parede estático.
+ * @param active_idx Índice ativo selecionado (0 a 5).
+ * @param name Nome textual descritivo do papel de parede ou animação GIF.
+ */
+void phone_ctl_notify_media_changed(bool is_gif, uint8_t active_idx, const char *name)
+{
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "{\"evt\":\"%s\",\"data\":{\"active_idx\":%u,\"name\":\"%s\"}}",
+             is_gif ? "display.gif_changed" : "display.wallpaper_changed",
+             active_idx,
+             name ? name : "");
+
+    /* Envia a notificação via GATT Notify (conn_id 0 para transmissão aos clientes conectados) */
+    bt_ctl_service_send_notify(0, (const uint8_t *)buf, strlen(buf));
+    ESP_LOGI(TAG, "Notificacao de midia alterada transmitida via BLE: %s", buf);
 }

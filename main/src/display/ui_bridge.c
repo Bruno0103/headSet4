@@ -28,27 +28,17 @@
 #include "hs_cmds.h"
 #include "settings.h"
 #include "ui_model.h"
+#include "media_storage.h"
+#include "settings.h"
+#include "phone_ctl.h"
 
 static const char *TAG = "ui_bridge";
 
-/* Itens da galeria de imagens disponíveis na UI (assets do display) */
-static const ui_bridge_gallery_item_t s_gallery_items[] = {
-    {.name = "Headphones", .img_src = NULL},
-    {.name = "Bluetooth Icon", .img_src = NULL},
-    {.name = "CPU Chip", .img_src = NULL},
-    {.name = "Bateria Normal", .img_src = NULL},
-    {.name = "Bateria Carga", .img_src = NULL},
-};
-#define GALLERY_ITEMS_COUNT (sizeof(s_gallery_items) / sizeof(s_gallery_items[0]))
+/* Itens da galeria de imagens disponíveis na UI (6 slots de 240x296) */
+#define GALLERY_ITEMS_COUNT MEDIA_STORAGE_MAX_IMAGES
 
-/* Itens da galeria de GIFs / Animações disponíveis na UI */
-static const ui_bridge_gallery_gif_item_t s_gallery_gif_items[] = {
-    {.name = "Animacao Padrao", .gif_src = NULL},
-    {.name = "Ondas Sonoras", .gif_src = NULL},
-    {.name = "Equalizador Grafico", .gif_src = NULL},
-    {.name = "Pulso de Energia", .gif_src = NULL},
-};
-#define GALLERY_GIF_ITEMS_COUNT (sizeof(s_gallery_gif_items) / sizeof(s_gallery_gif_items[0]))
+/* Itens da galeria de GIFs / Animações disponíveis na UI (6 slots) */
+#define GALLERY_GIF_ITEMS_COUNT MEDIA_STORAGE_MAX_GIFS
 
 /* ============================================================================
  * INICIALIZAÇÃO DA CAMADA BRIDGE
@@ -58,8 +48,10 @@ static const ui_bridge_gallery_gif_item_t s_gallery_gif_items[] = {
 esp_err_t ui_bridge_init(void)
 {
     ESP_LOGI(TAG, "Fachada fina UI Bridge inicializada");
+    media_storage_init();
     return ESP_OK;
 }
+
 
 /* ============================================================================
  * 1. BLUETOOTH
@@ -516,28 +508,44 @@ bool ui_bridge_display_set_tempo_tela(int segundos)
 int ui_bridge_display_get_galeria_imagens(ui_bridge_gallery_item_t *out_items, int max_items)
 {
     if (!out_items || max_items <= 0) return 0;
-    int count = (int)GALLERY_ITEMS_COUNT;
+    media_catalog_t cat;
+    if (media_storage_get_catalog(&cat) != ESP_OK) return 0;
+
+    int count = (int)MEDIA_STORAGE_MAX_IMAGES;
     if (count > max_items) count = max_items;
 
     for (int i = 0; i < count; i++) {
-        out_items[i] = s_gallery_items[i];
+        out_items[i].name = cat.images[i].name;
+        out_items[i].img_src = (i == cat.active_img_idx) ? media_storage_get_active_image_dsc() : NULL;
     }
     return count;
 }
 
 const void *ui_bridge_display_get_imagem_principal(void)
 {
-    ui_model_data_t snap;
-    ui_model_get_snapshot(&snap);
-    int idx = snap.display_selected_img_idx;
-    if (idx < 0 || idx >= (int)GALLERY_ITEMS_COUNT) idx = 0;
-    return s_gallery_items[idx].img_src;
+    return (const void *)media_storage_get_active_image_dsc();
 }
 
 bool ui_bridge_display_set_imagem_principal(int index)
 {
-    if (index < 0 || index >= (int)GALLERY_ITEMS_COUNT) return false;
+    if (index < 0 || index >= MEDIA_STORAGE_MAX_IMAGES) return false;
 
+    /* 1. Atualiza no subsistema de armazenamento e carrega para a PSRAM */
+    media_storage_set_active_image((uint8_t)index);
+
+    /* 2. Persiste a preferência no ator settings */
+    settings_set_u8(SETTINGS_KEY_DISP_IMG_IDX, (uint8_t)index);
+
+    /* 3. Dispara feedback háptico (vibração curta de confirmação no fone) */
+    ui_bridge_vibracall_trigger_test(60, 80);
+
+    /* 4. Notifica o smartphone conectado via telemetria BLE */
+    media_catalog_t cat;
+    if (media_storage_get_catalog(&cat) == ESP_OK) {
+        phone_ctl_notify_media_changed(false, (uint8_t)index, cat.images[index].name);
+    }
+
+    /* 5. Atualiza o modelo reativo de UI */
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
 
@@ -559,28 +567,44 @@ bool ui_bridge_display_set_imagem_principal(int index)
 int ui_bridge_display_get_galeria_gifs(ui_bridge_gallery_gif_item_t *out_items, int max_items)
 {
     if (!out_items || max_items <= 0) return 0;
-    int count = (int)GALLERY_GIF_ITEMS_COUNT;
+    media_catalog_t cat;
+    if (media_storage_get_catalog(&cat) != ESP_OK) return 0;
+
+    int count = (int)MEDIA_STORAGE_MAX_GIFS;
     if (count > max_items) count = max_items;
 
     for (int i = 0; i < count; i++) {
-        out_items[i] = s_gallery_gif_items[i];
+        out_items[i].name = cat.gifs[i].name;
+        out_items[i].gif_src = (i == cat.active_gif_idx) ? media_storage_get_active_gif_data(NULL) : NULL;
     }
     return count;
 }
 
 const void *ui_bridge_display_get_gif_principal(void)
 {
-    ui_model_data_t snap;
-    ui_model_get_snapshot(&snap);
-    int idx = snap.display_selected_gif_idx;
-    if (idx < 0 || idx >= (int)GALLERY_GIF_ITEMS_COUNT) idx = 0;
-    return s_gallery_gif_items[idx].gif_src;
+    return media_storage_get_active_gif_data(NULL);
 }
 
 bool ui_bridge_display_set_gif_principal(int index)
 {
-    if (index < 0 || index >= (int)GALLERY_GIF_ITEMS_COUNT) return false;
+    if (index < 0 || index >= MEDIA_STORAGE_MAX_GIFS) return false;
 
+    /* 1. Atualiza no subsistema de armazenamento e carrega para a PSRAM */
+    media_storage_set_active_gif((uint8_t)index);
+
+    /* 2. Persiste a preferência no ator settings */
+    settings_set_u8(SETTINGS_KEY_DISP_GIF_IDX, (uint8_t)index);
+
+    /* 3. Dispara feedback háptico (vibração curta de confirmação no fone) */
+    ui_bridge_vibracall_trigger_test(60, 80);
+
+    /* 4. Notifica o smartphone conectado via telemetria BLE */
+    media_catalog_t cat;
+    if (media_storage_get_catalog(&cat) == ESP_OK) {
+        phone_ctl_notify_media_changed(true, (uint8_t)index, cat.gifs[index].name);
+    }
+
+    /* 5. Atualiza o modelo reativo de UI */
     ui_model_data_t snap;
     ui_model_get_snapshot(&snap);
 
@@ -598,6 +622,7 @@ bool ui_bridge_display_set_gif_principal(int index)
     ui_model_post_update(&msg);
     return true;
 }
+
 
 /* ============================================================================
  * 6. BATERIA

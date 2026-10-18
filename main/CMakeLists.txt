@@ -32,6 +32,7 @@ idf_component_register(
          "src/display/display.c"
          "src/display/ui_bridge.c"
          "src/display/ui_model.c"
+         "src/display/media_storage.c"
     INCLUDE_DIRS "."
                  "src/core"
                  "src/board"

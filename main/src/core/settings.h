@@ -56,6 +56,8 @@ extern "C" {
 #define SETTINGS_KEY_DISP_BRIGHT     "disp_bright"
 #define SETTINGS_KEY_DISP_TIMEOUT    "disp_to"
 #define SETTINGS_KEY_DISP_TIMER_EN   "disp_timer_en"
+#define SETTINGS_KEY_DISP_IMG_IDX    "disp_img_idx"
+#define SETTINGS_KEY_DISP_GIF_IDX    "disp_gif_idx"
 #define SETTINGS_KEY_SENS_PROX_EN    "sens_prox_en"
 #define SETTINGS_KEY_SENS_THRESH_ON  "sens_th_on"
 #define SETTINGS_KEY_SENS_THRESH_OFF "sens_th_off"

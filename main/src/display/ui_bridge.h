@@ -29,7 +29,7 @@ extern "C" {
 /* Tamanho máximo padronizado para strings de nomes e status retornados para a
  * UI */
 #define UI_BRIDGE_STR_MAX_LEN 64
-#define UI_BRIDGE_MAX_GALLERY_ITEMS 8
+#define UI_BRIDGE_MAX_GALLERY_ITEMS 6
 
 /* ============================================================================
  * ESTRUTURA PARA GALERIA DE IMAGENS DO DISPLAY

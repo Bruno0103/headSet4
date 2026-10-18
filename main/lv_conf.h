@@ -1385,11 +1385,11 @@
 #endif /*LV_USE_FFMPEG*/
 
 /** GIF decoder */
-#define LV_USE_GIF 0
+#define LV_USE_GIF 1
 
 #if LV_USE_GIF
 /** Speeds up playback at the cost of an extra 16KB of RAM. */
-#define LV_GIF_CACHE_DECODE_DATA 0
+#define LV_GIF_CACHE_DECODE_DATA 1
 
 /** Wider GIFs are rejected; raising this value increases memory usage. */
 #define LV_GIF_MAX_WIDTH 480

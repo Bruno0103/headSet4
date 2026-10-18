@@ -59,6 +59,15 @@ esp_err_t phone_ctl_post_incoming_data(uint16_t conn_id, const uint8_t *data, si
  */
 void phone_ctl_notify_disconnect(uint16_t conn_id);
 
+/**
+ * @brief Notifica o aplicativo Android conectado sobre a alteração da mídia ativa (feita no fone).
+ *
+ * @param is_gif true se a alteração for de animação GIF, false se for papel de parede estático.
+ * @param active_idx Índice selecionado (0 a 5).
+ * @param name Nome da mídia selecionada.
+ */
+void phone_ctl_notify_media_changed(bool is_gif, uint8_t active_idx, const char *name);
+
 #ifdef __cplusplus
 }
 #endif

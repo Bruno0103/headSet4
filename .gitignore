@@ -88,9 +88,11 @@ Desktop.ini
 # ==============================================================================
 # Diretório de skills e definições dos agentes locais
 .agents/*
+AGENTS.md
 
 # Documentação e guias de suporte aos agentes
 tools/*
+docs/*
 
 preview-build
 build
