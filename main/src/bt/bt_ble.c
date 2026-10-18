@@ -268,6 +268,33 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         configure_locked();
         break;
 
+    /* ---- Eventos de Seguranca SMP (Security Manager Protocol - AGENTS.md WP 7.1 / R.4) ---- */
+    case ESP_GAP_BLE_SEC_REQ_EVT:
+        /* Resposta afirmativa e imediata a requisicoes de seguranca do peer (smartphone Android/iOS).
+         * Sem isso, a sessao expira e o Android reporta erro GATT 0x0F (15 - INSUF_ENCRYPTION). */
+        ESP_LOGI(TAG, "SMP: Requisicao de seguranca BLE recebida. Aceitando pareamento...");
+        esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+        break;
+
+    case ESP_GAP_BLE_AUTH_CMPL_EVT: {
+        esp_ble_auth_cmpl_t *auth = &param->ble_security.auth_cmpl;
+        if (auth->success) {
+            ESP_LOGI(TAG, "SMP: Pareamento BLE concluido com sucesso! (auth_mode: 0x%02X)", auth->auth_mode);
+        } else {
+            ESP_LOGW(TAG, "SMP: Pareamento BLE nao concluido (motivo: 0x%02X)", auth->fail_reason);
+        }
+        break;
+    }
+
+    case ESP_GAP_BLE_KEY_EVT:
+        ESP_LOGD(TAG, "SMP: Chave BLE trocada (tipo: %d)", param->ble_security.ble_key.key_type);
+        break;
+
+    case ESP_GAP_BLE_NC_REQ_EVT:
+        /* Numeric Comparison: para IO_CAP_NONE, responde defensivamente */
+        esp_ble_confirm_reply(param->ble_security.ble_req.bd_addr, false);
+        break;
+
     default:
         break;
     }
@@ -375,6 +402,20 @@ esp_err_t bt_ble_init(const char *device_name)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "tx_power_set: %s", esp_err_to_name(err));
     }
+
+    /* Configuracao de Seguranca SMP (Security Manager Protocol - AGENTS.md WP 7.1 / R.4):
+     * Configura modo de autenticacao Just Works com Bonding persistente para fones de ouvido. */
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
+    uint8_t key_size = 16;
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t rsp_key  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
 
     /* O primeiro advertising so comeca quando este evento chegar (ver gap_event_handler). */
     ESP_RETURN_ON_ERROR(esp_ble_gap_config_local_privacy(true), TAG, "privacidade local");

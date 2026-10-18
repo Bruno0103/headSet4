@@ -1109,11 +1109,11 @@ esp_err_t phone_ctl_init(void)
         return err;
     }
 
-    /* Inscreve nos eventos do barramento central */
-    esp_event_handler_register(SENSOR_EVT, ESP_EVENT_ANY_ID, on_sensor_event, NULL);
-    esp_event_handler_register(BT_EVT, ESP_EVENT_ANY_ID, on_bt_event, NULL);
-    esp_event_handler_register(AUDIO_EVT, ESP_EVENT_ANY_ID, on_audio_event, NULL);
-    esp_event_handler_register(CFG_EVT, ESP_EVENT_ANY_ID, on_cfg_event, NULL);
+    /* Inscreve nos eventos do barramento central hs_ctrl_evt (AGENTS.md WP 7.3 / R.3) */
+    hs_event_register(SENSOR_EVT, ESP_EVENT_ANY_ID, on_sensor_event, NULL);
+    hs_event_register(BT_EVT, ESP_EVENT_ANY_ID, on_bt_event, NULL);
+    hs_event_register(AUDIO_EVT, ESP_EVENT_ANY_ID, on_audio_event, NULL);
+    hs_event_register(CFG_EVT, ESP_EVENT_ANY_ID, on_cfg_event, NULL);
 
     ESP_LOGI(TAG, "Actor phone_ctl configurado com sucesso (idle_ms=%u)", (unsigned int)PHONE_CTL_IDLE_MS);
     return ESP_OK;
@@ -1193,7 +1193,10 @@ void phone_ctl_notify_media_changed(bool is_gif, uint8_t active_idx, const char 
              active_idx,
              name ? name : "");
 
-    /* Envia a notificação via GATT Notify (conn_id 0 para transmissão aos clientes conectados) */
-    bt_ctl_service_send_notify(0, (const uint8_t *)buf, strlen(buf));
-    ESP_LOGI(TAG, "Notificacao de midia alterada transmitida via BLE: %s", buf);
+    /* Envia a notificacao via GATT Notify para o conn_id ativo (se houver cliente conectado) */
+    uint16_t conn_id = bt_ctl_service_get_conn_id();
+    if (conn_id != 0xFFFF) {
+        bt_ctl_service_send_notify(conn_id, (const uint8_t *)buf, strlen(buf));
+        ESP_LOGI(TAG, "Notificacao de midia alterada transmitida via BLE para conn_id %u: %s", conn_id, buf);
+    }
 }

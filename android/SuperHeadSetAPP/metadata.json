@@ -1,0 +1,6 @@
+{
+  "name": "HeadSet4",
+  "description": "Smart Cyberpunk Hi-Fi Wireless Headset companion app with real-time telemetry, 5-band EQ, and 240x296 display manager.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

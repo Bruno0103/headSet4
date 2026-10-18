@@ -1223,10 +1223,108 @@ void display_update_track_metadata(const char *title, const char *artist, const 
 }
 
 /**
+ * @brief Atualiza as linhas de telemetria de mídia na tela de Status Geral (screen_status).
+ *
+ * Em estrita conformidade com as diretrizes do AGENTS.md (§2 e §3.5) e solicitação do usuário:
+ * 1. Linha 'Imagens / GIFs' (row_13 em screen_status_gen.c):
+ *    - Exibe a contagem total de mídias gravadas na Flash NVS em relação à capacidade máxima de 6 slots:
+ *      "[total imagens em memória] / 6 · [total GIFs em memória] / 6".
+ *    - Exemplo típico (com o wallpaper padrão ativo no slot 0 e nenhum GIF gravado): "1 / 6 · 0 / 6".
+ * 2. Linha de baixo 'Principais' (row_14 em screen_status_gen.c):
+ *    - Exibe o número da imagem atualmente setada e o número do GIF atualmente setado:
+ *      "[Imagem setada] / [GIF setado]".
+ *    - Exemplo típico: "1 / 0" (onde '1' representa o slot 1/Wallpaper Padrão ativo e '0' indica que não há GIF ativo).
+ *
+ * Blindagem e Robustez contra Falhas Críticas (Guru Meditation / LoadProhibited):
+ * - Consulta o catálogo em memória RAM de forma segura via media_storage_get_catalog().
+ * - Valida estruturalmente os contêineres e verifica os tipos de classe LVGL (lv_label_class)
+ *   antes de qualquer escrita ou invocação de API.
+ *
+ * @param column_1 Ponteiro para o contêiner de linhas de telemetria da tela screen_status.
+ */
+static void update_status_media_info(lv_obj_t *column_1) {
+  if (!column_1) return;
+
+  uint32_t row_cnt = lv_obj_get_child_count(column_1);
+  if (row_cnt <= 10) return;
+
+  media_catalog_t cat;
+  if (media_storage_get_catalog(&cat) != ESP_OK) {
+    ESP_LOGW(TAG, "Tela Status: Falha ao obter catálogo de mídias para telemetria");
+    return;
+  }
+
+  /* 1. Contabiliza o total de imagens gravadas na memória Flash NVS */
+  int total_imgs = 0;
+  for (int i = 0; i < MEDIA_STORAGE_MAX_IMAGES; i++) {
+    if (cat.images[i].has_data) {
+      total_imgs++;
+    }
+  }
+
+  /* Determina o número da imagem setada (1 a 6 se o slot ativo possuir dados válidos; 0 se vazio) */
+  int img_setado = 0;
+  if (cat.active_img_idx < MEDIA_STORAGE_MAX_IMAGES && cat.images[cat.active_img_idx].has_data) {
+    img_setado = cat.active_img_idx + 1;
+  }
+
+  /* 2. Contabiliza o total de GIFs gravados na memória Flash NVS */
+  int total_gifs = 0;
+  for (int i = 0; i < MEDIA_STORAGE_MAX_GIFS; i++) {
+    if (cat.gifs[i].has_data) {
+      total_gifs++;
+    }
+  }
+
+  /* Determina o número do GIF setado (1 a 6 se o slot ativo possuir dados válidos; 0 se vazio) */
+  int gif_setado = 0;
+  if (cat.active_gif_idx < MEDIA_STORAGE_MAX_GIFS && cat.gifs[cat.active_gif_idx].has_data) {
+    gif_setado = cat.active_gif_idx + 1;
+  }
+
+  /* 3. Atualiza a linha 10 (row_13 em screen_status_gen.c): 'Imagens / GIFs'
+   * Formato solicitado: total de imagens em memoria / 6  total de GIFs em memoria/6
+   * Exemplo: "1 / 6 · 0 / 6"
+   */
+  lv_obj_t *row_media = lv_obj_get_child(column_1, 10);
+  if (row_media && lv_obj_get_child_count(row_media) >= 2) {
+    lv_obj_t *lbl_val = lv_obj_get_child(row_media, 1);
+    if (lbl_val && lv_obj_check_type(lbl_val, &lv_label_class)) {
+      char media_str[64];
+      snprintf(media_str, sizeof(media_str), "%d / %d · %d / %d",
+               total_imgs, MEDIA_STORAGE_MAX_IMAGES, total_gifs, MEDIA_STORAGE_MAX_GIFS);
+      lv_label_set_text(lbl_val, media_str);
+      ESP_LOGI(TAG, "Tela Status: Linha 'Imagens / GIFs' atualizada para '%s' (Total Img: %d/%d, Total GIF: %d/%d)",
+               media_str, total_imgs, MEDIA_STORAGE_MAX_IMAGES, total_gifs, MEDIA_STORAGE_MAX_GIFS);
+    }
+  }
+
+  /* 4. Atualiza a linha 11 (row_14 em screen_status_gen.c): 'Principais'
+   * Formato solicitado: Imagem setada/ gif setado
+   * Exemplo: "1 / 0"
+   */
+  if (row_cnt > 11) {
+    lv_obj_t *row_princ = lv_obj_get_child(column_1, 11);
+    if (row_princ && lv_obj_get_child_count(row_princ) >= 2) {
+      lv_obj_t *lbl_princ = lv_obj_get_child(row_princ, 1);
+      if (lbl_princ && lv_obj_check_type(lbl_princ, &lv_label_class)) {
+        char princ_str[64];
+        snprintf(princ_str, sizeof(princ_str), "%d / %d", img_setado, gif_setado);
+        lv_label_set_text(lbl_princ, princ_str);
+        ESP_LOGI(TAG, "Tela Status: Linha 'Principais' (linha de baixo) atualizada para '%s' (Img setada: %d, GIF setado: %d)",
+                 princ_str, img_setado, gif_setado);
+      }
+    }
+  }
+}
+
+/**
  * @brief Mapeia e ajusta elementos da tela de Status Geral (screen_status).
  *
  * Apaga e oculta o rótulo provisório de template 'Exemplos · não são leituras reais',
  * deixando o layout da tela limpo e focado diretamente nas métricas de telemetria.
+ * Além disso, localiza a coluna de telemetria e atualiza dinamicamente as linhas
+ * de contagem de 'Imagens / GIFs' e 'Principais' com base no catálogo da partição NVS.
  *
  * Blindagem Crítica contra Guru Meditation Error (LoadProhibited):
  * 1. Utiliza get_screen_content_container() para acessar column_0 (child 2 da tela),
@@ -1242,18 +1340,33 @@ static void bind_status_controls(lv_obj_t *screen) {
     return;
   }
 
-  /* Em screen_status_gen.c, o label informativo 'Exemplos...' é o primeiro filho de column_0 */
+  /* Em screen_status_gen.c:
+   * column_0 possui:
+   * - child 0: label_6 informativo 'Exemplos...' -> deve ser ocultado
+   * - child 1: column_1 container com as 12 linhas de status
+   */
   uint32_t col_cnt = lv_obj_get_child_count(content_col);
+  lv_obj_t *column_1 = NULL;
+
   for (uint32_t i = 0; i < col_cnt; i++) {
     lv_obj_t *child = lv_obj_get_child(content_col, i);
-    if (child && lv_obj_check_type(child, &lv_label_class)) {
-      /* Apaga o texto e oculta o widget para desocupar espaço no layout */
+    if (!child) continue;
+
+    if (lv_obj_check_type(child, &lv_label_class)) {
+      /* Apaga o texto e oculta o widget de exemplo para desocupar espaço no layout */
       lv_label_set_text(child, "");
       lv_obj_set_height(child, 0);
       lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
       ESP_LOGI(TAG, "Tela Status: rotulo provisorio apagado e ocultado com sucesso");
-      break;
+    } else if (lv_obj_get_child_count(child) >= 10) {
+      /* Identifica a coluna que abriga as linhas de telemetria estruturais */
+      column_1 = child;
     }
+  }
+
+  /* Atualiza as métricas de imagens e GIFs em memória flash NVS */
+  if (column_1) {
+    update_status_media_info(column_1);
   }
 }
 

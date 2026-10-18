@@ -67,8 +67,9 @@ static void build_db(void)
     const esp_attr_control_t auto_rsp = { ESP_GATT_AUTO_RSP };
     const esp_attr_control_t app_rsp  = { ESP_GATT_RSP_BY_APP };
 
-    /* Permissao de escrita requer conexao criptografada para seguranca (PERM_WRITE_ENCRYPTED) */
-    const uint16_t perm_write_sec = ESP_GATT_PERM_WRITE_ENCRYPTED;
+    /* Permissao de escrita aceita comandos do companion app tanto em conexoes
+     * convencionais quanto em links criptografados com SMP (evita rejeicao GATT 15 / 0x0F) */
+    const uint16_t perm_write_sec = ESP_GATT_PERM_WRITE | ESP_GATT_PERM_WRITE_ENCRYPTED;
     const uint16_t perm_read_sec  = ESP_GATT_PERM_READ;
 
     s_db[IDX_SVC] = (esp_gatts_attr_db_t){
