@@ -57,7 +57,7 @@ static uint16_t            s_conn_id  = 0xFFFF;
 static bool                s_notify_enabled = false;
 
 /* Buffer para suporte a Write Long / fragmentacao GATT */
-#define CTL_PREP_BUF_MAX 512
+#define CTL_PREP_BUF_MAX 1024
 static uint8_t             s_prep_buf[CTL_PREP_BUF_MAX];
 static uint16_t            s_prep_len = 0;
 static uint16_t            s_prep_handle = 0;

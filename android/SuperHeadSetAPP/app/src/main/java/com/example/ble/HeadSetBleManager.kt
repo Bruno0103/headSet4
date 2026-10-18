@@ -1368,8 +1368,8 @@ class HeadSetBleManager(
                 sendJsonCommand(startCmd)
                 delay(150) // Wait for buffer allocation on ESP32 PSRAM
 
-                // 3. Chunk streaming: 360 bytes raw per chunk (Base64 is 480 chars, fits MTU 512)
-                val rawChunkSize = 360
+                // 3. Chunk streaming: 240 bytes raw por chunk (Base64 gera 320 chars, JSON total = 358 bytes; cabe perfeitamente no MTU 517 sem fragmentacao)
+                val rawChunkSize = 240
                 val totalChunks = (totalBytes + rawChunkSize - 1) / rawChunkSize
                 var bytesSent = 0
                 var seq = 0

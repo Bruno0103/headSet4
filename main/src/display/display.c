@@ -1721,8 +1721,20 @@ void display_task(void *arg) {
      *   - Caso o display estivesse suspenso ou atenuado, restaura imediatamente ao nível normal.
      */
     if (disp != NULL) {
-      bool timer_enabled = ui_bridge_display_get_timer_enabled();
-      int timeout_sec = ui_bridge_display_get_tempo_tela();
+      /* Amostra o status do temporizador a cada 500 ms para eliminar lock contention continuo */
+      static uint32_t s_last_timer_check_ms = 0;
+      static bool s_cached_timer_enabled = false;
+      static int s_cached_timeout_sec = 30;
+
+      uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+      if (now_ms - s_last_timer_check_ms >= 500) {
+        s_last_timer_check_ms = now_ms;
+        s_cached_timer_enabled = ui_bridge_display_get_timer_enabled();
+        s_cached_timeout_sec = ui_bridge_display_get_tempo_tela();
+      }
+
+      bool timer_enabled = s_cached_timer_enabled;
+      int timeout_sec = s_cached_timeout_sec;
 
       if (timer_enabled && timeout_sec > 0) {
         uint32_t inactive_ms = lv_display_get_inactive_time(disp);

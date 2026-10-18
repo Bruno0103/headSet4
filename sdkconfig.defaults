@@ -96,3 +96,9 @@ CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=y
 CONFIG_XPT2046_INTERRUPT_MODE=n
 # Monitor de diagnóstico do touch screen (solicitado pelo usuário)
 CONFIG_HEADSET_TOUCH_DIAG=y
+
+# --- Coexistencia Wi-Fi/BT desativada (dispositivo exclusivamente Bluetooth Classic + BLE) ---
+# Elimina assert failed em xQueueReceiveFromISR do coex adapter por semaforos de Wi-Fi nao alocados
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=n
+CONFIG_SW_COEXIST_ENABLE=n
+CONFIG_ESP_WIFI_SW_COEXIST_ENABLE=n

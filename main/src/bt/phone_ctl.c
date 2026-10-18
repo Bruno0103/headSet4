@@ -55,11 +55,11 @@ typedef struct {
 static media_upload_ctx_t s_upload_ctx = {0};
 
 #define PHONE_CTL_STACK_SIZE    3584
-#define PHONE_CTL_QUEUE_LEN     16
+#define PHONE_CTL_QUEUE_LEN     32
 #define PHONE_CTL_IDLE_MS       30000  /* 30 segundos sem atividade -> encerra a task */
 
-/* Buffer de montagem de frames de entrada */
-#define INCOMING_BUF_MAX        512
+/* Buffer de montagem de frames de entrada (suporta pacotes Base64 com folga) */
+#define INCOMING_BUF_MAX        1024
 static char                     s_incoming_buf[INCOMING_BUF_MAX];
 static size_t                   s_incoming_len = 0;
 static SemaphoreHandle_t        s_ctl_mtx = NULL;
