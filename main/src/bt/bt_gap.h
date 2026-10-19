@@ -31,6 +31,8 @@ typedef struct {
     void (*on_auth_complete)(const uint8_t *bda, bool success, const char *device_name);
     /** Enlace ACL aberto/fechado (reason = codigo HCI, so valido ao fechar). */
     void (*on_acl)(const uint8_t *bda, bool connected, uint8_t reason);
+    /** Nome remoto lido via esp_bt_gap_read_remote_name(). */
+    void (*on_remote_name)(const uint8_t *bda, const char *device_name);
 } bt_gap_cbs_t;
 
 /** Nome, CoD de headphones, IO capability (DisplayYesNo), callbacks GAP. O scan inicia DESLIGADO. */
@@ -38,6 +40,9 @@ esp_err_t bt_gap_start(const char *device_name);
 
 /** Registra os callbacks de politica (bt_link_mgr). */
 void bt_gap_register_cbs(const bt_gap_cbs_t *cbs);
+
+/** Solicita a leitura assíncrona do nome remoto do dispositivo Bluetooth (resposta via on_remote_name). */
+esp_err_t bt_gap_request_remote_name(const uint8_t *bda);
 
 /** Visibilidade Classic: connectable = page scan; discoverable = inquiry scan. */
 esp_err_t bt_gap_set_scan(bool connectable, bool discoverable);

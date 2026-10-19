@@ -77,6 +77,7 @@ enum {
     BT_INTERNAL_CMD_PAIR_TIMER,
     BT_INTERNAL_CMD_VOLUME_SAVE_TIMER,
     BT_INTERNAL_CMD_GAP_AUTH_COMPLETE,
+    BT_INTERNAL_CMD_REMOTE_NAME,
     BT_INTERNAL_CMD_EVENT,
     BT_INTERNAL_CMD_SET_ACCOUNT_REF,
     BT_INTERNAL_CMD_SET_VOLUME,
@@ -98,6 +99,12 @@ typedef struct {
     bool          success;
     char          device_name[32];
 } bt_internal_auth_msg_t;
+
+/* Payload interno para nome remoto recebido via GAP */
+typedef struct {
+    esp_bd_addr_t bda;
+    char          device_name[32];
+} bt_internal_remote_name_msg_t;
 
 /* Estado privado mantido exclusivamente dentro da task do ator */
 typedef struct {
@@ -430,6 +437,19 @@ static void stop_pairing(const char *why)
     bt_pairing_evt_t ev = { .active = false, .timeout_sec = 0 };
     hs_event_post(BT_EVT, BT_EVT_PAIRING_MODE, &ev, sizeof(ev));
     bt_fastpair_on_pairing_mode(false);
+
+    /* Se o pareamento encerrou (timeout ou cancelamento) e o slot atual continua vazio,
+     * mas existe outro slot com aparelho válido pareado, retorna para o slot válido existente! */
+    if (!sel_valid()) {
+        for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
+            if (s_ctx.slot[i].valid) {
+                ESP_LOGI(TAG, "Pareamento sem sucesso no slot %d: retornando ao slot %d existente", s_ctx.sel, i);
+                switch_to_slot(i);
+                return;
+            }
+        }
+    }
+
     apply_state();
 }
 
@@ -438,6 +458,19 @@ static void start_pairing(void)
     if (s_ctx.pairing) {
         return;
     }
+    /* Se o slot selecionado atual já possui dispositivo pareado e o outro slot está vazio,
+     * direciona o pareamento para o slot livre para NÃO sobrescrever o aparelho existente! */
+    if (sel_valid()) {
+        for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
+            if (!s_ctx.slot[i].valid) {
+                s_ctx.sel = i;
+                atomic_store(&s_atomic_sel, s_ctx.sel);
+                ESP_LOGI(TAG, "Direcionando janela de pareamento para o slot livre %d", s_ctx.sel);
+                break;
+            }
+        }
+    }
+
     ESP_LOGI(TAG, "Janela de pareamento aberta para o slot %d (%d s)", s_ctx.sel, PAIRING_WINDOW_MS / 1000);
     s_ctx.pairing = true;
     atomic_store(&s_atomic_pairing, true);
@@ -577,6 +610,18 @@ static void on_acl(const uint8_t *bda, bool connected, uint8_t reason)
     ESP_LOGD(TAG, "ACL " ESP_BD_ADDR_STR " %s (0x%02X)", ESP_BD_ADDR_HEX(bda), connected ? "up" : "down", reason);
 }
 
+static void on_remote_name(const uint8_t *bda, const char *device_name)
+{
+    if (!s_bt_actor || !bda || !device_name) {
+        return;
+    }
+    bt_internal_remote_name_msg_t rmt;
+    memset(&rmt, 0, sizeof(rmt));
+    memcpy(rmt.bda, bda, ESP_BD_ADDR_LEN);
+    strncpy(rmt.device_name, device_name, sizeof(rmt.device_name) - 1);
+    hs_actor_send(s_bt_actor, BT_INTERNAL_CMD_REMOTE_NAME, &rmt, sizeof(rmt), 0);
+}
+
 /* ============================================================================
  * LÓGICA DE PROCESSAMENTO DE MENSAGENS DO ACTOR BT_LINK (RUNS NO CORE 0, PRIO 6)
  * ============================================================================ */
@@ -598,10 +643,26 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             apply_state();
             break;
 
-        case SENSOR_EVT_BUTTON_SHORT:
-            ESP_LOGI(TAG, "Botão curto acionado: alternando slot ativo (1-Clique)");
-            switch_to_slot((s_ctx.sel + 1) % BT_LINK_NUM_SLOTS);
+        case SENSOR_EVT_BUTTON_SHORT: {
+            int next_slot = (s_ctx.sel + 1) % BT_LINK_NUM_SLOTS;
+            ESP_LOGI(TAG, "Botão curto acionado: avaliando comutação para Slot %d (atual: Slot %d, valid: %d)",
+                     next_slot, s_ctx.sel, s_ctx.slot[s_ctx.sel].valid);
+            if (s_ctx.slot[next_slot].valid) {
+                /* O slot de destino possui dispositivo pareado: executa comutação 1-Clique estável */
+                ESP_LOGI(TAG, "Slot %d válido: comutando link ativo", next_slot);
+                switch_to_slot(next_slot);
+            } else if (sel_valid()) {
+                /* Slot de destino está vazio, mas o slot atual possui aparelho ativo ou pareado:
+                 * NÃO derruba o link atual para não cortar o áudio nem desconectar o BLE GATT espuriamente. */
+                ESP_LOGW(TAG, "Slot %d vazio. Mantendo Slot %d ativo. Para parear um novo dispositivo no Slot %d, mantenha o botão pressionado por 3s (clique longo).",
+                         next_slot, s_ctx.sel, next_slot);
+            } else {
+                /* Nenhum slot possui dispositivo: abre janela de pareamento */
+                ESP_LOGI(TAG, "Nenhum slot pareado: abrindo pareamento");
+                start_pairing();
+            }
             break;
+        }
 
         case SENSOR_EVT_BUTTON_LONG:
             if (s_ctx.pairing) {
@@ -649,6 +710,21 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             if (s_connect_tmr) esp_timer_stop(s_connect_tmr);
             ESP_LOGI(TAG, "Link ativo com " ESP_BD_ADDR_STR " (perfis 0x%X)", ESP_BD_ADDR_HEX(s_ctx.link.bda), s_ctx.link.profiles);
             post_slot_changed();
+
+            /* Emite imediatamente o nome amigável salvo no NVS para sincronizar a UI e o App */
+            const char *key_name = (s_ctx.sel == 0) ? SETTINGS_KEY_PEER_NAME_SLOT0 : SETTINGS_KEY_PEER_NAME_SLOT1;
+            char cached_name[32] = {0};
+            if (settings_get_blob(key_name, cached_name, sizeof(cached_name) - 1) == ESP_OK && cached_name[0] != '\0') {
+                bt_peer_name_evt_t name_evt;
+                memset(&name_evt, 0, sizeof(name_evt));
+                name_evt.slot = (uint8_t)s_ctx.sel;
+                memcpy(name_evt.bda, s_ctx.link.bda, ESP_BD_ADDR_LEN);
+                strncpy(name_evt.name, cached_name, sizeof(name_evt.name) - 1);
+                hs_event_post(BT_EVT, BT_EVT_PEER_NAME, &name_evt, sizeof(name_evt));
+            }
+            /* Solicita atualização/confirmação do nome remoto via GAP HCI */
+            bt_gap_request_remote_name(s_ctx.link.bda);
+
             if ((ev->profile & BT_PROFILE_HFP) && s_ctx.battery >= 0) {
                 bt_hfp_report_battery((uint8_t)s_ctx.battery);
             }
@@ -836,6 +912,35 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
         break;
     }
 
+    case BT_INTERNAL_CMD_REMOTE_NAME: {
+        if (msg->len >= sizeof(bt_internal_remote_name_msg_t)) {
+            const bt_internal_remote_name_msg_t *rmt = (const bt_internal_remote_name_msg_t *)msg->data;
+            int matched_slot = -1;
+            for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
+                if (s_ctx.slot[i].valid && memcmp(s_ctx.slot[i].bda, rmt->bda, ESP_BD_ADDR_LEN) == 0) {
+                    matched_slot = i;
+                    break;
+                }
+            }
+            if (matched_slot < 0 && s_ctx.link.profiles && memcmp(s_ctx.link.bda, rmt->bda, ESP_BD_ADDR_LEN) == 0) {
+                matched_slot = s_ctx.sel;
+            }
+            if (matched_slot >= 0 && rmt->device_name[0] != '\0') {
+                const char *key_name = (matched_slot == 0) ? SETTINGS_KEY_PEER_NAME_SLOT0 : SETTINGS_KEY_PEER_NAME_SLOT1;
+                settings_set_blob(key_name, rmt->device_name, strlen(rmt->device_name) + 1);
+
+                bt_peer_name_evt_t name_evt;
+                memset(&name_evt, 0, sizeof(name_evt));
+                name_evt.slot = (uint8_t)matched_slot;
+                memcpy(name_evt.bda, rmt->bda, ESP_BD_ADDR_LEN);
+                strncpy(name_evt.name, rmt->device_name, sizeof(name_evt.name) - 1);
+                hs_event_post(BT_EVT, BT_EVT_PEER_NAME, &name_evt, sizeof(name_evt));
+                ESP_LOGI(TAG, "Nome remoto atualizado para slot %d: '%s'", matched_slot, rmt->device_name);
+            }
+        }
+        break;
+    }
+
     case BT_INTERNAL_CMD_EVENT: {
         if (msg->len >= sizeof(bt_internal_evt_msg_t)) {
             handle_bus_evt_in_actor((const bt_internal_evt_msg_t *)msg->data);
@@ -986,6 +1091,7 @@ esp_err_t bt_link_mgr_start(void)
         .on_ssp_confirm   = on_ssp_confirm,
         .on_auth_complete = on_auth_complete,
         .on_acl           = on_acl,
+        .on_remote_name   = on_remote_name,
     };
     bt_gap_register_cbs(&cbs);
 

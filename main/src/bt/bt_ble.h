@@ -56,6 +56,14 @@ void bt_ble_refresh_adv(void);
 /** Registra um servico GATT (app_id unico). O cb recebe todos os eventos do seu gatts_if. */
 esp_err_t bt_ble_gatts_register(uint16_t app_id, esp_gatts_cb_t cb);
 
+/**
+ * Solicita atualização dos parâmetros de conexão BLE com o smartphone conectado.
+ * Configura supervision_timeout estendido (6000 ms = 6,0 s) e slave latency para
+ * garantir tolerância ao tempo em que o rádio físico de 2.4 GHz do ESP32 fica
+ * ocupado no Paging do Bluetooth Classic, impedindo quedas espúrias da conexão GATT.
+ */
+esp_err_t bt_ble_update_conn_params(const esp_bd_addr_t bda);
+
 #ifdef __cplusplus
 }
 #endif

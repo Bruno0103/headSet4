@@ -88,49 +88,49 @@
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Regular.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x2000-0x206F" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
     <bin
       name="font_montserrat_regular_16"
       size="16"
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Regular.ttf"
-      range="0x20-0x7F" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
     <bin
       name="font_montserrat_regular_14"
       size="14"
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Regular.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x2000-0x206F" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
     <bin
       name="font_montserrat_regular_20"
       size="20"
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Regular.ttf"
-      range="0x20-0x7F, 0xA0-0xFF" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
     <bin
       name="font_montserrat_italic_12"
       size="12"
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Italic.ttf"
-      range="0x20-0x7F, 0xA0-0xFF, 0x2000-0x206F" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
     <bin
       name="font_montserrat_italic_14"
       size="14"
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Italic.ttf"
-      range="0x20-0x7F" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
     <bin
       name="font_montserrat_italic_20"
       size="20"
       bpp="4"
       as_file="true"
       src_path="fonts/Montserrat-Italic.ttf"
-      range="0x20-0x7F" />
+      range="0x20-0x7F, 0xA0-0xFF, 0x0100-0x017F, 0x2000-0x206F" />
 
     <!-- ──────────────────── <lvgl-figma-flow end="fonts"/> ──────────────────── -->
     <!-- Add <bin> , <tiny_ttf>, <freetype> tags here -->

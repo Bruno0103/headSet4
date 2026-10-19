@@ -95,6 +95,22 @@ static void gap_evt_hdl(uint16_t ev, void *p) {
     esp_bt_gap_pin_reply(prm->pin_req.bda, false, 0, NULL);
     break;
 
+  case ESP_BT_GAP_READ_REMOTE_NAME_EVT: {
+    bool ok = (prm->read_rmt_name.stat == ESP_BT_STATUS_SUCCESS);
+    const char *name = (const char *)prm->read_rmt_name.rmt_name;
+    if (ok && name && name[0] != '\0') {
+      ESP_LOGI(TAG, "Nome remoto recebido: '%s' (" ESP_BD_ADDR_STR ")",
+               name, ESP_BD_ADDR_HEX(prm->read_rmt_name.bda));
+      if (s_cbs.on_remote_name) {
+        s_cbs.on_remote_name(prm->read_rmt_name.bda, name);
+      }
+    } else {
+      ESP_LOGW(TAG, "Falha ao obter nome remoto (stat %d) para " ESP_BD_ADDR_STR,
+               prm->read_rmt_name.stat, ESP_BD_ADDR_HEX(prm->read_rmt_name.bda));
+    }
+    break;
+  }
+
   default:
     break;
   }
@@ -106,6 +122,7 @@ static void gap_cb(esp_bt_gap_cb_event_t ev, esp_bt_gap_cb_param_t *param) {
   case ESP_BT_GAP_ACL_DISCONN_CMPL_STAT_EVT:
   case ESP_BT_GAP_CFM_REQ_EVT:
   case ESP_BT_GAP_AUTH_CMPL_EVT:
+  case ESP_BT_GAP_READ_REMOTE_NAME_EVT:
   case ESP_BT_GAP_KEY_REQ_EVT:
   case ESP_BT_GAP_PIN_REQ_EVT:
     bt_app_work_dispatch(gap_evt_hdl, ev, param, sizeof(esp_bt_gap_cb_param_t),
@@ -115,6 +132,15 @@ static void gap_cb(esp_bt_gap_cb_event_t ev, esp_bt_gap_cb_param_t *param) {
     ESP_LOGD(TAG, "Evento GAP %d ignorado", ev);
     break;
   }
+}
+
+esp_err_t bt_gap_request_remote_name(const uint8_t *bda) {
+  if (!bda) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  esp_bd_addr_t a;
+  memcpy(a, bda, sizeof(a));
+  return esp_bt_gap_read_remote_name(a);
 }
 
 esp_err_t bt_gap_start(const char *device_name) {

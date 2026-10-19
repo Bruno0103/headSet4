@@ -17,6 +17,8 @@
 
 #include "esp_gatts_api.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "bt_ble.h"
 #include "phone_ctl.h"
@@ -55,6 +57,7 @@ static esp_gatt_if_t       s_gatts_if = ESP_GATT_IF_NONE;
 static uint16_t            s_handles[IDX_NB];
 static uint16_t            s_conn_id  = 0xFFFF;
 static bool                s_notify_enabled = false;
+static uint16_t            s_mtu = 23; /* ATT MTU negociado (padrao inicial 23, tipico 512) */
 
 /* Buffer para suporte a Write Long / fragmentacao GATT */
 #define CTL_PREP_BUF_MAX 1024
@@ -68,8 +71,10 @@ static void build_db(void)
     const esp_attr_control_t app_rsp  = { ESP_GATT_RSP_BY_APP };
 
     /* Permissao de escrita aceita comandos do companion app tanto em conexoes
-     * convencionais quanto em links criptografados com SMP (evita rejeicao GATT 15 / 0x0F) */
-    const uint16_t perm_write_sec = ESP_GATT_PERM_WRITE | ESP_GATT_PERM_WRITE_ENCRYPTED;
+     * convencionais quanto em links criptografados com SMP.
+     * Usar apenas ESP_GATT_PERM_WRITE permite escrita em links abertos ou criptografados,
+     * eliminando a rejeicao espuria GATT_INSUF_AUTHENTICATION (0x05) no primeiro write. */
+    const uint16_t perm_write_sec = ESP_GATT_PERM_WRITE;
     const uint16_t perm_read_sec  = ESP_GATT_PERM_READ;
 
     s_db[IDX_SVC] = (esp_gatts_attr_db_t){
@@ -127,7 +132,15 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
     case ESP_GATTS_CONNECT_EVT:
         if (gatts_if == s_gatts_if) {
             s_conn_id = p->connect.conn_id;
+            s_mtu = 23; /* Reinicia para o MTU padrao ate o cliente solicitar MTU estendido */
             ESP_LOGI(TAG, "Cliente conectou ao servico de controle (conn_id: %u)", s_conn_id);
+        }
+        break;
+
+    case ESP_GATTS_MTU_EVT:
+        if (gatts_if == s_gatts_if) {
+            s_mtu = p->mtu.mtu;
+            ESP_LOGI(TAG, "MTU BLE atualizado para conn_id %u: %u bytes", p->mtu.conn_id, s_mtu);
         }
         break;
 
@@ -253,13 +266,56 @@ esp_err_t bt_ctl_service_send_notify(uint16_t conn_id, const uint8_t *data, size
         return ESP_ERR_INVALID_ARG;
     }
 
-    /* Envia Notificacao GATT sem exigir ACK na camada de aplicacao (false = notify) */
-    esp_err_t err = esp_ble_gatts_send_indicate(s_gatts_if, conn_id, s_handles[IDX_NOTIFY_VAL],
-                                                len, (uint8_t *)data, false);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "esp_ble_gatts_send_indicate (conn_id %u): %s", conn_id, esp_err_to_name(err));
+    /* O tamanho maximo de um payload de Notificacao ATT e limitado por (MTU - 3).
+     * Alem disso, o stack Bluedroid rejeita com ESP_ERR_INVALID_SIZE se len > ESP_GATT_MAX_ATTR_LEN (600).
+     * Limitamos defensivamente o chunk a no maximo 500 bytes para garantir compatibilidade e margem segura. */
+    uint16_t max_chunk = (s_mtu > 3) ? (s_mtu - 3) : 20;
+    if (max_chunk > 500) {
+        max_chunk = 500;
     }
-    return err;
+
+    /* Se o payload couber em uma unica notificacao ATT, envia diretamente sem overhead */
+    if (len <= max_chunk) {
+        esp_err_t err = esp_ble_gatts_send_indicate(s_gatts_if, conn_id, s_handles[IDX_NOTIFY_VAL],
+                                                    (uint16_t)len, (uint8_t *)data, false);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "esp_ble_gatts_send_indicate (conn_id %u, len %u): %s",
+                     conn_id, (unsigned)len, esp_err_to_name(err));
+        }
+        return err;
+    }
+
+    /* Payload longo (ex: catalogo de midia com 6 fotos e 6 GIFs totalizando > 600 bytes):
+     * Fragmenta ordenadamente em chunks de ate max_chunk bytes.
+     * O Companion App Android possui suporte nativo em parseIncomingTelemetryChunk()
+     * que acumula chunks no incomingBuffer ate detectar o encerramento do JSON ('}' ou '\n'). */
+    ESP_LOGI(TAG, "Notificacao longa (%u bytes): fragmentando em pacotes de ate %u bytes (conn_id %u)",
+             (unsigned)len, (unsigned)max_chunk, conn_id);
+
+    size_t sent = 0;
+    while (sent < len) {
+        size_t chunk_len = len - sent;
+        if (chunk_len > max_chunk) {
+            chunk_len = max_chunk;
+        }
+
+        esp_err_t err = esp_ble_gatts_send_indicate(s_gatts_if, conn_id, s_handles[IDX_NOTIFY_VAL],
+                                                    (uint16_t)chunk_len, (uint8_t *)(data + sent), false);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Falha ao enviar fragmento GATT (%u bytes em offset %u/%u): %s",
+                     (unsigned)chunk_len, (unsigned)sent, (unsigned)len, esp_err_to_name(err));
+            return err;
+        }
+
+        sent += chunk_len;
+        if (sent < len) {
+            /* Pausa curta (15 ms) para permitir que a fila de pacotes L2CAP do controlador
+             * Bluetooth processe e transmita cada fragmento antes do proximo envio */
+            vTaskDelay(pdMS_TO_TICKS(15));
+        }
+    }
+
+    return ESP_OK;
 }
 
 bool bt_ctl_service_is_notify_enabled(void)

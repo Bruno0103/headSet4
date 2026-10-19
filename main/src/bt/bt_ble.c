@@ -297,6 +297,16 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         esp_ble_confirm_reply(param->ble_security.ble_req.bd_addr, false);
         break;
 
+    case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
+        ESP_LOGI(TAG, "Parametros de conexao BLE atualizados (status: %d, min_int: %u, max_int: %u, conn_int: %u, latency: %u, timeout: %u [*10ms])",
+                 param->update_conn_params.status,
+                 param->update_conn_params.min_int,
+                 param->update_conn_params.max_int,
+                 param->update_conn_params.conn_int,
+                 param->update_conn_params.latency,
+                 param->update_conn_params.timeout);
+        break;
+
     default:
         break;
     }
@@ -327,6 +337,8 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             s_running = false;          /* a conexao interrompe o advertising */
             restart_adv = true;
         }
+        /* Atualiza imediatamente os parâmetros de conexão BLE para elevar o supervision timeout para 6.0s */
+        bt_ble_update_conn_params(param->connect.remote_bda);
     } else if (event == ESP_GATTS_DISCONNECT_EVT && param->disconnect.conn_id < 8) {
         uint8_t before = s_conn_ids;
         s_conn_ids &= ~(1u << param->disconnect.conn_id);
@@ -406,12 +418,16 @@ esp_err_t bt_ble_init(const char *device_name)
     }
 
     /* Configuracao de Seguranca SMP (Security Manager Protocol - AGENTS.md WP 7.1 / R.4):
-     * Configura modo de autenticacao Just Works com Bonding persistente para fones de ouvido. */
+     * Configura modo de autenticacao Just Works com Bonding persistente para fones de ouvido.
+     * Como o HeadSet4 opera com endereco publico fixo alinhado ao Classic (A2DP), a chave LTK
+     * (ESP_BLE_ENC_KEY_MASK) e suficiente para criptografia SC. Omitimos ESP_BLE_ID_KEY_MASK
+     * para evitar que a pilha tente registrar IRK na resolving list do controlador via
+     * opcode 0x2027 enquanto o advertising esta ativo, o que gerava erro HCI 0x0C (Cmd Disallowed). */
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t key_size = 16;
-    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    uint8_t rsp_key  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK;
+    uint8_t rsp_key  = ESP_BLE_ENC_KEY_MASK;
 
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
@@ -472,3 +488,32 @@ void bt_ble_refresh_adv(void)
     apply_locked();
     xSemaphoreGive(s_lock);
 }
+
+esp_err_t bt_ble_update_conn_params(const esp_bd_addr_t bda)
+{
+    if (!bda) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_ble_conn_update_params_t conn_params = {0};
+    memcpy(conn_params.bda, bda, sizeof(esp_bd_addr_t));
+    /* Intervalo de conexão de 20 ms a 50 ms (em múltiplos de 1.25 ms: 16 e 40) */
+    conn_params.min_int = 16;
+    conn_params.max_int = 40;
+    /* Latência de escravo: permite pular 2 eventos sem gerar desconexão */
+    conn_params.latency = 2;
+    /* Supervision Timeout: 600 * 10 ms = 6000 ms (6,0 segundos)
+     * Garante que o link BLE não expire enquanto o rádio 2.4 GHz estiver em Paging Classic (~2,56 s) */
+    conn_params.timeout = 600;
+
+    esp_err_t err = esp_ble_gap_update_conn_params(&conn_params);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Falha ao solicitar atualizacao de parametros BLE para " ESP_BD_ADDR_STR ": %s",
+                 ESP_BD_ADDR_HEX(bda), esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Solicitada atualizacao de parametros BLE para " ESP_BD_ADDR_STR " (timeout=6000ms, latency=2)",
+                 ESP_BD_ADDR_HEX(bda));
+    }
+    return err;
+}
+

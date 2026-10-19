@@ -451,6 +451,21 @@ esp_err_t media_storage_set_active_gif(uint8_t slot) {
  * ============================================================================
  */
 
+/**
+ * @brief Alimenta defensivamente o Task Watchdog Timer se a task chamadora estiver inscrita.
+ * 
+ * No ESP-IDF v6.x, esp_task_wdt_reset() falha com ESP_ERR_NOT_FOUND (e emite log de erro E task_wdt: task not found)
+ * se a tarefa atual não tiver sido adicionada ao TWDT via esp_task_wdt_add(NULL).
+ * Esta função verifica previamente com esp_task_wdt_status(NULL) e cede uma fatia
+ * de tempo (5 ms) para que tarefas IDLE e do sistema possam rodar e alimentar seus próprios watchdogs.
+ */
+static inline void media_storage_feed_wdt_defensive(void) {
+  if (esp_task_wdt_status(NULL) == ESP_OK) {
+    esp_task_wdt_reset();
+  }
+  vTaskDelay(pdMS_TO_TICKS(5));
+}
+
 esp_err_t media_storage_save_image(uint8_t slot, const char *name,
                                    const uint8_t *data, size_t len,
                                    uint32_t crc32) {
@@ -483,14 +498,14 @@ esp_err_t media_storage_save_image(uint8_t slot, const char *name,
   char key[16];
   snprintf(key, sizeof(key), "img_blob_%u", slot);
 
-  /* Alimenta o watchdog antes da gravação de bloco pesado (142 KB) na Flash */
-  esp_task_wdt_reset();
+  /* Alimenta o watchdog defensivamente antes da gravação de bloco pesado (142 KB) na Flash */
+  media_storage_feed_wdt_defensive();
 
   esp_err_t err = nvs_set_blob(s_nvs_h, key, data, len);
   if (err == ESP_OK) {
-    esp_task_wdt_reset();
+    media_storage_feed_wdt_defensive();
     nvs_commit(s_nvs_h);
-    esp_task_wdt_reset();
+    media_storage_feed_wdt_defensive();
 
     /* Atualiza metadados */
     s_catalog.images[slot].has_data = true;
@@ -558,14 +573,14 @@ esp_err_t media_storage_save_gif(uint8_t slot, const char *name,
   char key[16];
   snprintf(key, sizeof(key), "gif_blob_%u", slot);
 
-  /* Alimenta o watchdog antes da gravação de bloco pesado (até 400 KB) na Flash */
-  esp_task_wdt_reset();
+  /* Alimenta o watchdog defensivamente antes da gravação de bloco pesado (até 400 KB) na Flash */
+  media_storage_feed_wdt_defensive();
 
   esp_err_t err = nvs_set_blob(s_nvs_h, key, data, len);
   if (err == ESP_OK) {
-    esp_task_wdt_reset();
+    media_storage_feed_wdt_defensive();
     nvs_commit(s_nvs_h);
-    esp_task_wdt_reset();
+    media_storage_feed_wdt_defensive();
 
     /* Atualiza metadados */
     s_catalog.gifs[slot].has_data = true;

@@ -95,6 +95,7 @@ class HeadSetBleManager(
 
     private var scanCallback: ScanCallback? = null
     private var isScanningActive = false
+    private var isUserInitiatedDisconnect = false
 
     // 6 slots vazios reais por padrão (sem dados fictícios nem URLs externas)
     private val emptyImages = (0..5).map { idx ->
@@ -350,6 +351,7 @@ class HeadSetBleManager(
      * Starts BLE scan using BluetoothLeScanner with filters for HeadSet4.
      */
     fun startScanAndConnect(targetDeviceName: String = "HeadSet4") {
+        isUserInitiatedDisconnect = false
         if (!isBluetoothEnabled()) {
             _uiState.update {
                 it.copy(
@@ -507,6 +509,7 @@ class HeadSetBleManager(
      * Connects to a specific BluetoothDevice over GATT with TRANSPORT_LE.
      */
     fun connectToDevice(device: BluetoothDevice) {
+        isUserInitiatedDisconnect = false
         stopScan()
 
         // Disconnect existing
@@ -592,6 +595,7 @@ class HeadSetBleManager(
     }
 
     fun disconnect() {
+        isUserInitiatedDisconnect = true
         stopScan()
         heartbeatJob?.cancel()
         activeUploadJob?.cancel()
@@ -669,7 +673,7 @@ class HeadSetBleManager(
                 }
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.w(tag, "GATT Desconectado (status: $status)")
+                    Log.w(tag, "GATT Desconectado (status: $status, userInitiated: $isUserInitiatedDisconnect)")
                     logPacket("RX", "GATT_DISCONNECTED (status: $status)", isError = true)
                     gattQueue = null
                     try {
@@ -680,9 +684,14 @@ class HeadSetBleManager(
                     bluetoothGatt = null
                     heartbeatJob?.cancel()
 
+                    // Identifica se a desconexão decorre de transição de transporte Classic ou timeout recuperável
+                    val shouldAutoReconnect = !isUserInitiatedDisconnect &&
+                            !_uiState.value.isSimulationMode &&
+                            (status == 19 || status == 8 || status == 133 || status == 0 || _uiState.value.isAudioConnected)
+
                     _uiState.update {
                         it.copy(
-                            connectionStatus = BleConnectionStatus.DISCONNECTED,
+                            connectionStatus = if (shouldAutoReconnect) BleConnectionStatus.CONNECTING else BleConnectionStatus.DISCONNECTED,
                             isGattConnected = false,
                             slot0Connected = false,
                             slot1Connected = false,
@@ -691,10 +700,23 @@ class HeadSetBleManager(
                             activeGifIdx = -1,
                             imageSlots = emptyImages,
                             gifSlots = emptyGifs,
-                            lastGattMessage = "Conexão de controle perdida (status: $status). Toque para reconectar."
+                            lastGattMessage = if (shouldAutoReconnect)
+                                "Desconexão transitória de transporte ($status). Reconectando canal de controle BLE..."
+                            else
+                                "Conexão de controle perdida (status: $status). Toque para reconectar."
                         )
                     }
                     checkCurrentA2dpConnection()
+
+                    if (shouldAutoReconnect) {
+                        Log.i(tag, "Disparando reconexão BLE automática em 1,5s após comutação de transporte...")
+                        scope.launch(Dispatchers.IO) {
+                            delay(1500)
+                            if (!isUserInitiatedDisconnect && _uiState.value.connectionStatus != BleConnectionStatus.CONNECTED) {
+                                startScanAndConnect()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1565,7 +1587,7 @@ class HeadSetBleManager(
                         )
                     }
 
-                    delay(35) // 35ms throttling per chunk to protect ESP32 FreeRTOS tasks
+                    delay(65) // 65ms throttling per chunk: dá vazão ao FreeRTOS no ESP32 para decodificar Base64 sem saturar a fila de mensagens
                 }
 
                 delay(100)

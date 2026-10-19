@@ -1061,91 +1061,63 @@ static void bind_gallery_controls(lv_obj_t *screen, bool is_gif) {
 }
 
 /**
+ * @brief Callback disparado ao clicar diretamente no container principal de screen_main.
+ * Permite avançar para screen_main_gif ao tocar no container (área externa/fundo).
+ */
+static void on_main_content_click_cb(lv_event_t *e) {
+  /*
+   * Filtro anti-duplo-disparo:
+   * Se o alvo original do clique (target) for diferente do container (current_target),
+   * significa que o clique veio borbulhado de um filho (como o card ou a imagem).
+   * Como o card já possui seu próprio manipulador nativo de transição gerado pelo LVGL Pro,
+   * descartamos para evitar dois disparos concorrentes.
+   */
+  if (lv_event_get_target(e) != lv_event_get_current_target(e)) {
+    return;
+  }
+  if (display_is_transitioning() || s_touch_paused) {
+    return;
+  }
+  ESP_LOGI(TAG, "Toque direto no conteiner de screen_main -> avancando para screen_main_gif");
+  lv_obj_t *new_scr = screen_main_gif_create();
+  if (new_scr) {
+    lv_screen_load_anim(new_scr, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 300, 0, true);
+  }
+}
+
+/**
+ * @brief Callback disparado ao clicar diretamente no container principal de screen_main_gif.
+ * Permite avançar para screen_main_cover_art ao tocar no container (área externa/fundo).
+ */
+static void on_main_gif_content_click_cb(lv_event_t *e) {
+  /* Filtro anti-duplo-disparo: só executa se o toque foi diretamente no container */
+  if (lv_event_get_target(e) != lv_event_get_current_target(e)) {
+    return;
+  }
+  if (display_is_transitioning() || s_touch_paused) {
+    return;
+  }
+  ESP_LOGI(TAG, "Toque direto no conteiner de screen_main_gif -> avancando para screen_main_cover_art");
+  lv_obj_t *new_scr = screen_main_cover_art_create();
+  if (new_scr) {
+    lv_screen_load_anim(new_scr, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 300, 0, true);
+  }
+}
+
+/**
  * @brief Mapeia a imagem de papel de parede ativo na tela principal (screen_main).
- * Ajusta o widget para 240x296 e aplica o descritor RGB565 da PSRAM.
+ * Configura o conteiner e a imagem para que o toque em qualquer um deles passe para screen_main_gif.
  */
 static void bind_main_image_controls(lv_obj_t *screen) {
   if (!screen) return;
   lv_obj_t *content = get_screen_content_container(screen);
   if (!content) return;
 
-  if (lv_obj_get_child_count(content) > 0) {
-    lv_obj_t *card = lv_obj_get_child(content, 0);
-    if (card && lv_obj_get_child_count(card) > 0) {
-      lv_obj_t *tile = lv_obj_get_child(card, 0);
-      if (tile && lv_obj_get_child_count(tile) > 0) {
-        lv_obj_t *img = lv_obj_get_child(tile, 0);
-        if (img) {
-          lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
-          const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
-          if (dsc) {
-            lv_image_set_src(img, dsc);
-            ESP_LOGI(TAG, "Wallpaper 240x296 aplicado com sucesso em screen_main");
-          }
-        }
-      }
-    }
-  }
-}
+  /* 1. Habilita clique no conteiner principal para navegar ao tocar no fundo */
+  lv_obj_add_flag(content, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(content, on_main_content_click_cb, LV_EVENT_CLICKED, NULL);
 
-/**
- * @brief Mapeia a animação GIF ativa na tela screen_main_gif.
- * Ajusta o widget para 240x296 e inicializa a reprodução contínua via decodificador LVGL.
- */
-static void bind_main_gif_controls(lv_obj_t *screen) {
-  if (!screen) return;
-  lv_obj_t *content = get_screen_content_container(screen);
-  if (!content) return;
-
-  if (lv_obj_get_child_count(content) > 0) {
-    lv_obj_t *card = lv_obj_get_child(content, 0);
-    if (card && lv_obj_get_child_count(card) > 0) {
-      lv_obj_t *inner_card = lv_obj_get_child(card, 0);
-      if (inner_card && lv_obj_get_child_count(inner_card) > 0) {
-        lv_obj_t *img = lv_obj_get_child(inner_card, 0);
-        if (img) {
-          lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
-          const lv_image_dsc_t *gif_dsc = media_storage_get_active_gif_dsc();
-          if (gif_dsc && gif_dsc->data_size > 0) {
-            lv_gif_set_color_format(img, LV_COLOR_FORMAT_RGB565);
-            lv_gif_set_src(img, gif_dsc);
-            ESP_LOGI(TAG, "GIF animado 240x296 (%u bytes) aplicado em screen_main_gif",
-                     (unsigned int)gif_dsc->data_size);
-          } else {
-            const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
-            if (dsc) {
-              lv_image_set_src(img, dsc);
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
- * @brief Mapeia controles e exibição na tela de Cover Art (screen_main_cover_art).
- *
- * Estrutura determinística do LVGL Pro para screen_main_cover_art:
- * - the_root:
- *   - child 0: panel_0 (barra superior BT + BAT)
- *   - child 1: container_0 (container principal obtido via get_screen_content_container):
- *     - child 0: card_0 (card com imagem da capa e labels de artista/música)
- *     - child 1: button_0 (botão "Apps")
- *
- * Em conformidade com o requisito de design e UX do HeadSet4:
- * - O toque no card/imagem da capa MUDA DE TELA para screen_main (ciclo de navegação de papéis de parede).
- * - NENHUM comando de transporte AVRCP (Play/Pause) é enviado a partir da UI (modo somente recepção de dados).
- */
-static void bind_main_cover_art_controls(lv_obj_t *screen) {
-  if (!screen) return;
-  lv_obj_t *content = get_screen_content_container(screen);
-  if (!content) {
-    ESP_LOGW(TAG, "Container de conteudo nao encontrado em screen_main_cover_art");
-    return;
-  }
-
-  /* Desarma propagação por bubble do botão Apps para container_0, evitando duplo disparo concorrente */
+  /* 2. Desarma propagação por bubble do botão Apps (filho 1), isolando sua navegação para Apps */
   if (lv_obj_get_child_count(content) > 1) {
     lv_obj_t *btn_apps = lv_obj_get_child(content, 1);
     if (btn_apps) {
@@ -1160,33 +1132,148 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
     }
   }
 
-  /* card_0 é o primeiro filho do container principal de cover art */
+  /* 3. Configura card_0, tile e img para que o toque na imagem borbulhe para card_0 */
+  if (lv_obj_get_child_count(content) > 0) {
+    lv_obj_t *card = lv_obj_get_child(content, 0);
+    if (card && lv_obj_get_child_count(card) > 0) {
+      lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_t *tile = lv_obj_get_child(card, 0);
+      if (tile && lv_obj_get_child_count(tile) > 0) {
+        lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(tile, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_t *img = lv_obj_get_child(tile, 0);
+        if (img) {
+          lv_obj_add_flag(img, LV_OBJ_FLAG_CLICKABLE);
+          lv_obj_add_flag(img, LV_OBJ_FLAG_EVENT_BUBBLE);
+          lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
+          const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
+          if (dsc) {
+            lv_image_set_src(img, dsc);
+            ESP_LOGI(TAG, "Wallpaper 240x296 aplicado com sucesso em screen_main");
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * @brief Mapeia a animação GIF ativa na tela screen_main_gif.
+ * Configura o conteiner e o GIF animado para que o toque em qualquer um deles passe para screen_main_cover_art.
+ */
+static void bind_main_gif_controls(lv_obj_t *screen) {
+  if (!screen) return;
+  lv_obj_t *content = get_screen_content_container(screen);
+  if (!content) return;
+
+  /* 1. Habilita clique no conteiner principal para navegar ao tocar no fundo */
+  lv_obj_add_flag(content, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(content, on_main_gif_content_click_cb, LV_EVENT_CLICKED, NULL);
+
+  /* 2. Desarma propagação por bubble do botão Apps (filho 1), isolando sua navegação para Apps */
+  if (lv_obj_get_child_count(content) > 1) {
+    lv_obj_t *btn_apps = lv_obj_get_child(content, 1);
+    if (btn_apps) {
+      lv_obj_remove_flag(btn_apps, LV_OBJ_FLAG_EVENT_BUBBLE);
+      uint32_t btn_kids = lv_obj_get_child_count(btn_apps);
+      for (uint32_t k = 0; k < btn_kids; k++) {
+        lv_obj_t *kobj = lv_obj_get_child(btn_apps, k);
+        if (kobj) {
+          lv_obj_remove_flag(kobj, LV_OBJ_FLAG_EVENT_BUBBLE);
+        }
+      }
+    }
+  }
+
+  /* 3. Configura card_0, inner_card e img para que o toque no GIF borbulhe para card_0 */
+  if (lv_obj_get_child_count(content) > 0) {
+    lv_obj_t *card = lv_obj_get_child(content, 0);
+    if (card && lv_obj_get_child_count(card) > 0) {
+      lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_t *inner_card = lv_obj_get_child(card, 0);
+      if (inner_card && lv_obj_get_child_count(inner_card) > 0) {
+        lv_obj_add_flag(inner_card, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(inner_card, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_t *img = lv_obj_get_child(inner_card, 0);
+        if (img) {
+          lv_obj_add_flag(img, LV_OBJ_FLAG_CLICKABLE);
+          lv_obj_add_flag(img, LV_OBJ_FLAG_EVENT_BUBBLE);
+          const lv_image_dsc_t *gif_dsc = media_storage_get_active_gif_dsc();
+          if (gif_dsc && gif_dsc->data_size > 0) {
+            lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
+            lv_gif_set_color_format(img, LV_COLOR_FORMAT_RGB565);
+            lv_gif_set_src(img, gif_dsc);
+            ESP_LOGI(TAG, "GIF animado 240x296 (%u bytes) aplicado em screen_main_gif",
+                     (unsigned int)gif_dsc->data_size);
+          } else {
+            /* Quando não há GIF ativo gravado/selecionado no slot, restaura o asset padrão de fábrica
+             * (image_image) com seu tamanho original de 200x200 px. Isso isola completamente a tela de GIF
+             * e garante que imagens enviadas para o papel de parede principal (screen_main) fiquem estritamente
+             * na tela principal e nunca ocupem a tela de GIF. */
+            lv_obj_set_size(img, 200, 200);
+            if (image_image) {
+              lv_image_set_src(img, image_image);
+            }
+            ESP_LOGI(TAG, "Nenhum GIF ativo no slot. Exibindo asset padrão de fábrica (image_image) em screen_main_gif");
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * @brief Mapeia controles e exibição na tela de Cover Art (screen_main_cover_art).
+ * Configura o conteiner e a capa de album para que o toque em qualquer um deles passe para screen_main.
+ */
+static void bind_main_cover_art_controls(lv_obj_t *screen) {
+  if (!screen) return;
+  lv_obj_t *content = get_screen_content_container(screen);
+  if (!content) {
+    ESP_LOGW(TAG, "Container de conteudo nao encontrado em screen_main_cover_art");
+    return;
+  }
+
+  /* 1. Garante que container_0 seja clicável (já possui nativamente o evento para screen_main_create) */
+  lv_obj_add_flag(content, LV_OBJ_FLAG_CLICKABLE);
+
+  /* 2. Desarma propagação por bubble do botão Apps para container_0, evitando duplo disparo concorrente */
+  if (lv_obj_get_child_count(content) > 1) {
+    lv_obj_t *btn_apps = lv_obj_get_child(content, 1);
+    if (btn_apps) {
+      lv_obj_remove_flag(btn_apps, LV_OBJ_FLAG_EVENT_BUBBLE);
+      uint32_t btn_kids = lv_obj_get_child_count(btn_apps);
+      for (uint32_t k = 0; k < btn_kids; k++) {
+        lv_obj_t *kobj = lv_obj_get_child(btn_apps, k);
+        if (kobj) {
+          lv_obj_remove_flag(kobj, LV_OBJ_FLAG_EVENT_BUBBLE);
+        }
+      }
+    }
+  }
+
+  /* 3. card_0 é o primeiro filho do container principal de cover art */
   if (lv_obj_get_child_count(content) > 0) {
     lv_obj_t *card = lv_obj_get_child(content, 0);
     if (card) {
-      /*
-       * UX e Navegação de Retorno:
-       * Em screen_main_cover_art_gen.c, o 'container_0' (content) já possui nativamente o evento
-       * de clique registrado para 'screen_main_create'.
-       * O 'card' e seus filhos ('tile' e 'img') possuem LV_OBJ_FLAG_EVENT_BUBBLE, repassando qualquer
-       * toque diretamente para o container pai.
-       * Portanto, NÃO adicionamos evento redundante em 'card' nem o tornamos clicável separado,
-       * evitando disparos duplos de transição concorrente no LVGL.
-       */
-      ESP_LOGI(TAG, "Cover Art: Container pai gerencia navegacao de retorno para screen_main");
+      lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_add_flag(card, LV_OBJ_FLAG_EVENT_BUBBLE);
+      ESP_LOGI(TAG, "Cover Art: Container e Imagem configurados para navegar para screen_main");
 
       /* Atualiza imediatamente com a capa decodificada e metadados de texto mantidos no modelo */
       ui_model_data_t snap;
       ui_model_get_snapshot(&snap);
 
-      /* 1. Capa de álbum: tile_4_0 -> image_0 */
+      /* Capa de álbum: tile_4_0 -> image_0 */
       if (lv_obj_get_child_count(card) > 0) {
         lv_obj_t *tile = lv_obj_get_child(card, 0);
         if (tile) {
+          lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
           lv_obj_add_flag(tile, LV_OBJ_FLAG_EVENT_BUBBLE);
           if (lv_obj_get_child_count(tile) > 0) {
             lv_obj_t *img = lv_obj_get_child(tile, 0);
             if (img) {
+              lv_obj_add_flag(img, LV_OBJ_FLAG_CLICKABLE);
               lv_obj_add_flag(img, LV_OBJ_FLAG_EVENT_BUBBLE);
               const lv_image_dsc_t *dsc = cover_art_get_image_dsc();
               if (dsc) {
@@ -1198,8 +1285,14 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
         }
       }
 
-      /* 2. Metadados de texto: Álbum (1), Música (2), Artista (3) */
+      /* Metadados de texto: Álbum (1), Música (2), Artista (3) */
       uint32_t count = lv_obj_get_child_count(card);
+      for (uint32_t l = 1; l < count; l++) {
+        lv_obj_t *lbl = lv_obj_get_child(card, l);
+        if (lbl) {
+          lv_obj_add_flag(lbl, LV_OBJ_FLAG_EVENT_BUBBLE);
+        }
+      }
       if (count > 1 && strlen(snap.track_album) > 0) {
         lv_obj_t *lbl_album = lv_obj_get_child(card, 1);
         if (lbl_album) lv_label_set_text(lbl_album, snap.track_album);

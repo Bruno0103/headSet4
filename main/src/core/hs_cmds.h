@@ -294,9 +294,8 @@ typedef enum {
 
 typedef struct {
     uint16_t conn_id;            /**< Identificador da conexão BLE ativa. */
-
-    uint16_t len;                /**< Tamanho dos dados contidos em raw. */
-    uint8_t  raw[128];           /**< Payload fragmentado ou comando direto (expandido para 128 B para MTU estendido). */
+    uint16_t len;                /**< Tamanho dos dados contidos em raw (<= 60 B). */
+    uint8_t  raw[60];            /**< Payload fragmentado inline (2 + 2 + 60 = 64 B, compatível com HS_MSG_PAYLOAD_MAX_LEN). */
 } phone_cmd_msg_t;
 
 #ifdef __cplusplus
