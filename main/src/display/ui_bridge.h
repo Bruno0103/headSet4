@@ -311,6 +311,11 @@ bool ui_bridge_display_get_timer_enabled(void);
 bool ui_bridge_display_set_timer_enabled(bool enabled);
 
 /**
+ * @brief Acorda o backlight do display restaurando o brilho nominal e reinicia o timer de inatividade do LVGL.
+ */
+void ui_bridge_display_wake(void);
+
+/**
  * @brief Configura o modo de display para "Ligado por timer" (Temporizador ativado).
  *
  * @param[in] enable true para ativar o temporizador de inatividade.

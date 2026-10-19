@@ -296,7 +296,7 @@ typedef struct {
     uint16_t conn_id;            /**< Identificador da conexão BLE ativa. */
 
     uint16_t len;                /**< Tamanho dos dados contidos em raw. */
-    uint8_t  raw[40];            /**< Payload fragmentado ou comando direto. */
+    uint8_t  raw[128];           /**< Payload fragmentado ou comando direto (expandido para 128 B para MTU estendido). */
 } phone_cmd_msg_t;
 
 #ifdef __cplusplus

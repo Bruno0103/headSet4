@@ -121,8 +121,15 @@ void app_main(void) {
   ESP_ERROR_CHECK(settings_init());
 
   /* Codec/I2S antes do Bluetooth: o stack ja pode entregar PCM assim que
-   * conectar */
-  ESP_ERROR_CHECK(audio_init());
+   * conectar. Inicialização defensiva: se o codec WM8960 demorar a responder
+   * ou sofrer glitch temporário de alimentação, não travamos o boot do sistema. */
+  esp_err_t audio_err = audio_init();
+  if (audio_err != ESP_OK) {
+    ESP_LOGE(TAG, "Falha na inicialização inicial do áudio/codec WM8960 (%s). O sistema manterá recuperação resiliente.",
+             esp_err_to_name(audio_err));
+  } else {
+    ESP_LOGI(TAG, "Subsistema de áudio e Codec WM8960 inicializados com sucesso.");
+  }
   if (sfx_init() != ESP_OK) {
     ESP_LOGE(TAG, "Falha ao iniciar os efeitos sonoros");
   }

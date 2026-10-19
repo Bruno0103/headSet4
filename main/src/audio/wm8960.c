@@ -38,11 +38,26 @@ esp_err_t wm8960_attach(i2c_master_bus_handle_t bus)
 static esp_err_t write_locked(uint8_t reg, uint16_t value)
 {
     uint8_t buf[2] = { (uint8_t)((reg << 1) | ((value >> 8) & 1)), (uint8_t)(value & 0xFF) };
-    esp_err_t err = i2c_master_transmit(s_dev, buf, sizeof buf, 100);
-    if (err == ESP_OK) {
-        s_shadow[reg] = value & 0x1FF;
-        s_known[reg]  = true;
+    esp_err_t err = ESP_FAIL;
+
+    /*
+     * Resiliência de Barramento I2C Compartilhado:
+     * O barramento I2C0 (SDA=21, SCL=26) é compartilhado entre o Codec WM8960 (0x1A)
+     * e o sensor óptico APDS-9930 (0x39). Para proteger contra ruído transitório
+     * ou colisões na amostragem, aplicamos retentativa com micro-delay defensivo.
+     */
+    for (int retry = 0; retry < 3; retry++) {
+        err = i2c_master_transmit(s_dev, buf, sizeof(buf), 100);
+        if (err == ESP_OK) {
+            s_shadow[reg] = value & 0x1FF;
+            s_known[reg]  = true;
+            return ESP_OK;
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
+
+    ESP_LOGW(TAG, "Falha de comunicacao I2C no reg 0x%02X do WM8960 apos 3 tentativas: %s (SDA=%d, SCL=%d)",
+             reg, esp_err_to_name(err), BOARD_I2C_SDA, BOARD_I2C_SCL);
     return err;
 }
 

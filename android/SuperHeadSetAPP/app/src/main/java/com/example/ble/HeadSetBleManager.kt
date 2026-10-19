@@ -1,12 +1,14 @@
 package com.example.ble
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
@@ -94,65 +96,172 @@ class HeadSetBleManager(
     private var scanCallback: ScanCallback? = null
     private var isScanningActive = false
 
-    private val initialImages = listOf(
+    // 6 slots vazios reais por padrão (sem dados fictícios nem URLs externas)
+    private val emptyImages = (0..5).map { idx ->
         MediaSlot(
-            id = 0,
-            title = "Cyber Grid",
-            subtitle = "RGB565 142 KB (Padrão)",
+            id = idx,
+            title = "Slot $idx",
+            subtitle = "Vazio / Disponível",
             type = "image",
-            imgUrl = "https://lh3.googleusercontent.com/aida-public/AB6AXuD-hmkg_riUgW5lHIBzGww4ybc5J-y4DB0xqQVrg4w50FrzFbK6u9vDpAGAu-uhvxgtJoo_gbBFthGvftll-XFvbNucgajjm93zGVQn6HFcN3vwClDwGrhvIQDx7iJHyD74_vTy_4ndESTGZYtVWQsWcarriEilalujSv0dWsz7Ko5JWVK_6zowJRuDC6TyjB0H3MNICXtq9rBYD_LpdoUcF5GdRJnzo7iIFbanU1yVS9eGEx6508jV",
-            isEmpty = false,
-            sizeBytes = 142080,
-            hasData = true,
-            crc32 = "A1B2C3D4"
-        ),
-        MediaSlot(
-            id = 1,
-            title = "Obsidian Core",
-            subtitle = "RGB565 142 KB (Flash)",
-            type = "image",
-            imgUrl = "https://lh3.googleusercontent.com/aida-public/AB6AXuC_z_g9SMn_Tae4VivkzghMJ45eHh--xg2GiiG9qK8QHCBg2ujqlhfi1F2OWYYoPf4EPjkXoz0YLDOjAaszn2BG6i3n939QkfsDaaC0BkUC3JbXMFjYlZ9n6eUIqnUWojpOIy6pMD_IcGwGyXQdKVhMdOl2QsjSRPJUDq22zicoPruK1aJ-hdUx_r3HQN5pee-HUZondVNX7YLmHRH3Oo4a1tw_ryTO8eMmfH2YrcZual0N3XF9BZFP",
-            isEmpty = false,
-            sizeBytes = 142080,
-            hasData = true,
-            crc32 = "B2C3D4E5"
-        ),
-        MediaSlot(
-            id = 2,
-            title = "Neon Matrix",
-            subtitle = "RGB565 142 KB (Slot 2)",
-            type = "matrix",
-            isEmpty = false,
-            sizeBytes = 142080,
-            hasData = true,
-            crc32 = "D4E5F6A7"
-        ),
-        MediaSlot(id = 3, title = "Foto 3", subtitle = "Disponível", isEmpty = true, sizeBytes = 0, hasData = false),
-        MediaSlot(id = 4, title = "Foto 4", subtitle = "Disponível", isEmpty = true, sizeBytes = 0, hasData = false),
-        MediaSlot(id = 5, title = "Foto 5", subtitle = "Disponível", isEmpty = true, sizeBytes = 0, hasData = false)
-    )
+            isEmpty = true,
+            sizeBytes = 0,
+            hasData = false
+        )
+    }
 
-    private val initialGifs = listOf(
-        MediaSlot(id = 0, title = "Ondas Sonoras", subtitle = "142 KB Loop", type = "wave", isEmpty = false, sizeBytes = 142000, hasData = true),
-        MediaSlot(id = 1, title = "Pulso Elétrico", subtitle = "185 KB Loop", type = "pulse", isEmpty = false, sizeBytes = 185000, hasData = true),
-        MediaSlot(id = 2, title = "Matrix Scan", subtitle = "164 KB Loop", type = "matrix_anim", isEmpty = false, sizeBytes = 164000, hasData = true),
-        MediaSlot(id = 3, title = "Radar Holográfico", subtitle = "128 KB Loop", type = "radar", isEmpty = false, sizeBytes = 128000, hasData = true),
-        MediaSlot(id = 4, title = "Neon Skull", subtitle = "210 KB Loop", type = "skull", isEmpty = false, sizeBytes = 210000, hasData = true),
-        MediaSlot(id = 5, title = "GIF 5", subtitle = "Disponível", isEmpty = true, sizeBytes = 0, hasData = false)
-    )
+    private val emptyGifs = (0..5).map { idx ->
+        MediaSlot(
+            id = idx,
+            title = "GIF $idx",
+            subtitle = "Vazio / Disponível",
+            type = "gif",
+            isEmpty = true,
+            sizeBytes = 0,
+            hasData = false
+        )
+    }
 
     private val _uiState = MutableStateFlow(
         HeadSetUiState(
-            imageSlots = initialImages,
-            gifSlots = initialGifs
+            imageSlots = emptyImages,
+            gifSlots = emptyGifs
         )
     )
     val uiState = _uiState.asStateFlow()
 
+    private var a2dpProfile: BluetoothA2dp? = null
+
     init {
         setupBondStateReceiver()
+        setupAudioConnectionReceiver()
         populateBondedDevices()
         syncAudioState()
+        checkCurrentA2dpConnection()
+    }
+
+    /**
+     * Monitora conexão de Áudio Clássico (A2DP / HFP) do Android.
+     * Quando o usuário conecta o fone pelo menu Bluetooth do telefone, o app detecta e
+     * inicia em segundo plano a conexão BLE para que comandos e telemetria funcionem imediatamente.
+     */
+    private fun setupAudioConnectionReceiver() {
+        try {
+            // 1. Obter ProfileProxy para BluetoothA2dp
+            bluetoothAdapter?.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
+                override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
+                    if (profile == BluetoothProfile.A2DP) {
+                        a2dpProfile = proxy as? BluetoothA2dp
+                        checkCurrentA2dpConnection()
+                    }
+                }
+
+                override fun onServiceDisconnected(profile: Int) {
+                    if (profile == BluetoothProfile.A2DP) {
+                        a2dpProfile = null
+                    }
+                }
+            }, BluetoothProfile.A2DP)
+
+            // 2. Registrar BroadcastReceiver para eventos de conexão de áudio do sistema
+            val filter = IntentFilter().apply {
+                addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+                addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            }
+
+            context.registerReceiver(object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context?, intent: Intent?) {
+                    val action = intent?.action ?: return
+                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    val devName = device?.name ?: "Dispositivo"
+                    val isHs = devName.contains("HeadSet", ignoreCase = true) ||
+                            devName.contains("ESP32", ignoreCase = true)
+
+                    when (action) {
+                        BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
+                            val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
+                            Log.i(tag, "A2DP State para $devName: $state")
+                            if (state == BluetoothProfile.STATE_CONNECTED && isHs) {
+                                _uiState.update {
+                                    it.copy(
+                                        isAudioConnected = true,
+                                        connectedHeadphoneName = devName,
+                                        lastGattMessage = "Áudio Clássico conectado ao $devName!"
+                                    )
+                                }
+                                // Auto-conecta BLE em background se ainda não estiver conectado
+                                if (_uiState.value.connectionStatus == BleConnectionStatus.DISCONNECTED) {
+                                    Log.i(tag, "Auto-conectando BLE para sincronização de controles...")
+                                    startScanAndConnect()
+                                }
+                            } else if (state == BluetoothProfile.STATE_DISCONNECTED && isHs) {
+                                _uiState.update {
+                                    it.copy(
+                                        isAudioConnected = false,
+                                        lastGattMessage = "Áudio Clássico do $devName desconectado."
+                                    )
+                                }
+                            }
+                        }
+                        BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                            if (isHs) {
+                                Log.i(tag, "ACL Classic Conectado: $devName")
+                                checkCurrentA2dpConnection()
+                            }
+                        }
+                        BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                            if (isHs) {
+                                Log.i(tag, "ACL Classic Desconectado: $devName")
+                                checkCurrentA2dpConnection()
+                            }
+                        }
+                    }
+                }
+            }, filter)
+        } catch (e: Exception) {
+            Log.w(tag, "setupAudioConnectionReceiver error: ${e.message}")
+        }
+    }
+
+    fun checkCurrentA2dpConnection() {
+        try {
+            val connectedDevices = a2dpProfile?.connectedDevices ?: emptyList()
+            val hs = connectedDevices.firstOrNull {
+                it.name?.contains("HeadSet", ignoreCase = true) == true ||
+                it.name?.contains("ESP32", ignoreCase = true) == true
+            }
+
+            val isBtAudio = if (hs != null) {
+                true
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.any {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                } == true
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.isBluetoothA2dpOn == true
+            }
+
+            val devName = hs?.name ?: "HeadSet4"
+            _uiState.update {
+                it.copy(
+                    isAudioConnected = isBtAudio,
+                    connectedHeadphoneName = if (isBtAudio) devName else it.connectedHeadphoneName
+                )
+            }
+
+            if (isBtAudio && _uiState.value.connectionStatus == BleConnectionStatus.DISCONNECTED) {
+                Log.i(tag, "Áudio Bluetooth ativo detectado. Disparando auto-conexão BLE...")
+                startScanAndConnect()
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "checkCurrentA2dpConnection: ${e.message}")
+        }
     }
 
     fun isBluetoothEnabled(): Boolean = bluetoothAdapter?.isEnabled == true
@@ -267,15 +376,9 @@ class HeadSetBleManager(
 
         populateBondedDevices()
 
-        // Check if device is already bonded
+        // Verifica se há HeadSet4 nos dispositivos emparelhados
         val bondedHs = bluetoothAdapter?.bondedDevices?.firstOrNull {
             it.name?.contains(targetDeviceName, ignoreCase = true) == true
-        }
-
-        if (bondedHs != null) {
-            Log.i(tag, "HeadSet4 encontrado nos dispositivos pareados! Conectando diretamente: ${bondedHs.address}")
-            connectToDevice(bondedHs)
-            return
         }
 
         _uiState.update {
@@ -333,7 +436,7 @@ class HeadSetBleManager(
                 }
 
                 if (devName.contains(targetDeviceName, ignoreCase = true)) {
-                    Log.i(tag, "HeadSet4 localizado no scan! Conectando a $devAddress...")
+                    Log.i(tag, "HeadSet4 localizado no scan! Conectando com parâmetros frescos a $devAddress...")
                     stopScan()
                     connectToDevice(device)
                 }
@@ -352,16 +455,26 @@ class HeadSetBleManager(
         }
 
         try {
-            // Also start general scan without strict filter to catch ESP32 if advertising incomplete name
+            // Inicia scan com scanner LE
             scanner.startScan(null, settings, scanCallback)
         } catch (e: Exception) {
             Log.e(tag, "startScan exception: ${e.message}")
         }
 
-        // Auto-timeout scan after 15 seconds
+        // Auto-timeout e fallback inteligente para dispositivo emparelhado
         scanTimeoutJob?.cancel()
         scanTimeoutJob = scope.launch {
-            delay(15000)
+            if (bondedHs != null) {
+                delay(2500)
+                if (isScanningActive && _uiState.value.connectionStatus == BleConnectionStatus.SCANNING) {
+                    Log.i(tag, "Scan timeout inicial. Tentando conexão direta com dispositivo pareado: ${bondedHs.address}")
+                    stopScan()
+                    connectToDevice(bondedHs)
+                    return@launch
+                }
+            }
+
+            delay(12500)
             if (isScanningActive) {
                 stopScan()
                 if (_uiState.value.connectionStatus == BleConnectionStatus.SCANNING) {
@@ -503,13 +616,20 @@ class HeadSetBleManager(
             state.copy(
                 connectionStatus = BleConnectionStatus.DISCONNECTED,
                 isGattConnected = false,
-                isAudioConnected = false,
                 isSimulationMode = false,
                 lastGattMessage = "Headphone desconectado",
                 discoveredDevices = list,
-                uploadProgress = null
+                uploadProgress = null,
+                slot0Connected = false,
+                slot1Connected = false,
+                activeSlot = -1,
+                activeWallpaperIdx = -1,
+                activeGifIdx = -1,
+                imageSlots = emptyImages,
+                gifSlots = emptyGifs
             )
         }
+        checkCurrentA2dpConnection()
         logPacket("TX", "DISCONNECT")
     }
 
@@ -564,10 +684,17 @@ class HeadSetBleManager(
                         it.copy(
                             connectionStatus = BleConnectionStatus.DISCONNECTED,
                             isGattConnected = false,
-                            isAudioConnected = false,
-                            lastGattMessage = "Conexão perdida (status: $status). Toque para reconectar."
+                            slot0Connected = false,
+                            slot1Connected = false,
+                            activeSlot = -1,
+                            activeWallpaperIdx = -1,
+                            activeGifIdx = -1,
+                            imageSlots = emptyImages,
+                            gifSlots = emptyGifs,
+                            lastGattMessage = "Conexão de controle perdida (status: $status). Toque para reconectar."
                         )
                     }
+                    checkCurrentA2dpConnection()
                 }
             }
         }
@@ -706,11 +833,11 @@ class HeadSetBleManager(
             it.copy(
                 connectionStatus = BleConnectionStatus.CONNECTED,
                 isGattConnected = true,
-                isAudioConnected = true,
                 isBonded = gatt.device.bondState == BluetoothDevice.BOND_BONDED,
-                lastGattMessage = "HeadSet4 conectado e pronto! Solicitando status..."
+                lastGattMessage = "Canal de controle HeadSet4 conectado e pronto! Solicitando status..."
             )
         }
+        checkCurrentA2dpConnection()
 
         logPacket("RX", "CANAL BLE PRONTO: Serviços de controle, equalizador e bateria ativos!", isSuccess = true)
 
@@ -803,6 +930,21 @@ class HeadSetBleManager(
                             )
                         }
                     }
+                    "select_slot" -> {
+                        val slot = json.optInt("slot", -1)
+                        if (slot in 0..1) {
+                            Log.i(tag, "ESP32 confirmou comutação para Slot $slot!")
+                            _uiState.update { it.copy(activeSlot = slot, lastGattMessage = "Slot ativo comutado para Dispositivo ${slot + 1}!") }
+                        }
+                    }
+                    "disconnect_slot" -> {
+                        val slot = json.optInt("slot", -1)
+                        if (slot == 0) {
+                            _uiState.update { it.copy(slot0Connected = false, lastGattMessage = "Dispositivo 1 desconectado!") }
+                        } else if (slot == 1) {
+                            _uiState.update { it.copy(slot1Connected = false, lastGattMessage = "Dispositivo 2 desconectado!") }
+                        }
+                    }
                     "set_wallpaper_idx" -> {
                         val active = json.optInt("active_img", _uiState.value.activeWallpaperIdx)
                         _uiState.update { it.copy(activeWallpaperIdx = active) }
@@ -849,6 +991,7 @@ class HeadSetBleManager(
                         slot1Name = json.optString("bt2", it.slot1Name),
                         slot0Connected = json.optString("st1") == "Conectado",
                         slot1Connected = json.optString("st2") == "Conectado",
+                        activeSlot = if (json.has("act_slot")) json.optInt("act_slot") else it.activeSlot,
                         autoSwitchEnabled = json.optBoolean("alt", it.autoSwitchEnabled),
                         isHeadsetWorn = json.optString("prox") == "worn",
                         batteryPercent = json.optInt("bat", it.batteryPercent),
@@ -1195,14 +1338,14 @@ class HeadSetBleManager(
     }
 
     fun selectSlot(slot: Int) {
-        _uiState.update { it.copy(activeSlot = slot) }
+        // NÃO faz mutação otimista da UI aqui!
+        // Apenas envia o comando. A UI só altera activeSlot quando o ESP32 confirmar via
+        // resposta {"status":"ok","cmd":"select_slot","slot":X} ou evento "bt.slot_changed".
         sendJsonCommand("""{"cmd":"select_slot","slot":$slot}""")
     }
 
     fun disconnectSlot(slot: Int) {
-        _uiState.update {
-            if (slot == 0) it.copy(slot0Connected = false) else it.copy(slot1Connected = false)
-        }
+        // NÃO altera slotConnected antes do fone confirmar!
         sendJsonCommand("""{"cmd":"disconnect_slot","slot":$slot}""")
     }
 

@@ -31,6 +31,7 @@
 #include "media_storage.h"
 #include "settings.h"
 #include "phone_ctl.h"
+#include "display.h"
 
 static const char *TAG = "ui_bridge";
 
@@ -423,6 +424,12 @@ bool ui_bridge_display_set_timer_enabled(bool enabled)
     };
     ui_model_post_update(&msg);
     return true;
+}
+
+void ui_bridge_display_wake(void)
+{
+    /* Acorda o backlight restaurando o brilho configurado e zera o timer de inatividade do LVGL */
+    display_wake_and_reset_timer();
 }
 
 bool ui_bridge_display_set_ativar(bool enable)

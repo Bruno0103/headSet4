@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -368,193 +372,261 @@ fun DashboardScreen(
                 }
             }
 
-            // Slot 0: Active Master
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CyberSurfaceContainerLow)
-                    .border(
-                        1.dp,
-                        if (uiState.activeSlot == 0) CyberSecondaryFixed.copy(alpha = 0.35f) else CyberOutlineVariant.copy(alpha = 0.2f),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
+            val isBleConnected = uiState.connectionStatus == BleConnectionStatus.CONNECTED
+
+            if (!isBleConnected) {
+                // Estado fidedigno quando fone está desconectado: sem mocks ou slots fictícios
+                CyberCard {
+                    Column(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(CyberSurfaceContainer)
-                            .border(1.dp, CyberOutlineVariant.copy(alpha = 0.25f), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp, horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Smartphone,
-                            contentDescription = "Smartphone",
-                            tint = CyberPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = uiState.slot0Name,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontFamily = HankenGrotesk,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(CyberSecondaryContainer.copy(alpha = 0.2f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = if (uiState.activeSlot == 0) "ATIVO" else "CONECTADO",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = JetBrainsMono,
-                                        color = CyberSecondaryFixed,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (uiState.activeSlot == 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(CyberSecondaryFixed.copy(alpha = pulseAlpha))
-                    )
-                } else {
-                    Button(
-                        onClick = { onSlotSwitch(0) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CyberSurfaceContainerHigh,
-                            contentColor = CyberPrimary
-                        ),
-                        shape = RoundedCornerShape(9999.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text(
-                            text = "ALTERNAR",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
-                    }
-                }
-            }
-
-            // Slot 1: Standby Laptop
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CyberSurfaceContainerLow.copy(alpha = 0.85f))
-                    .border(
-                        1.dp,
-                        if (uiState.activeSlot == 1) CyberSecondaryFixed.copy(alpha = 0.35f) else CyberOutlineVariant.copy(alpha = 0.2f),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(CyberSurfaceContainer)
-                            .border(1.dp, CyberOutlineVariant.copy(alpha = 0.25f), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LaptopMac,
-                            contentDescription = "Laptop",
+                            imageVector = Icons.Default.Devices,
+                            contentDescription = "Multipoint Offline",
                             tint = CyberOutline,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            text = "MULTIPOINT OFFLINE",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontFamily = JetBrainsMono,
+                                color = CyberOutline,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Text(
+                            text = "Conecte o HeadSet4 via BLE para consultar e alternar os dispositivos pareados em tempo real.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = HankenGrotesk,
+                                color = CyberOutlineVariant
+                            )
                         )
                     }
-
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                }
+            } else {
+                // Slot 0
+                val isSlot0Active = uiState.activeSlot == 0 && uiState.slot0Connected
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CyberSurfaceContainerLow)
+                        .border(
+                            1.dp,
+                            if (isSlot0Active) CyberSecondaryFixed.copy(alpha = 0.45f) else CyberOutlineVariant.copy(alpha = 0.2f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(CyberSurfaceContainer)
+                                .border(1.dp, CyberOutlineVariant.copy(alpha = 0.25f), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = uiState.slot1Name,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontFamily = HankenGrotesk,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            Icon(
+                                imageVector = Icons.Default.Smartphone,
+                                contentDescription = "Smartphone",
+                                tint = if (uiState.slot0Connected) CyberPrimaryContainer else CyberOutline,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(CyberSurfaceContainerHighest)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                        }
+
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = if (uiState.activeSlot == 1) "ATIVO" else "EM ESPERA",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = JetBrainsMono,
-                                        color = if (uiState.activeSlot == 1) CyberSecondaryFixed else CyberOutline,
-                                        fontSize = 9.sp
+                                    text = if (uiState.slot0Connected) uiState.slot0Name else "Slot 1 (Livre)",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontFamily = HankenGrotesk,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (uiState.slot0Connected) MaterialTheme.colorScheme.onSurface else CyberOutline
                                     )
                                 )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            when {
+                                                isSlot0Active -> CyberSecondaryContainer.copy(alpha = 0.25f)
+                                                uiState.slot0Connected -> CyberSurfaceContainerHighest
+                                                else -> CyberSurfaceContainer
+                                            }
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = when {
+                                            isSlot0Active -> "ATIVO (ÁUDIO)"
+                                            uiState.slot0Connected -> "CONECTADO"
+                                            else -> "DESCONECTADO"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            color = when {
+                                                isSlot0Active -> CyberSecondaryFixed
+                                                uiState.slot0Connected -> CyberPrimaryContainer
+                                                else -> CyberOutline
+                                            },
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
                             }
+                        }
+                    }
+
+                    if (isSlot0Active) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(CyberSecondaryFixed.copy(alpha = pulseAlpha))
+                        )
+                    } else if (uiState.slot0Connected) {
+                        Button(
+                            onClick = { onSlotSwitch(0) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CyberSurfaceContainerHigh,
+                                contentColor = CyberPrimary
+                            ),
+                            shape = RoundedCornerShape(9999.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                text = "ALTERNAR",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
                         }
                     }
                 }
 
-                if (uiState.activeSlot == 1) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(CyberSecondaryFixed.copy(alpha = pulseAlpha))
-                    )
-                } else {
-                    Button(
-                        onClick = { onSlotSwitch(1) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CyberSurfaceContainerHigh,
-                            contentColor = CyberPrimary
-                        ),
-                        shape = RoundedCornerShape(9999.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text(
-                            text = "ALTERNAR",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMono,
-                                fontWeight = FontWeight.Bold
-                            )
+                // Slot 1
+                val isSlot1Active = uiState.activeSlot == 1 && uiState.slot1Connected
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CyberSurfaceContainerLow.copy(alpha = 0.85f))
+                        .border(
+                            1.dp,
+                            if (isSlot1Active) CyberSecondaryFixed.copy(alpha = 0.45f) else CyberOutlineVariant.copy(alpha = 0.2f),
+                            RoundedCornerShape(12.dp)
                         )
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(CyberSurfaceContainer)
+                                .border(1.dp, CyberOutlineVariant.copy(alpha = 0.25f), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LaptopMac,
+                                contentDescription = "Laptop",
+                                tint = if (uiState.slot1Connected) CyberPrimaryContainer else CyberOutline,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = if (uiState.slot1Connected) uiState.slot1Name else "Slot 2 (Livre)",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontFamily = HankenGrotesk,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (uiState.slot1Connected) MaterialTheme.colorScheme.onSurfaceVariant else CyberOutline
+                                    )
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            when {
+                                                isSlot1Active -> CyberSecondaryContainer.copy(alpha = 0.25f)
+                                                uiState.slot1Connected -> CyberSurfaceContainerHighest
+                                                else -> CyberSurfaceContainer
+                                            }
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = when {
+                                            isSlot1Active -> "ATIVO (ÁUDIO)"
+                                            uiState.slot1Connected -> "EM ESPERA"
+                                            else -> "DESCONECTADO"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = JetBrainsMono,
+                                            color = when {
+                                                isSlot1Active -> CyberSecondaryFixed
+                                                uiState.slot1Connected -> CyberOutline
+                                                else -> CyberOutline
+                                            },
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (isSlot1Active) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(CyberSecondaryFixed.copy(alpha = pulseAlpha))
+                        )
+                    } else if (uiState.slot1Connected) {
+                        Button(
+                            onClick = { onSlotSwitch(1) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CyberSurfaceContainerHigh,
+                                contentColor = CyberPrimary
+                            ),
+                            shape = RoundedCornerShape(9999.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                text = "ALTERNAR",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -1300,6 +1372,172 @@ fun ConnectionStatusHeroCard(
                             fontSize = 10.sp
                         )
                     )
+                }
+            }
+
+            val context = LocalContext.current
+            val isAudioConnected = uiState.isAudioConnected
+
+            // Dual-Link Status Indicator (Áudio Classic A2DP + App BLE GATT)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(CyberSurfaceContainerLow)
+                    .border(1.dp, CyberOutlineVariant.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Canal 1: Áudio de Mídia / Sistema (A2DP / HFP)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (isAudioConnected) CyberSecondaryFixed else CyberOutline.copy(alpha = 0.5f))
+                    )
+                    Text(
+                        text = "ÁUDIO MÍDIA: ${if (isAudioConnected) "CONECTADO" else "DESCONECTADO"}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            color = if (isAudioConnected) CyberSecondaryFixed else CyberOutline,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                // Canal 2: App de Controle (BLE GATT)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (isConnected) CyberPrimaryContainer else CyberOutline.copy(alpha = 0.5f))
+                    )
+                    Text(
+                        text = "APP CONTROLE: ${if (isConnected) "CONECTADO" else "DESCONECTADO"}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            color = if (isConnected) CyberPrimaryContainer else CyberOutline,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+            }
+
+            // Banner Interativo de Conexão Dividida (Esclarecimento e atalho)
+            if (isConnected && !isAudioConnected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(CyberSurfaceContainerHigh)
+                        .border(1.dp, CyberPrimaryContainer.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "ÁUDIO DE MÍDIA DESCONECTADO",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                                color = CyberPrimaryContainer
+                            )
+                        )
+                        Text(
+                            text = "O app está conectado enviando comandos, mas para ouvir músicas é necessário ativar o áudio Bluetooth nas configurações do Android.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = HankenGrotesk,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                })
+                            } catch (e: Exception) {
+                                // Fallback silencioso
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CyberPrimaryContainer,
+                            contentColor = Color(0xFF00363D)
+                        ),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = "CONECTAR ÁUDIO",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            )
+                        )
+                    }
+                }
+            } else if (!isConnected && isAudioConnected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(CyberSurfaceContainerHigh)
+                        .border(1.dp, CyberSecondaryFixed.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "FONE CONECTADO NO ANDROID",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                                color = CyberSecondaryFixed
+                            )
+                        )
+                        Text(
+                            text = "O áudio do celular está pronto, mas o app ainda não sincronizou a telemetria com o fone.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = HankenGrotesk,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onAutoConnect,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CyberSecondaryFixed,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = "SINCRONIZAR APP",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            )
+                        )
+                    }
                 }
             }
 

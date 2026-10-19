@@ -34,6 +34,7 @@
 #include "settings.h"
 #include "ui_model.h"
 #include "ui_bridge.h"
+#include "display.h"
 #include "esp_heap_caps.h"
 #include "mbedtls/base64.h"
 #include "media_storage.h"
@@ -54,14 +55,16 @@ typedef struct {
 
 static media_upload_ctx_t s_upload_ctx = {0};
 
-#define PHONE_CTL_STACK_SIZE    3584
-#define PHONE_CTL_QUEUE_LEN     32
+#define PHONE_CTL_STACK_SIZE    8192   /* 8 KB: acomoda com folga cJSON, NVS Flash commit e Bluedroid */
+#define PHONE_CTL_QUEUE_LEN     64     /* 64 itens: evita drop de chunks durante tráfego BLE intenso */
 #define PHONE_CTL_IDLE_MS       30000  /* 30 segundos sem atividade -> encerra a task */
 
 /* Buffer de montagem de frames de entrada (suporta pacotes Base64 com folga) */
 #define INCOMING_BUF_MAX        1024
 static char                     s_incoming_buf[INCOMING_BUF_MAX];
 static size_t                   s_incoming_len = 0;
+static char                     s_temp_dispatch_buf[INCOMING_BUF_MAX];
+static char                     s_resp_buf[512];
 static SemaphoreHandle_t        s_ctl_mtx = NULL;
 
 static hs_actor_t              *s_phone_actor = NULL;
@@ -271,7 +274,11 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
 
     const char *cmd = cmd_item->valuestring;
     cJSON *id_item = cJSON_GetObjectItem(root, "id");
-    char resp_buf[512] = {0};
+    char *resp_buf = s_resp_buf;
+    memset(resp_buf, 0, sizeof(s_resp_buf));
+
+    /* Registro unificado no console do ESP32 de toda interação recebida pelo Companion App */
+    ESP_LOGI(TAG, "📱 [APP_BLE] Comando recebido: '%s' (conn_id: %u)", cmd, conn_id);
 
     /* ========================================================================
      * 1. HANDSHAKE FORMAL DE CONEXÃO COM COMPANION APP
@@ -279,12 +286,15 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
     if (strcmp(cmd, "app_connect") == 0) {
         cJSON *app_ver = cJSON_GetObjectItem(root, "app_version");
         cJSON *client  = cJSON_GetObjectItem(root, "client");
-        ESP_LOGI(TAG, "Handshake formal recebido do companion app (cliente: %s, versao: %s)",
+        ESP_LOGI(TAG, "📱 [CONEXAO] Handshake formal recebido do app (cliente: %s, versao: %s)",
                  (client && cJSON_IsString(client)) ? client->valuestring : "desconhecido",
                  (app_ver && cJSON_IsString(app_ver)) ? app_ver->valuestring : "1.0.0");
 
-        int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
-        snprintf(resp_buf + len, sizeof(resp_buf) - len,
+        /* Acorda o display e zera o tempo de inatividade para feedback visual imediato ao conectar */
+        ui_bridge_display_wake();
+
+        int len = phone_ctl_format_resp_header(resp_buf, sizeof(s_resp_buf), "ok", cmd, id_item);
+        snprintf(resp_buf + len, sizeof(s_resp_buf) - len,
                  ",\"connected\":true,\"headset\":\"HeadSet4\",\"fw_version\":\"1.0.0\",\"api_version\":1,"
                  "\"features\":[\"eq5\",\"media_upload\",\"dual_slot\",\"haptics\",\"proximity\"]}");
     }
@@ -293,16 +303,18 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
      * 2. CONSULTA GLOBAL DE ESTADO (SNAPSHOT DO HEADSET)
      * ======================================================================== */
     else if (strcmp(cmd, "get_all_status") == 0) {
+        ESP_LOGI(TAG, "📱 [STATUS] App solicitou snapshot de estado global do headset");
         ui_model_data_t snap;
         ui_model_get_snapshot(&snap);
 
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len,
                  ",\"bt1\":\"%s\",\"bt2\":\"%s\",\"st1\":\"%s\",\"st2\":\"%s\","
-                 "\"alt\":%s,\"prox\":%s,\"bat\":%u,\"disp\":%s,\"brilho\":%u,\"vol\":%u,"
+                 "\"act_slot\":%u,\"alt\":%s,\"prox\":%s,\"bat\":%u,\"disp\":%s,\"brilho\":%u,\"vol\":%u,"
                  "\"img\":%d,\"gif\":%d}",
                  snap.bt_name_slot0, snap.bt_name_slot1,
                  snap.bt_status_slot0, snap.bt_status_slot1,
+                 (unsigned int)snap.bt_active_slot,
                  snap.bt_auto_switch ? "true" : "false",
                  snap.prox_worn ? "\"worn\"" : "\"removed\"",
                  (unsigned int)snap.battery_percent,
@@ -327,6 +339,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (vol < 0 || vol > 100) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be between 0 and 100");
             } else {
+                ESP_LOGI(TAG, "📱 [AUDIO] App ajustou volume para: %d%%", vol);
                 audio_cmd_set_volume_send((uint8_t)vol);
                 settings_set_u8(SETTINGS_KEY_VOL_SLOT0, (uint8_t)vol);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
@@ -342,6 +355,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "invalid_type", "mute must be boolean");
         } else {
             bool muted = cJSON_IsTrue(m);
+            ESP_LOGI(TAG, "📱 [AUDIO] App alterou mudo para: %s", muted ? "MUDO ATIVADO" : "MUDO DESATIVADO");
             audio_cmd_set_mute_send(muted);
             int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
             snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"mute\":%s}", muted ? "true" : "false");
@@ -362,6 +376,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (s < 0 || s > 1) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "slot must be 0 or 1");
             } else {
+                ESP_LOGI(TAG, "📱 [BLUETOOTH] App selecionou slot ativo: %d", s);
                 hs_actor_t *bt_act = bt_link_actor_get();
                 if (!bt_act) {
                     phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "actor_unavailable", "bt_link actor not ready");
@@ -385,6 +400,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (s < 0 || s > 1) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "slot must be 0 or 1");
             } else {
+                ESP_LOGI(TAG, "📱 [BLUETOOTH] App solicitou desconectar slot: %d", s);
                 hs_actor_t *bt_act = bt_link_actor_get();
                 if (!bt_act) {
                     phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "actor_unavailable", "bt_link actor not ready");
@@ -398,6 +414,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         }
     }
     else if (strcmp(cmd, "start_pairing") == 0) {
+        ESP_LOGI(TAG, "📱 [BLUETOOTH] App solicitou entrar em modo de pareamento (120 s)");
         hs_actor_t *bt_act = bt_link_actor_get();
         if (!bt_act) {
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "actor_unavailable", "bt_link actor not ready");
@@ -416,6 +433,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "invalid_type", "enable must be boolean");
         } else {
             bool asw = cJSON_IsTrue(en);
+            ESP_LOGI(TAG, "📱 [BLUETOOTH] App alterou auto-switching de slots para: %s", asw ? "ATIVADO" : "DESATIVADO");
             settings_set_u8(SETTINGS_KEY_BT_AUTOSWITCH, asw ? 1 : 0);
             hs_actor_t *bt_act = bt_link_actor_get();
             if (bt_act) {
@@ -446,6 +464,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (b < 0 || b > 100) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be between 0 and 100");
             } else {
+                ESP_LOGI(TAG, "📱 [DISPLAY] App ajustou brilho da tela para: %d%%", b);
                 ui_bridge_display_set_brilho(b);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"val\":%d}", b);
@@ -460,9 +479,15 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "invalid_type", "enable must be boolean");
         } else {
             bool turn_on = cJSON_IsTrue(en);
+            ESP_LOGI(TAG, "📱 [DISPLAY] App solicitou %s da tela",
+                     turn_on ? "LIGAR / DESPERTAR BACKLIGHT" : "DESLIGAR / SUSPENDER BACKLIGHT");
             if (turn_on) {
+                /* Desperta o backlight e zera o timer de inatividade do LVGL */
+                ui_bridge_display_wake();
                 ui_bridge_display_set_ativar(true);
             } else {
+                /* Apaga o backlight imediatamente */
+                display_backlight_sleep();
                 ui_bridge_display_set_desativar(true);
             }
             int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
@@ -480,6 +505,11 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (t < 0) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be >= 0");
             } else {
+                if (t == 0) {
+                    ESP_LOGI(TAG, "📱 [DISPLAY] App alterou timeout de tela: timer DESATIVADO (0 segundos, tela permanecera sempre ligada)");
+                } else {
+                    ESP_LOGI(TAG, "📱 [DISPLAY] App alterou timeout de tela: desligar apos %d segundos de inatividade", t);
+                }
                 ui_bridge_display_set_tempo_tela(t);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"val\":%d}", t);
@@ -527,6 +557,9 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             }
 
             if (!has_error) {
+                ESP_LOGI(TAG, "📱 [VIBRACALL] App alterou configuracao do motor haptico: ativar=%s, intensidade=%d%%",
+                         has_en ? (en_val ? "SIM" : "NAO") : "inalterado",
+                         int_val >= 0 ? int_val : -1);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 if (has_en && int_val >= 0) {
                     snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"enable\":%s,\"val\":%d}", en_val ? "true" : "false", int_val);
@@ -538,7 +571,8 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             }
         }
     }
-    else if (strcmp(cmd, "trigger_vibrate") == 0 || strcmp(cmd, "notification") == 0) {
+    else if (strcmp(cmd, "trigger_vibrate") == 0 || strcmp(cmd, "notification") == 0 ||
+             strcmp(cmd, "test_vibracall") == 0 || strcmp(cmd, "vibrate_test") == 0) {
         uint16_t dur = 300;
         uint8_t intens = 0;
         cJSON *dur_item = cJSON_GetObjectItem(root, "duration_ms");
@@ -549,12 +583,12 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         if (int_item && cJSON_IsNumber(int_item)) {
             intens = (uint8_t)int_item->valueint;
         }
-        ESP_LOGI(TAG, "Notificacao recebida do smartphone ativo! Acionando vibracall (%u ms, %u%%)", dur, intens);
+        ESP_LOGI(TAG, "📱 [VIBRACALL] App solicitou teste/acionamento do motor haptico (%u ms, intensidade: %u%%)", dur, intens);
         actuators_vibrate(dur, intens);
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"vibrated\":true,\"duration_ms\":%u,\"intensity\":%u}", dur, intens);
     }
-    else if (strcmp(cmd, "set_ears_angle") == 0) {
+    else if (strcmp(cmd, "set_ears_angle") == 0 || strcmp(cmd, "test_ears") == 0) {
         cJSON *val = cJSON_GetObjectItem(root, "val");
         if (!val) {
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "missing_arg", "val is required");
@@ -565,6 +599,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (a < 0 || a > 180) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be between 0 and 180");
             } else {
+                ESP_LOGI(TAG, "📱 [ORELHAS] App ajustou angulo maximo das orelhas animatronicas para: %d graus", a);
                 ui_bridge_orelhas_set_angulo_maximo(a);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"val\":%d}", a);
@@ -579,6 +614,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "invalid_type", "enable must be boolean");
         } else {
             bool e = cJSON_IsTrue(en);
+            ESP_LOGI(TAG, "📱 [ORELHAS] App alterou ativacao das orelhas animatronicas: %s", e ? "ATIVADAS" : "DESATIVADAS");
             ui_bridge_orelhas_set_ativar(e);
             int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
             snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"enable\":%s}", e ? "true" : "false");
@@ -596,6 +632,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "invalid_type", "enable must be boolean");
         } else {
             bool e = cJSON_IsTrue(en);
+            ESP_LOGI(TAG, "📱 [SENSOR] App alterou sensor de presenca na cabeca (APDS-9930): %s", e ? "ATIVADO" : "DESATIVADO");
             ui_bridge_proximidade_set_ativar(e);
             int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
             snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"enable\":%s}", e ? "true" : "false");
@@ -612,6 +649,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (s < 0 || s > 1023) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be between 0 and 1023");
             } else {
+                ESP_LOGI(TAG, "📱 [SENSOR] App ajustou sensibilidade de presenca para: %d", s);
                 ui_bridge_proximidade_set_distancia_sensibilidade(s);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"val\":%d}", s);
@@ -669,6 +707,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (idx < 0 || idx >= MEDIA_STORAGE_MAX_IMAGES) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be between 0 and 5");
             } else {
+                ESP_LOGI(TAG, "📱 [MIDIA] App definiu imagem de papel de parede ativa para o slot: %d", idx);
                 ui_bridge_display_set_imagem_principal(idx);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"active_img\":%d}", idx);
@@ -686,6 +725,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (idx < 0 || idx >= MEDIA_STORAGE_MAX_GIFS) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "val must be between 0 and 5");
             } else {
+                ESP_LOGI(TAG, "📱 [MIDIA] App definiu animacao GIF ativa para o slot: %d", idx);
                 ui_bridge_display_set_gif_principal(idx);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"active_gif\":%d}", idx);
@@ -735,6 +775,8 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                         strncpy(s_upload_ctx.name, name_item->valuestring, sizeof(s_upload_ctx.name) - 1);
                         s_upload_ctx.name[sizeof(s_upload_ctx.name) - 1] = '\0';
                     }
+                    ESP_LOGI(TAG, "📱 [MIDIA] App iniciou sessao de upload: tipo=%s, slot=%d, tamanho=%" PRIu32 " bytes, nome='%s'",
+                             is_gif ? "GIF" : "Imagem RGB565", slot, size, s_upload_ctx.name);
                     int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                     snprintf(resp_buf + len, sizeof(resp_buf) - len,
                              ",\"type\":\"%s\",\"slot\":%d,\"chunk_size\":480}",
@@ -765,6 +807,11 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                     phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "base64_error", "failed to decode chunk");
                 } else {
                     s_upload_ctx.received_bytes += (uint32_t)written;
+                    uint32_t pct = (s_upload_ctx.expected_size > 0) ? (s_upload_ctx.received_bytes * 100 / s_upload_ctx.expected_size) : 0;
+                    if (seq % 50 == 0 || s_upload_ctx.received_bytes == s_upload_ctx.expected_size) {
+                        ESP_LOGI(TAG, "📱 [MIDIA] Recebendo chunks BLE: seq=%d, recebido=%" PRIu32 "/%" PRIu32 " bytes (%u%%)",
+                                 seq, s_upload_ctx.received_bytes, s_upload_ctx.expected_size, (unsigned int)pct);
+                    }
                     int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ack", cmd, id_item);
                     snprintf(resp_buf + len, sizeof(resp_buf) - len,
                              ",\"seq\":%d,\"received\":%" PRIu32 ",\"total\":%" PRIu32 "}",
@@ -779,6 +826,8 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         } else if (s_upload_ctx.received_bytes != s_upload_ctx.expected_size) {
             phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "incomplete_data", "received bytes do not match expected size");
         } else {
+            ESP_LOGI(TAG, "📱 [MIDIA] App finalizou envio (%s, slot %u, total %" PRIu32 " bytes). Gravando na Flash NVS...",
+                     s_upload_ctx.is_gif ? "GIF" : "Imagem RGB565", s_upload_ctx.slot, s_upload_ctx.received_bytes);
             esp_err_t s_err;
             if (s_upload_ctx.is_gif) {
                 s_err = media_storage_save_gif(s_upload_ctx.slot, s_upload_ctx.name,
@@ -791,12 +840,15 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             }
 
             if (s_err == ESP_OK) {
+                ESP_LOGI(TAG, "📱 [MIDIA] Gravacao concluida com sucesso na Flash NVS! Slot %u ativo pronto.", s_upload_ctx.slot);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len,
                          ",\"type\":\"%s\",\"slot\":%u,\"verified\":true,\"name\":\"%s\"}",
                          s_upload_ctx.is_gif ? "gif" : "image", s_upload_ctx.slot, s_upload_ctx.name);
             } else if (s_err == ESP_ERR_INVALID_CRC) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "crc_mismatch", "data checksum does not match expected_crc32");
+            } else if (s_err == ESP_ERR_INVALID_ARG) {
+                phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "invalid_format", "invalid media header, signature or dimensions");
             } else {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "save_nvs_failed", "flash commit operation failed");
             }
@@ -817,6 +869,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (slot < 0 || slot >= 6) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "slot must be between 0 and 5");
             } else {
+                ESP_LOGI(TAG, "📱 [MIDIA] App solicitou exclusao do slot %d (%s)", slot, is_gif ? "GIF" : "Imagem");
                 media_storage_delete(is_gif, (uint8_t)slot);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len,
@@ -826,11 +879,13 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
         }
     }
     else if (strcmp(cmd, "erase_all_images") == 0) {
+        ESP_LOGI(TAG, "📱 [MIDIA] App solicitou apagar todas as imagens da galeria");
         media_storage_erase_all_images();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"erased\":true}");
     }
     else if (strcmp(cmd, "format_media") == 0) {
+        ESP_LOGI(TAG, "📱 [MIDIA] App solicitou formatacao completa da particao de midias NVS");
         media_storage_format();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"formatted\":true}");
@@ -876,6 +931,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                     new_id[i] = (uint8_t)v;
                 }
                 if (ok && bt_fastpair_set_model_id(new_id) == ESP_OK) {
+                    ESP_LOGI(TAG, "📱 [FAST_PAIR] App atualizou Model ID para: %02X%02X%02X", new_id[0], new_id[1], new_id[2]);
                     int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                     snprintf(resp_buf + len, sizeof(resp_buf) - len,
                              ",\"model_id\":\"%02X%02X%02X\"}", new_id[0], new_id[1], new_id[2]);
@@ -890,31 +946,31 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
      * 10. TRANSPORTE DE MÍDIA AVRCP (PASSTHROUGH)
      * ======================================================================== */
     else if (strcmp(cmd, "media_play_pause") == 0) {
-        ESP_LOGI(TAG, "Comando BLE: Play/Pause");
+        ESP_LOGI(TAG, "📱 [AVRCP] App comandou: Play/Pause alternado");
         bt_avrcp_send_play();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"action\":\"play_pause\"}");
     }
     else if (strcmp(cmd, "media_play") == 0) {
-        ESP_LOGI(TAG, "Comando BLE: Play");
+        ESP_LOGI(TAG, "📱 [AVRCP] App comandou: Play");
         bt_avrcp_send_play();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"action\":\"play\"}");
     }
     else if (strcmp(cmd, "media_pause") == 0) {
-        ESP_LOGI(TAG, "Comando BLE: Pause");
+        ESP_LOGI(TAG, "📱 [AVRCP] App comandou: Pause");
         bt_avrcp_send_pause();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"action\":\"pause\"}");
     }
     else if (strcmp(cmd, "media_next") == 0) {
-        ESP_LOGI(TAG, "Comando BLE: Next Track");
+        ESP_LOGI(TAG, "📱 [AVRCP] App comandou: Proxima Faixa (Next)");
         bt_avrcp_send_next();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"action\":\"next\"}");
     }
     else if (strcmp(cmd, "media_prev") == 0) {
-        ESP_LOGI(TAG, "Comando BLE: Previous Track");
+        ESP_LOGI(TAG, "📱 [AVRCP] App comandou: Faixa Anterior (Previous)");
         bt_avrcp_send_prev();
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"action\":\"prev\"}");
@@ -936,6 +992,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "preset must be 0..3 or 255");
             } else {
                 uint8_t preset = (uint8_t)p;
+                ESP_LOGI(TAG, "📱 [EQUALIZADOR] App selecionou preset de equalizacao: %u", (unsigned int)preset);
                 audio_cmd_set_eq_send(preset, NULL);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len, ",\"preset\":%u}", (unsigned int)preset);
@@ -967,6 +1024,8 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             if (err_gain) {
                 phone_ctl_format_err(resp_buf, sizeof(resp_buf), cmd, id_item, "out_of_range", "each gain must be between -24 and +24");
             } else {
+                ESP_LOGI(TAG, "📱 [EQUALIZADOR] App definiu ganhos das 5 bandas: [%+d, %+d, %+d, %+d, %+d] dB",
+                         gains[0], gains[1], gains[2], gains[3], gains[4]);
                 audio_cmd_set_eq_send(0xFF, gains);
                 int len = phone_ctl_format_resp_header(resp_buf, sizeof(resp_buf), "ok", cmd, id_item);
                 snprintf(resp_buf + len, sizeof(resp_buf) - len,
@@ -1027,13 +1086,12 @@ static void phone_ctl_on_msg(hs_actor_t *self, const hs_msg_t *msg)
 
             /* Verifica se formou um objeto JSON completo ou linha terminada */
             if (s_incoming_buf[s_incoming_len - 1] == '}' || s_incoming_buf[s_incoming_len - 1] == '\n') {
-                char temp[INCOMING_BUF_MAX];
-                strncpy(temp, s_incoming_buf, sizeof(temp) - 1);
-                temp[sizeof(temp) - 1] = '\0';
+                strncpy(s_temp_dispatch_buf, s_incoming_buf, sizeof(s_temp_dispatch_buf) - 1);
+                s_temp_dispatch_buf[sizeof(s_temp_dispatch_buf) - 1] = '\0';
                 s_incoming_len = 0;
                 xSemaphoreGive(s_ctl_mtx);
 
-                handle_json_command(p->conn_id, temp);
+                handle_json_command(p->conn_id, s_temp_dispatch_buf);
                 return;
             }
         } else {
@@ -1047,7 +1105,11 @@ static void phone_ctl_on_msg(hs_actor_t *self, const hs_msg_t *msg)
     case PHONE_CMD_CLIENT_CONNECTED: {
         const phone_cmd_msg_t *p = (const phone_cmd_msg_t *)msg->data;
         uint16_t conn = p ? p->conn_id : 0;
-        ESP_LOGI(TAG, "Notificacoes BLE (CCCD) ativadas pelo cliente conn_id %u. Enviando app.connected proativo.", conn);
+        ESP_LOGI(TAG, "Notificacoes BLE (CCCD) ativadas pelo cliente conn_id %u. Despertando tela e enviando app.connected proativo.", conn);
+
+        /* Desperta o display e zera timer de inatividade imediatamente ao conectar */
+        ui_bridge_display_wake();
+
         const char *welcome = "{\"evt\":\"app.connected\",\"data\":{\"status\":\"ready\",\"name\":\"HeadSet4\",\"fw_version\":\"1.0.0\",\"api_version\":1,\"mtu\":512}}";
         bt_ctl_service_send_notify(conn, (const uint8_t *)welcome, strlen(welcome));
         break;
@@ -1143,9 +1205,18 @@ esp_err_t phone_ctl_post_incoming_data(uint16_t conn_id, const uint8_t *data, si
         cmd_msg.len = (uint16_t)chunk_len;
         memcpy(cmd_msg.raw, data + offset, chunk_len);
 
-        esp_err_t err = hs_actor_send(s_phone_actor, PHONE_CMD_PROCESS_MSG, &cmd_msg, sizeof(cmd_msg), pdMS_TO_TICKS(50));
+        /* Tentativa com retentativa defensiva para evitar perda de chunks sob rajadas BLE */
+        esp_err_t err = ESP_FAIL;
+        for (int retry = 0; retry < 3; retry++) {
+            err = hs_actor_send(s_phone_actor, PHONE_CMD_PROCESS_MSG, &cmd_msg, sizeof(cmd_msg), pdMS_TO_TICKS(150));
+            if (err == ESP_OK) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
         if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Falha ao enfileirar chunk no actor phone_ctl: %s", esp_err_to_name(err));
+            ESP_LOGW(TAG, "Falha ao enfileirar chunk no actor phone_ctl apos retentativas: %s", esp_err_to_name(err));
             return err;
         }
         offset += chunk_len;

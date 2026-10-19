@@ -104,6 +104,14 @@ void display_backlight_wake(void) {
   display_backlight_set_duty(s_current_brightness > 0 ? s_current_brightness : 60);
 }
 
+void display_wake_and_reset_timer(void) {
+  display_backlight_wake();
+  lv_display_t *disp = lv_display_get_default();
+  if (disp) {
+    lv_display_trigger_activity(disp);
+  }
+}
+
 bool display_backlight_is_dimmed(void) {
   return s_is_dimmed;
 }
@@ -191,12 +199,22 @@ typedef struct {
 static touch_filter_t s_touch_filter = {0};
 
 /**
+ * @brief Informa se o display está executando uma animação de transição de tela.
+ * Utiliza as APIs oficiais do LVGL 9 (lv_display_get_screen_loading e lv_display_get_screen_prev).
+ */
+static bool display_is_transitioning(void) {
+  lv_display_t *disp = lv_display_get_default();
+  if (!disp) return false;
+  return (lv_display_get_screen_loading(disp) != NULL || lv_display_get_screen_prev(disp) != NULL);
+}
+
+/**
  * @brief Callback do LVGL para leitura do estado e posição do Touch Resistivo XPT2046.
  *
  * Implementação Robusta com Blindagem Anti-Ruído e Diagnóstico em Tempo Real:
  * 1. LIBERAÇÃO DO BARRAMENTO SPI E ELIMINAÇÃO DE POLLING:
- *    Durante transições de tela ou animações do LVGL (lv_anim_count_running > 0),
- *    o touch é completamente pausado e NÃO emite transações no barramento SPI3.
+ *    Durante transições de tela ativas (display_is_transitioning()), o touch é
+ *    completamente pausado e NÃO emite transações no barramento SPI3.
  * 2. BLINDAGEM TEMPORAL ANTI-TOQUE FANTASMA (DEBOUNCE 2-ESTÁGIOS):
  *    Spikes de RF/I2S que duram apenas 1 leitura são sumariamente rejeitados.
  * 3. LIBERDADE DE USO EM STREAMING:
@@ -208,12 +226,14 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
   (void)indev;
 
   /*
-   * REGRA DE OURO (Requisito de Estabilidade e Liberação do SPI3):
-   * Se o touch estiver pausado ou durante animações/transições gráficas do LVGL,
-   * retornamos imediatamente LV_INDEV_STATE_RELEASED SEM ACESSAR O BARRAMENTO SPI!
-   * Isso evita chaveamento de clock (40 MHz <-> 1 MHz) e libera 100% da banda para o LCD.
+   * REGRA DE OURO (Requisito de Estabilidade e Proteção de Concorrência):
+   * 1. Se o touch estiver explicitamente pausado (s_touch_paused); OU
+   * 2. Se houver uma transição de tela em andamento no LVGL 9 (display_is_transitioning()):
+   * Retornamos imediatamente LV_INDEV_STATE_RELEASED sem consultar o conversor XPT2046 no SPI3.
+   * Isso previne toques concorrentes durante animações de 300 ms, evita duplicidade de eventos,
+   * elimina repiques e libera 100% da banda do barramento SPI para a renderização do display.
    */
-  if (s_touch_paused || lv_anim_count_running() > 0) {
+  if (s_touch_paused || display_is_transitioning()) {
     if (s_touch_filter.is_pressed) {
       s_touch_filter.is_pressed = false;
       s_touch_filter.press_confirm_cnt = 0;
@@ -1118,11 +1138,16 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
   if (lv_obj_get_child_count(content) > 0) {
     lv_obj_t *card = lv_obj_get_child(content, 0);
     if (card) {
-      /* Requisito de UX: Toque na imagem/card da capa MUDA DE TELA (vai para screen_main).
-       * Não há nenhum controle AVRCP na interface gráfica (somente recepção de dados). */
-      lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_add_screen_create_event(card, LV_EVENT_CLICKED, screen_main_create, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 300, 0);
-      ESP_LOGI(TAG, "Mapeada navegacao: Cover Art toque na Capa -> Transicao para screen_main");
+      /*
+       * UX e Navegação de Retorno:
+       * Em screen_main_cover_art_gen.c, o 'container_0' (content) já possui nativamente o evento
+       * de clique registrado para 'screen_main_create'.
+       * O 'card' e seus filhos ('tile' e 'img') possuem LV_OBJ_FLAG_EVENT_BUBBLE, repassando qualquer
+       * toque diretamente para o container pai.
+       * Portanto, NÃO adicionamos evento redundante em 'card' nem o tornamos clicável separado,
+       * evitando disparos duplos de transição concorrente no LVGL.
+       */
+      ESP_LOGI(TAG, "Cover Art: Container pai gerencia navegacao de retorno para screen_main");
 
       /* Atualiza imediatamente com a capa decodificada e metadados de texto mantidos no modelo */
       ui_model_data_t snap;
@@ -1693,14 +1718,16 @@ void display_task(void *arg) {
 
     /*
      * Requisito de Otimizacao do Barramento SPI3:
-     * O Touch Resistivo SPI (XPT2046) NAO precisa funcionar durante transicao de tela
-     * ou execucao de animacoes graficas.
-     * Ao pausar a amostragem do XPT2046 durante animacoes (lv_anim_count_running > 0),
-     * eliminamos polling no barramento SPI3 e evitamos a comutacao de clock (40 MHz <-> 1 MHz),
+     * O Touch Resistivo SPI (XPT2046) é pausado durante transições de tela ativas
+     * (display_is_transitioning()).
+     * Ao pausar a amostragem do XPT2046 durante transições ativas, eliminamos polling no barramento
+     * SPI3 e comutação desnecessária de clock (40 MHz <-> 1 MHz) durante os 300 ms de animação,
      * liberando 100% da largura de banda para o display ILI9341 renderizar liso a 40 MHz.
+     * Não pausamos por lv_anim_count_running(), permitindo interação fluida mesmo com GIFs ou
+     * elementos dinâmicos em loop na interface gráfica.
      */
-    uint32_t running_anims = lv_anim_count_running();
-    if (running_anims > 0) {
+    bool transitioning = display_is_transitioning();
+    if (transitioning) {
       if (!display_touch_is_paused()) {
         display_touch_set_transition_pause(true);
       }

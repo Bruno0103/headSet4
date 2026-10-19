@@ -88,6 +88,9 @@ void display_backlight_dim(void);
 /** @brief Acorda o backlight restaurando o brilho nominal configurado. */
 void display_backlight_wake(void);
 
+/** @brief Acorda o backlight restaurando o brilho nominal e reinicia o timer de inatividade do LVGL. */
+void display_wake_and_reset_timer(void);
+
 /** @brief Retorna se o backlight está atualmente no modo pré-dimming de economia. */
 bool display_backlight_is_dimmed(void);
 

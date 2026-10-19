@@ -263,6 +263,8 @@ O desenvolvimento deste firmware é assistido por agentes de IA especializados s
    - *Auditoria & Quality Gate:* `requesting-code-review`, `receiving-code-review` e `verification-before-completion` contra a Matriz de Critérios Invioláveis do Portão de Qualidade.
    - *Finalização e Isolamento:* `using-git-worktrees` e `finishing-a-development-branch`.
 2. **Documentação Oficial em Tempo Real (Context7):** Todas as consultas de APIs externas, assinaturas de métodos e validações de frameworks (LVGL 9, ESP-IDF v6.x, FreeRTOS SMP) são obrigatoriamente respaldadas pela skill global **[context7-docs](file:///C:/Users/Bruno/.gemini/config/skills/context7-docs/SKILL.md)** via **Context7 MCP** ([context7.com](https://context7.com/)), eliminando alucinações e garantindo conformidade de código.
+3. **Otimização Dinâmica de Runtime (RTK - Rust Token Killer):** CLI de alta performance e plugin Antigravity que intercepta comandos de terminal via hook `PreToolUse`, condensando saídas com até 90% de economia de tokens sem perda de sinais críticos ([`GUIA_INTEGRACAO_RTK_TOKEN_KILLER.md`](file:///a:/BackupDesktopFileBruno/Estudos/ESP/ESP32/headSet4/docs/GUIA_INTEGRACAO_RTK_TOKEN_KILLER.md)).
+4. **Segurança Criptográfica & Atualização OTA:** Especialista A10 dedicado a aceleradores de hardware (AES/SHA/ECC) via PSA Crypto API, pareamento Fast Pair e partição dual-boot com rollback automático anti-bricking ([`PROTOCOLO_SEGURANCA_CRIPTOGRAFIA_OTA.md`](file:///a:/BackupDesktopFileBruno/Estudos/ESP/ESP32/headSet4/docs/PROTOCOLO_SEGURANCA_CRIPTOGRAFIA_OTA.md)).
 
 ---
 

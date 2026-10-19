@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.ble.ImageConverter
+import com.example.model.BleConnectionStatus
 import com.example.model.HeadSetUiState
 import com.example.model.MediaSlot
 import com.example.model.MediaUploadProgress
@@ -226,6 +227,43 @@ fun DisplayGalleryScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
+        }
+
+        if (uiState.connectionStatus != BleConnectionStatus.CONNECTED) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(CyberSurfaceContainerLow)
+                    .border(1.dp, CyberOutlineVariant.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudUpload,
+                    contentDescription = "Desconectado",
+                    tint = CyberOutline,
+                    modifier = Modifier.size(20.dp)
+                )
+                Column {
+                    Text(
+                        text = "MEMÓRIA OFFLINE · ESP32 DESCONECTADO",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMono,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberOutline
+                        )
+                    )
+                    Text(
+                        text = "Conecte o HeadSet4 via BLE para consultar papéis de parede e GIFs gravados na Flash NVS.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = HankenGrotesk,
+                            color = CyberOutlineVariant
+                        )
+                    )
+                }
+            }
         }
 
         // GATT Toast Notification Bar

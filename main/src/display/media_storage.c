@@ -23,6 +23,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "esp_task_wdt.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "settings.h"
@@ -219,6 +220,8 @@ esp_err_t media_storage_init(void) {
   if (!s_active_img_pixels) {
     ESP_LOGE(TAG, "Falha ao alocar buffer da imagem ativa em PSRAM (%d B)",
              MEDIA_IMAGE_RGB565_SIZE);
+    vSemaphoreDelete(s_mutex);
+    s_mutex = NULL;
     return ESP_ERR_NO_MEM;
   }
 
@@ -233,12 +236,17 @@ esp_err_t media_storage_init(void) {
   s_active_img_dsc.data = (const uint8_t *)s_active_img_pixels;
   generate_default_wallpaper_pattern(s_active_img_pixels);
 
-  /* 2. Inicializa a partição NVS dedicada 'nvs_media' */
+  /* 2. Inicializa a partição NVS dedicada 'nvs_media'.
+   * NOTA DE ARQUITETURA E RESILIÊNCIA:
+   * A partição possui 4 MB (1024 setores NVS). Com a flag CONFIG_NVS_ALLOCATE_CACHE_IN_SPIRAM=y,
+   * as estruturas internas do NVS (Page objects) são alocadas na PSRAM sem esgotar o heap interno DRAM.
+   * A formatação física (erase) é disparada EXCLUSIVAMENTE se a partição estiver sem páginas
+   * livres (ESP_ERR_NVS_NO_FREE_PAGES) ou em versão de formato incompatível (ESP_ERR_NVS_NEW_VERSION_FOUND),
+   * preservando os arquivos do usuário caso ocorra qualquer outro erro transiente. */
   esp_err_t err = nvs_flash_init_partition(MEDIA_NVS_PARTITION_NAME);
-  if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
-      err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    ESP_LOGW(TAG, "Partição %s necessita formatação. Executando erase...",
-             MEDIA_NVS_PARTITION_NAME);
+  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    ESP_LOGW(TAG, "Partição %s necessita formatação ou recuperação (%s). Executando erase...",
+             MEDIA_NVS_PARTITION_NAME, esp_err_to_name(err));
     nvs_flash_erase_partition(MEDIA_NVS_PARTITION_NAME);
     err = nvs_flash_init_partition(MEDIA_NVS_PARTITION_NAME);
   }
@@ -246,6 +254,19 @@ esp_err_t media_storage_init(void) {
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Falha crítica ao inicializar partição %s: %s",
              MEDIA_NVS_PARTITION_NAME, esp_err_to_name(err));
+    /* Liberação segura de recursos para evitar memory leak em caso de falha */
+    if (s_active_img_pixels) {
+      heap_caps_free(s_active_img_pixels);
+      s_active_img_pixels = NULL;
+    }
+    if (s_active_gif_buffer) {
+      heap_caps_free(s_active_gif_buffer);
+      s_active_gif_buffer = NULL;
+    }
+    if (s_mutex) {
+      vSemaphoreDelete(s_mutex);
+      s_mutex = NULL;
+    }
     return err;
   }
 
@@ -255,6 +276,19 @@ esp_err_t media_storage_init(void) {
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Falha ao abrir namespace %s: %s", MEDIA_NVS_NAMESPACE,
              esp_err_to_name(err));
+    nvs_flash_deinit_partition(MEDIA_NVS_PARTITION_NAME);
+    if (s_active_img_pixels) {
+      heap_caps_free(s_active_img_pixels);
+      s_active_img_pixels = NULL;
+    }
+    if (s_active_gif_buffer) {
+      heap_caps_free(s_active_gif_buffer);
+      s_active_gif_buffer = NULL;
+    }
+    if (s_mutex) {
+      vSemaphoreDelete(s_mutex);
+      s_mutex = NULL;
+    }
     return err;
   }
 
@@ -385,15 +419,21 @@ esp_err_t media_storage_set_active_gif(uint8_t slot) {
   char key[16];
   snprintf(key, sizeof(key), "gif_blob_%u", slot);
 
+  /* Pausa temporariamente consumo pelo LVGL enquanto carrega da Flash */
+  s_active_gif_len = 0;
+  s_active_gif_dsc.data_size = 0;
+
   size_t req_len = MEDIA_MAX_GIF_SIZE;
   esp_err_t err = nvs_get_blob(s_nvs_h, key, s_active_gif_buffer, &req_len);
 
   if (err == ESP_OK && req_len > 0) {
+    s_active_gif_dsc.data_size = req_len;
     s_active_gif_len = req_len;
     ESP_LOGI(TAG, "GIF do slot %u carregado para PSRAM (%u bytes)", slot,
              req_len);
   } else {
     s_active_gif_len = 0;
+    s_active_gif_dsc.data_size = 0;
     ESP_LOGI(TAG, "Slot %u de GIF está vazio", slot);
   }
 
@@ -421,6 +461,11 @@ esp_err_t media_storage_save_image(uint8_t slot, const char *name,
     return ESP_ERR_INVALID_ARG;
   }
 
+  if (!s_nvs_h) {
+    ESP_LOGE(TAG, "Partição de mídia NVS não inicializada");
+    return ESP_ERR_INVALID_STATE;
+  }
+
   /* Validação matemática de integridade via CRC32 */
   uint32_t calc_crc = media_storage_calc_crc32(data, len);
   if (crc32 != 0 && calc_crc != crc32) {
@@ -431,16 +476,21 @@ esp_err_t media_storage_save_image(uint8_t slot, const char *name,
     return ESP_ERR_INVALID_CRC;
   }
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
     return ESP_ERR_TIMEOUT;
   }
 
   char key[16];
   snprintf(key, sizeof(key), "img_blob_%u", slot);
 
+  /* Alimenta o watchdog antes da gravação de bloco pesado (142 KB) na Flash */
+  esp_task_wdt_reset();
+
   esp_err_t err = nvs_set_blob(s_nvs_h, key, data, len);
   if (err == ESP_OK) {
+    esp_task_wdt_reset();
     nvs_commit(s_nvs_h);
+    esp_task_wdt_reset();
 
     /* Atualiza metadados */
     s_catalog.images[slot].has_data = true;
@@ -482,6 +532,17 @@ esp_err_t media_storage_save_gif(uint8_t slot, const char *name,
     return ESP_ERR_INVALID_ARG;
   }
 
+  /* Validação rigorosa dos magic bytes do formato GIF (GIF87a ou GIF89a) */
+  if (len < 6 || (memcmp(data, "GIF87a", 6) != 0 && memcmp(data, "GIF89a", 6) != 0)) {
+    ESP_LOGE(TAG, "Arquivo rejeitado: assinatura de cabeçalho GIF inválida (não é GIF87a/GIF89a)");
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  if (!s_nvs_h) {
+    ESP_LOGE(TAG, "Partição de mídia NVS não inicializada");
+    return ESP_ERR_INVALID_STATE;
+  }
+
   uint32_t calc_crc = media_storage_calc_crc32(data, len);
   if (crc32 != 0 && calc_crc != crc32) {
     ESP_LOGE(TAG,
@@ -490,16 +551,21 @@ esp_err_t media_storage_save_gif(uint8_t slot, const char *name,
     return ESP_ERR_INVALID_CRC;
   }
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
     return ESP_ERR_TIMEOUT;
   }
 
   char key[16];
   snprintf(key, sizeof(key), "gif_blob_%u", slot);
 
+  /* Alimenta o watchdog antes da gravação de bloco pesado (até 400 KB) na Flash */
+  esp_task_wdt_reset();
+
   esp_err_t err = nvs_set_blob(s_nvs_h, key, data, len);
   if (err == ESP_OK) {
+    esp_task_wdt_reset();
     nvs_commit(s_nvs_h);
+    esp_task_wdt_reset();
 
     /* Atualiza metadados */
     s_catalog.gifs[slot].has_data = true;
@@ -512,9 +578,13 @@ esp_err_t media_storage_save_gif(uint8_t slot, const char *name,
     }
     save_catalog_to_nvs();
 
-    /* Se for o slot ativo atual, atualiza o cache da PSRAM */
+    /* Se for o slot ativo atual, atualiza o cache da PSRAM com proteção atômica contra colisão com LVGL */
     if (slot == s_catalog.active_gif_idx && s_active_gif_buffer) {
+      /* Zera temporariamente o comprimento para desarmar renderização de stream intermediário pelo LVGL */
+      s_active_gif_len = 0;
+      s_active_gif_dsc.data_size = 0;
       memcpy(s_active_gif_buffer, data, len);
+      s_active_gif_dsc.data_size = len;
       s_active_gif_len = len;
     }
 

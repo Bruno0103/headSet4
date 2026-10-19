@@ -85,12 +85,14 @@ static void pick_params(void)
     case BT_BLE_ADV_ACTIVE:
         s_params.adv_int_min = s_streaming ? ADV_STREAM_MIN : ADV_ACTIVE_MIN;
         s_params.adv_int_max = s_streaming ? ADV_STREAM_MAX : ADV_ACTIVE_MAX;
-        s_params.own_addr_type = BLE_ADDR_TYPE_RPA_PUBLIC;
+        /* Utiliza endereco publico para coincidir com o BD_ADDR Classico (A2DP/HFP), permitindo
+         * que o app Android conecte imediatamente ao GATT sem erro 133 quando o fone ja estiver pareado */
+        s_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
         break;
     default:
         s_params.adv_int_min = ADV_SLEEP_MIN;
         s_params.adv_int_max = ADV_SLEEP_MAX;
-        s_params.own_addr_type = BLE_ADDR_TYPE_RPA_PUBLIC;
+        s_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
         break;
     }
 }
@@ -417,9 +419,11 @@ esp_err_t bt_ble_init(const char *device_name)
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
 
-    /* O primeiro advertising so comeca quando este evento chegar (ver gap_event_handler). */
-    ESP_RETURN_ON_ERROR(esp_ble_gap_config_local_privacy(true), TAG, "privacidade local");
-    ESP_LOGI(TAG, "BLE inicializado (\"%s\")", s_name);
+    /* O primeiro advertising comeca quando o evento de confirmacao de privacidade chegar.
+     * Definir como false desativa o RPA (Resolvable Private Address) rotativo e mantem o
+     * endereco publico fixo alinhado com o perfil Classic (A2DP). */
+    ESP_RETURN_ON_ERROR(esp_ble_gap_config_local_privacy(false), TAG, "privacidade local");
+    ESP_LOGI(TAG, "BLE inicializado com endereco publico fixo (\"%s\")", s_name);
     return ESP_OK;
 }
 

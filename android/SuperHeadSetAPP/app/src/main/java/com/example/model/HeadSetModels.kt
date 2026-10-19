@@ -119,11 +119,11 @@ data class HeadSetUiState(
     val proximitySensitivity: Int = 160,
 
     // Multipoint Bluetooth Dual Slots (bt.link_up / bt.link_down / bt.slot_changed / bt.peer_name)
-    val slot0Name: String = "Dispositivo 1",
+    val slot0Name: String = "Slot 1 (Livre)",
     val slot0Connected: Boolean = false,
-    val slot1Name: String = "Dispositivo 2",
+    val slot1Name: String = "Slot 2 (Livre)",
     val slot1Connected: Boolean = false,
-    val activeSlot: Int = 0,
+    val activeSlot: Int = -1,
     val autoSwitchEnabled: Boolean = true,
 
     // Media & Audio Playback (audio.volume, audio.mode)
@@ -151,8 +151,8 @@ data class HeadSetUiState(
     val displayOn: Boolean = true,
     val displayBrightness: Int = 80,
     val displayTimeoutSec: Int = 30,
-    val activeWallpaperIdx: Int = 0,
-    val activeGifIdx: Int = 0,
+    val activeWallpaperIdx: Int = -1,
+    val activeGifIdx: Int = -1,
 
     // Display Media Gallery Slots (6 images & 6 GIFs)
     val imageSlots: List<MediaSlot> = emptyList(),
