@@ -198,14 +198,27 @@ typedef struct {
 
 static touch_filter_t s_touch_filter = {0};
 
+static uint32_t s_transition_cooldown_until_ms = 0;
+
 /**
  * @brief Informa se o display está executando uma animação de transição de tela.
- * Utiliza as APIs oficiais do LVGL 9 (lv_display_get_screen_loading e lv_display_get_screen_prev).
+ * Utiliza as APIs oficiais do LVGL 9 (lv_display_get_screen_loading e lv_display_get_screen_prev)
+ * com janela protetiva de cooldown (400 ms) para amortecer transições e evitar colisões reentrantes.
  */
 static bool display_is_transitioning(void) {
   lv_display_t *disp = lv_display_get_default();
   if (!disp) return false;
-  return (lv_display_get_screen_loading(disp) != NULL || lv_display_get_screen_prev(disp) != NULL);
+
+  uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+  if (now_ms < s_transition_cooldown_until_ms) {
+    return true;
+  }
+
+  if (lv_display_get_screen_loading(disp) != NULL || lv_display_get_screen_prev(disp) != NULL) {
+    s_transition_cooldown_until_ms = now_ms + 400;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -215,21 +228,24 @@ static bool display_is_transitioning(void) {
  * 1. LIBERAÇÃO DO BARRAMENTO SPI E ELIMINAÇÃO DE POLLING:
  *    Durante transições de tela ativas (display_is_transitioning()), o touch é
  *    completamente pausado e NÃO emite transações no barramento SPI3.
- * 2. BLINDAGEM TEMPORAL ANTI-TOQUE FANTASMA (DEBOUNCE 2-ESTÁGIOS):
+ * 2. CANCELAMENTO DE CLIQUES REENTRANTES VIA lv_indev_wait_release:
+ *    Se o touch for pausado ou a tela estiver em transição, instrui o indev a abortar
+ *    a pressão sem sintetizar um LV_EVENT_CLICKED espúrio ao forçar LV_INDEV_STATE_RELEASED.
+ * 3. BLINDAGEM TEMPORAL ANTI-TOQUE FANTASMA (DEBOUNCE 2-ESTÁGIOS):
  *    Spikes de RF/I2S que duram apenas 1 leitura são sumariamente rejeitados.
- * 3. LIBERDADE DE USO EM STREAMING:
+ * 4. LIBERDADE DE USO EM STREAMING:
  *    O touch NÃO fica travado durante a reprodução de música, permitindo uso contínuo.
- * 4. FILTRO DE DESPERTAR (R.14 DO AGENTS.md):
+ * 5. FILTRO DE DESPERTAR (R.14 DO AGENTS.md):
  *    Se o display estiver em Sleep ou Pré-Dimming, o primeiro toque acorda o backlight e é absorvido.
  */
 static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
-  (void)indev;
-
   /*
    * REGRA DE OURO (Requisito de Estabilidade e Proteção de Concorrência):
    * 1. Se o touch estiver explicitamente pausado (s_touch_paused); OU
    * 2. Se houver uma transição de tela em andamento no LVGL 9 (display_is_transitioning()):
    * Retornamos imediatamente LV_INDEV_STATE_RELEASED sem consultar o conversor XPT2046 no SPI3.
+   * Chamamos lv_indev_wait_release(indev) para que o LVGL aborte o toque emitindo LV_EVENT_PRESS_LOST
+   * e limpe indev->pointer.act_obj, NUNCA disparando LV_EVENT_CLICKED durante a transição.
    * Isso previne toques concorrentes durante animações de 300 ms, evita duplicidade de eventos,
    * elimina repiques e libera 100% da banda do barramento SPI para a renderização do display.
    */
@@ -238,6 +254,9 @@ static void lvgl_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data) {
       s_touch_filter.is_pressed = false;
       s_touch_filter.press_confirm_cnt = 0;
       s_touch_filter.release_confirm_cnt = 0;
+    }
+    if (indev) {
+      lv_indev_wait_release(indev);
     }
     data->state = LV_INDEV_STATE_RELEASED;
     return;
@@ -646,14 +665,10 @@ static void on_action_control_clicked(lv_event_t *e) {
       ui_bridge_bt_set_desconectar_dispositivo_2(true);
       break;
 
-    case UI_ACTION_BT_TOGGLE_AUTOSWITCH: {
-      ui_model_data_t snap;
-      ui_model_get_snapshot(&snap);
-      ESP_LOGI(TAG, "Acao: Alternar Bluetooth Auto-Switch (atual=%d -> novo=%d)",
-               snap.bt_auto_switch, !snap.bt_auto_switch);
-      ui_bridge_bt_set_alternar_ativo(!snap.bt_auto_switch);
+    case UI_ACTION_BT_TOGGLE_AUTOSWITCH:
+      ESP_LOGI(TAG, "Acao: Alternar Slot Ativo Bluetooth (1-Clique)");
+      ui_bridge_bt_toggle_active_slot();
       break;
-    }
 
     case UI_ACTION_BT_TOGGLE_ACTIVE_SLOT:
       ESP_LOGI(TAG, "Acao: Alternar Slot Ativo Bluetooth");
@@ -1065,7 +1080,6 @@ static void bind_main_image_controls(lv_obj_t *screen) {
           const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
           if (dsc) {
             lv_image_set_src(img, dsc);
-            lv_obj_invalidate(img);
             ESP_LOGI(TAG, "Wallpaper 240x296 aplicado com sucesso em screen_main");
           }
         }
@@ -1095,14 +1109,12 @@ static void bind_main_gif_controls(lv_obj_t *screen) {
           if (gif_dsc && gif_dsc->data_size > 0) {
             lv_gif_set_color_format(img, LV_COLOR_FORMAT_RGB565);
             lv_gif_set_src(img, gif_dsc);
-            lv_obj_invalidate(img);
             ESP_LOGI(TAG, "GIF animado 240x296 (%u bytes) aplicado em screen_main_gif",
                      (unsigned int)gif_dsc->data_size);
           } else {
             const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
             if (dsc) {
               lv_image_set_src(img, dsc);
-              lv_obj_invalidate(img);
             }
           }
         }
@@ -1110,7 +1122,6 @@ static void bind_main_gif_controls(lv_obj_t *screen) {
     }
   }
 }
-
 
 /**
  * @brief Mapeia controles e exibição na tela de Cover Art (screen_main_cover_art).
@@ -1132,6 +1143,21 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
   if (!content) {
     ESP_LOGW(TAG, "Container de conteudo nao encontrado em screen_main_cover_art");
     return;
+  }
+
+  /* Desarma propagação por bubble do botão Apps para container_0, evitando duplo disparo concorrente */
+  if (lv_obj_get_child_count(content) > 1) {
+    lv_obj_t *btn_apps = lv_obj_get_child(content, 1);
+    if (btn_apps) {
+      lv_obj_remove_flag(btn_apps, LV_OBJ_FLAG_EVENT_BUBBLE);
+      uint32_t btn_kids = lv_obj_get_child_count(btn_apps);
+      for (uint32_t k = 0; k < btn_kids; k++) {
+        lv_obj_t *kobj = lv_obj_get_child(btn_apps, k);
+        if (kobj) {
+          lv_obj_remove_flag(kobj, LV_OBJ_FLAG_EVENT_BUBBLE);
+        }
+      }
+    }
   }
 
   /* card_0 é o primeiro filho do container principal de cover art */
@@ -1165,7 +1191,6 @@ static void bind_main_cover_art_controls(lv_obj_t *screen) {
               const lv_image_dsc_t *dsc = cover_art_get_image_dsc();
               if (dsc) {
                 lv_image_set_src(img, dsc);
-                lv_obj_invalidate(img);
                 ESP_LOGI(TAG, "Capa aplicada com sucesso ao carregar screen_main_cover_art");
               }
             }

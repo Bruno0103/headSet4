@@ -129,7 +129,7 @@ static void on_bt_event(void *arg, esp_event_base_t base, int32_t id, void *data
     case BT_EVT_SLOT_CHANGED:
         if (data) {
             const bt_slot_evt_t *s = (const bt_slot_evt_t *)data;
-            snprintf(buf, sizeof(buf), "{\"active_slot\":%u}", s->active_slot);
+            snprintf(buf, sizeof(buf), "{\"active_slot\":%u,\"connected\":%s}", s->active_slot, s->is_connected ? "true" : "false");
             send_event_telemetry("bt", "slot_changed", buf);
         }
         break;

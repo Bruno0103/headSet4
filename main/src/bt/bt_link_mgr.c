@@ -30,6 +30,7 @@
 #include "settings.h"
 
 #include "apds9930.h"
+#include "audio.h"
 #include "bt_a2dp.h"
 #include "bt_ble.h"
 #include "bt_fastpair.h"
@@ -148,6 +149,8 @@ static void schedule_connect(void);
 static void stop_connect_timer(void);
 static bool has_empty_slot(void);
 static void update_slots_full_status(void);
+static void switch_to_slot(int target_slot);
+static void post_slot_changed(void);
 
 /* ============================================================================
  * PERSISTÊNCIA NVS (DELEGADA AO ACTOR SETTINGS)
@@ -173,12 +176,8 @@ static void nvs_load(void)
         s_ctx.sel = sel;
     }
 
-    uint8_t asw = 0;
-    if (settings_get_u8(SETTINGS_KEY_BT_AUTOSWITCH, &asw, 0) == ESP_OK) {
-        s_ctx.auto_switch = (asw != 0);
-    } else {
-        s_ctx.auto_switch = false;
-    }
+    /* Auto-switch de fundo desativado: fone opera em modo 1-Clique Estável */
+    s_ctx.auto_switch = false;
 
     atomic_store(&s_atomic_sel, s_ctx.sel);
     atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
@@ -250,6 +249,73 @@ static void drop_link(void)
     }
     if (s_ctx.link.profiles & BT_PROFILE_A2DP) {
         bt_a2dp_disconnect(s_ctx.link.bda);
+    }
+}
+
+/**
+ * @brief Executa comutação atômica e graciosa para um slot desejado (Protocolo 1-Clique Estável).
+ *
+ * 1. Para imediatamente o streaming de áudio I2S no Core 1 via audio_cmd_stop_send(1) para evitar ruídos residuais.
+ * 2. Se o slot anterior estava em pareamento, encerra.
+ * 3. Se houver link ativo conectado cujo endereço BDA difere do novo slot, sinaliza switching = true
+ *    e chama drop_link() (desconexão graciosa do A2DP e HFP).
+ * 4. Garante que manual_disconnect = false e attempts = 0 para permitir a reconexão imediata.
+ * 5. Salva novo slot selecionado e notifica o barramento de eventos (post_slot_changed()).
+ * 6. Ao receber LINK_DOWN do link anterior (ou se já não havia link ativo), apply_state() dispara
+ *    a reconexão ultrarrápida (50 ms) para o novo slot (ou abre modo de pareamento se o slot for vazio).
+ */
+static void switch_to_slot(int target_slot)
+{
+    if (target_slot < 0 || target_slot >= BT_LINK_NUM_SLOTS) {
+        return;
+    }
+
+    /* Se houver troca em andamento mas já passou mais de 2,5 segundos, expira o bloqueio de segurança */
+    if (s_ctx.switching) {
+        int64_t elapsed_ms = (esp_timer_get_time() - s_ctx.switch_start_us) / 1000;
+        if (elapsed_ms < 2500) {
+            ESP_LOGW(TAG, "Troca de dispositivos em andamento (%lld ms): aguarde conclusao", (long long)elapsed_ms);
+            return;
+        } else {
+            ESP_LOGW(TAG, "Timeout na comutacao anterior (%lld ms); forcando novo slot", (long long)elapsed_ms);
+            s_ctx.switching = false;
+            s_ctx.link.profiles = 0; /* Descarta estado fantasma */
+        }
+    }
+
+    if (s_ctx.pairing) {
+        stop_pairing("troca_slot");
+    }
+
+    /* Silencia o pipeline de áudio I2S no Core 1 imediatamente para evitar estalos residuais */
+    audio_cmd_stop_send(1);
+
+    bool need_disconnect = false;
+    if (s_ctx.link.profiles != 0) {
+        /* Se o dispositivo conectado atual é diferente do que está salvo no target_slot */
+        if (!s_ctx.slot[target_slot].valid || memcmp(s_ctx.link.bda, s_ctx.slot[target_slot].bda, ESP_BD_ADDR_LEN) != 0) {
+            need_disconnect = true;
+        }
+    }
+
+    s_ctx.sel = target_slot;
+    atomic_store(&s_atomic_sel, s_ctx.sel);
+    atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
+    s_ctx.attempts = 0;
+    s_ctx.manual_disconnect = false; /* Intenção voluntária de conexão pelo usuário */
+    nvs_save();
+    ESP_LOGI(TAG, ">>> [1-CLIQUE] Slot %d ativado (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
+    post_slot_changed();
+    stop_connect_timer();
+
+    if (need_disconnect) {
+        s_ctx.switching = true;
+        s_ctx.switch_start_us = esp_timer_get_time();
+        ESP_LOGI(TAG, "Desconectando dispositivo anterior antes de assumir Slot %d...", s_ctx.sel);
+        drop_link();
+    } else {
+        s_ctx.switching = false;
+        apply_state();
     }
 }
 
@@ -533,43 +599,8 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
             break;
 
         case SENSOR_EVT_BUTTON_SHORT:
-            /* Se houver troca em andamento mas já passou mais de 2,5 segundos, expira o bloqueio de segurança */
-            if (s_ctx.switching) {
-                int64_t elapsed_ms = (esp_timer_get_time() - s_ctx.switch_start_us) / 1000;
-                if (elapsed_ms < 2500) {
-                    ESP_LOGW(TAG, "Troca de dispositivos em andamento (%lld ms): aguarde conclusao", (long long)elapsed_ms);
-                    break;
-                } else {
-                    ESP_LOGW(TAG, "Timeout na desconexao anterior (%lld ms); forcando comutacao de slot pelo botao", (long long)elapsed_ms);
-                    s_ctx.switching = false;
-                    s_ctx.link.profiles = 0; /* Descarta estado fantasma do link anterior */
-                }
-            }
-
-            /* Se estava em pareamento no slot anterior, cancela e comuta para o outro slot */
-            if (s_ctx.pairing) {
-                stop_pairing("troca_slot");
-            }
-
-            s_ctx.sel = (s_ctx.sel + 1) % BT_LINK_NUM_SLOTS;
-            atomic_store(&s_atomic_sel, s_ctx.sel);
-            atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
-            s_ctx.attempts = 0;
-            s_ctx.manual_disconnect = false; /* Intenção explícita do usuário de comutar/conectar */
-            nvs_save();
-            ESP_LOGI(TAG, "Slot selecionado via botao: %d (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
-            post_slot_changed();
-            stop_connect_timer();
-
-            /* Se havia um dispositivo conectado de outro slot, sinaliza switching e salva timestamp */
-            if (s_ctx.link.profiles && !is_sel_bda(s_ctx.link.bda)) {
-                s_ctx.switching = true;
-                s_ctx.switch_start_us = esp_timer_get_time();
-                ESP_LOGI(TAG, "Iniciando comutacao de slot: desconectando dispositivo anterior...");
-            } else {
-                s_ctx.switching = false;
-            }
-            apply_state();
+            ESP_LOGI(TAG, "Botão curto acionado: alternando slot ativo (1-Clique)");
+            switch_to_slot((s_ctx.sel + 1) % BT_LINK_NUM_SLOTS);
             break;
 
         case SENSOR_EVT_BUTTON_LONG:
@@ -598,36 +629,15 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
         case BT_EVT_LINK_UP: {
             const bt_link_evt_t *ev = (const bt_link_evt_t *)ev_msg->payload;
             if (!is_sel_bda(ev->bda)) {
-                /* Se o recurso de auto-switch estiver ativado e o dispositivo pertencer ao outro slot válido, comuta */
-                int alt_slot = -1;
-                for (int i = 0; i < BT_LINK_NUM_SLOTS; i++) {
-                    if (i != s_ctx.sel && s_ctx.slot[i].valid && memcmp(s_ctx.slot[i].bda, ev->bda, ESP_BD_ADDR_LEN) == 0) {
-                        alt_slot = i;
-                        break;
-                    }
+                ESP_LOGW(TAG, "Perfil 0x%X de " ESP_BD_ADDR_STR " recusado (nao e o slot selecionado)", ev->profile,
+                         ESP_BD_ADDR_HEX(ev->bda));
+                if (ev->profile & BT_PROFILE_HFP) {
+                    bt_hfp_disconnect((uint8_t *)ev->bda);
                 }
-
-                if (s_ctx.auto_switch && alt_slot >= 0) {
-                    ESP_LOGI(TAG, "Auto-switch: alternando automaticamente para slot %d por atividade de " ESP_BD_ADDR_STR,
-                             alt_slot, ESP_BD_ADDR_HEX(ev->bda));
-                    s_ctx.sel = alt_slot;
-                    atomic_store(&s_atomic_sel, s_ctx.sel);
-                    atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
-                    s_ctx.attempts = 0;
-                    nvs_save();
-                    post_slot_changed();
-                    stop_connect_timer();
-                } else {
-                    ESP_LOGW(TAG, "Perfil 0x%X de " ESP_BD_ADDR_STR " recusado (nao e o slot selecionado)", ev->profile,
-                             ESP_BD_ADDR_HEX(ev->bda));
-                    if (ev->profile & BT_PROFILE_HFP) {
-                        bt_hfp_disconnect((uint8_t *)ev->bda);
-                    }
-                    if (ev->profile & BT_PROFILE_A2DP) {
-                        bt_a2dp_disconnect((uint8_t *)ev->bda);
-                    }
-                    break;
+                if (ev->profile & BT_PROFILE_A2DP) {
+                    bt_a2dp_disconnect((uint8_t *)ev->bda);
                 }
+                break;
             }
             if (!s_ctx.link.profiles) {
                 memcpy(s_ctx.link.bda, ev->bda, ESP_BD_ADDR_LEN);
@@ -670,6 +680,7 @@ static void handle_bus_evt_in_actor(const bt_internal_evt_msg_t *ev_msg)
                 if (!s_ctx.link.profiles) {
                     if (s_complete_tmr) esp_timer_stop(s_complete_tmr);
                     s_ctx.switching = false;
+                    s_ctx.manual_disconnect = false; /* Garante prontidão para o novo slot */
                     post_slot_changed();
                     apply_state();
                 }
@@ -695,25 +706,8 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
     case BT_CMD_SELECT_SLOT: {
         if (msg->len >= sizeof(bt_cmd_select_slot_t)) {
             const bt_cmd_select_slot_t *cmd = (const bt_cmd_select_slot_t *)msg->data;
-            if (cmd->slot < BT_LINK_NUM_SLOTS && cmd->slot != s_ctx.sel) {
-                if (s_ctx.pairing) {
-                    stop_pairing("comando_slot");
-                }
-                s_ctx.sel = cmd->slot;
-                atomic_store(&s_atomic_sel, s_ctx.sel);
-                atomic_store(&s_atomic_volume, s_ctx.slot[s_ctx.sel].volume);
-                s_ctx.attempts = 0;
-                nvs_save();
-                ESP_LOGI(TAG, "Comando: Slot %d selecionado (%s)", s_ctx.sel, sel_valid() ? "pareado" : "vazio");
-                post_slot_changed();
-                stop_connect_timer();
-                if (s_ctx.link.profiles && !is_sel_bda(s_ctx.link.bda)) {
-                    s_ctx.switching = true;
-                    s_ctx.switch_start_us = esp_timer_get_time();
-                } else {
-                    s_ctx.switching = false;
-                }
-                apply_state();
+            if (cmd->slot < BT_LINK_NUM_SLOTS) {
+                switch_to_slot(cmd->slot);
             }
         }
         break;
@@ -755,12 +749,10 @@ static void bt_link_actor_fn(hs_actor_t *self, const hs_msg_t *msg)
     }
 
     case BT_CMD_SET_AUTO_SWITCH: {
-        if (msg->len >= sizeof(bt_cmd_set_auto_switch_t)) {
-            const bt_cmd_set_auto_switch_t *cmd = (const bt_cmd_set_auto_switch_t *)msg->data;
-            s_ctx.auto_switch = cmd->enabled;
-            settings_set_u8(SETTINGS_KEY_BT_AUTOSWITCH, cmd->enabled ? 1 : 0);
-            ESP_LOGI(TAG, "Auto-switch configurado: %s", cmd->enabled ? "ativado" : "desativado");
-        }
+        /* Auto-switch de fundo foi eliminado: o sistema opera em modo 1-Clique Estável */
+        s_ctx.auto_switch = false;
+        settings_set_u8(SETTINGS_KEY_BT_AUTOSWITCH, 0);
+        ESP_LOGI(TAG, "Auto-switch desativado: modo determinístico 1-Clique ativo");
         break;
     }
 

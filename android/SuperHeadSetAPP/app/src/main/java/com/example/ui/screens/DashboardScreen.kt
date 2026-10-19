@@ -346,28 +346,39 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MULTIPOINT BLUETOOTH",
+                    text = "BLUETOOTH DUAL-SLOT (1-CLIQUE)",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = JetBrainsMono,
                         color = CyberOutline,
                         letterSpacing = 1.sp
                     )
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Button(
+                    onClick = {
+                        val nextSlot = if (uiState.activeSlot == 0) 1 else 0
+                        onSlotSwitch(nextSlot)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CyberSurfaceContainerHigh,
+                        contentColor = CyberPrimary
+                    ),
+                    shape = RoundedCornerShape(9999.dp),
+                    modifier = Modifier.height(28.dp)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Cached,
+                        contentDescription = "Alternar Slot",
+                        modifier = Modifier.size(16.dp),
+                        tint = CyberPrimary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Troca Inteligente",
+                        text = "ALTERNAR",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = JetBrainsMono,
-                            color = CyberOutline
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
                         )
-                    )
-                    CyberSwitch(
-                        checked = uiState.autoSwitchEnabled,
-                        onCheckedChange = onAutoSwitchToggle,
-                        modifier = Modifier.testTag("toggle_smart_switch")
                     )
                 }
             }
@@ -473,7 +484,7 @@ fun DashboardScreen(
                                         text = when {
                                             isSlot0Active -> "ATIVO (ÁUDIO)"
                                             uiState.slot0Connected -> "CONECTADO"
-                                            else -> "DESCONECTADO"
+                                            else -> "EM ESPERA"
                                         },
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontFamily = JetBrainsMono,
@@ -498,7 +509,7 @@ fun DashboardScreen(
                                 .clip(CircleShape)
                                 .background(CyberSecondaryFixed.copy(alpha = pulseAlpha))
                         )
-                    } else if (uiState.slot0Connected) {
+                    } else {
                         Button(
                             onClick = { onSlotSwitch(0) },
                             colors = ButtonDefaults.buttonColors(
@@ -509,7 +520,7 @@ fun DashboardScreen(
                             modifier = Modifier.height(32.dp)
                         ) {
                             Text(
-                                text = "ALTERNAR",
+                                text = "ATIVAR (1-CLIQUE)",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontFamily = JetBrainsMono,
                                     fontWeight = FontWeight.Bold
@@ -583,14 +594,14 @@ fun DashboardScreen(
                                     Text(
                                         text = when {
                                             isSlot1Active -> "ATIVO (ÁUDIO)"
-                                            uiState.slot1Connected -> "EM ESPERA"
-                                            else -> "DESCONECTADO"
+                                            uiState.slot1Connected -> "CONECTADO"
+                                            else -> "EM ESPERA"
                                         },
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontFamily = JetBrainsMono,
                                             color = when {
                                                 isSlot1Active -> CyberSecondaryFixed
-                                                uiState.slot1Connected -> CyberOutline
+                                                uiState.slot1Connected -> CyberPrimaryContainer
                                                 else -> CyberOutline
                                             },
                                             fontSize = 9.sp,
@@ -609,7 +620,7 @@ fun DashboardScreen(
                                 .clip(CircleShape)
                                 .background(CyberSecondaryFixed.copy(alpha = pulseAlpha))
                         )
-                    } else if (uiState.slot1Connected) {
+                    } else {
                         Button(
                             onClick = { onSlotSwitch(1) },
                             colors = ButtonDefaults.buttonColors(
@@ -620,7 +631,7 @@ fun DashboardScreen(
                             modifier = Modifier.height(32.dp)
                         ) {
                             Text(
-                                text = "ALTERNAR",
+                                text = "ATIVAR (1-CLIQUE)",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontFamily = JetBrainsMono,
                                     fontWeight = FontWeight.Bold

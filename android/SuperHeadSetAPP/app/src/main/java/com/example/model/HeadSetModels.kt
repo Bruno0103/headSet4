@@ -124,7 +124,7 @@ data class HeadSetUiState(
     val slot1Name: String = "Slot 2 (Livre)",
     val slot1Connected: Boolean = false,
     val activeSlot: Int = -1,
-    val autoSwitchEnabled: Boolean = true,
+    val autoSwitchEnabled: Boolean = false,
 
     // Media & Audio Playback (audio.volume, audio.mode)
     val trackTitle: String = "HeadSet4 Audio Stream",

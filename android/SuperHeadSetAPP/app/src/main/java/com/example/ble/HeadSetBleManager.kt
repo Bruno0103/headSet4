@@ -1177,7 +1177,15 @@ class HeadSetBleManager(
                     }
                     "bt.slot_changed" -> {
                         val active = data.optInt("active_slot", 0)
-                        _uiState.update { it.copy(activeSlot = active) }
+                        val connected = data.optBoolean("connected", false)
+                        _uiState.update {
+                            it.copy(
+                                activeSlot = active,
+                                slot0Connected = (active == 0 && connected),
+                                slot1Connected = (active == 1 && connected),
+                                lastGattMessage = "Slot ativo comutado: Dispositivo ${active + 1} (${if (connected) "Conectado" else "Em reconexão..."})"
+                            )
+                        }
                     }
                 }
             }

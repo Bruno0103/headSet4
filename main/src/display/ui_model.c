@@ -158,12 +158,8 @@ static void update_string_subjects_internal(void)
     }
     lv_subject_copy_string(&g_subj_bt_status_2, s_buf_bt_status_2);
 
-    /* Bluetooth Alternância */
-    if (!s_model.bt_auto_switch) {
-        snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "Manual (dispositivo %u)", (unsigned int)(s_model.bt_active_slot + 1));
-    } else {
-        snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "Automatico (dispositivo %u)", (unsigned int)(s_model.bt_active_slot + 1));
-    }
+    /* Bluetooth Alternância: Modo 1-Clique Estável */
+    snprintf(s_buf_bt_alternancia, sizeof(s_buf_bt_alternancia), "1-Clique (Slot %u ativo)", (unsigned int)(s_model.bt_active_slot + 1));
     lv_subject_copy_string(&g_subj_bt_status_alternancia, s_buf_bt_alternancia);
 
     /* Proximidade */
