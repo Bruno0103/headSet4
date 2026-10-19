@@ -1,8 +1,12 @@
 menu "Headset"
 
     config HEADSET_DEVICE_NAME
-        string "Nome Bluetooth do headset"
-        default "Headphones"
+        string "Nome Bluetooth Classic do headset"
+        default "Headphone"
+
+    config HEADSET_BLE_DEVICE_NAME
+        string "Nome Bluetooth Low Energy (BLE) do headset"
+        default "Headphone BLE"
 
     config HEADSET_FACTORY_RESET_ON_BOOT
         bool "Apagar particao NVS a cada boot (Factory Reset)"

@@ -82,11 +82,11 @@ data class GattPacketLog(
 data class HeadSetUiState(
     // BLE Link & Telemetry
     val connectionStatus: BleConnectionStatus = BleConnectionStatus.DISCONNECTED,
-    val deviceName: String = "HeadSet4",
+    val deviceName: String = "Headphone BLE",
     val deviceAddress: String = "CC:50:E3:8A:2F:10",
     val negotiatedMtu: Int = 512,
     val latencyMs: Int = 12,
-    val lastGattMessage: String = "Aguardando conexão BLE com o HeadSet4...",
+    val lastGattMessage: String = "Aguardando conexão BLE com o Headphone BLE...",
     val discoveredDevices: List<DiscoveredBluetoothDevice> = emptyList(),
     val isScanningDevices: Boolean = false,
     val lastPingPongMs: Long = 0L,
@@ -105,7 +105,7 @@ data class HeadSetUiState(
     val isGattConnected: Boolean = false,
     val audioDeviceType: String = "BLE GATT (ESP32)",
     val isMusicActive: Boolean = false,
-    val connectedHeadphoneName: String = "HeadSet4",
+    val connectedHeadphoneName: String = "Headphone",
 
     // Battery Telemetry (sensor.battery & Service 0x180F)
     val batteryPercent: Int = 0,

@@ -310,7 +310,7 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
 
         int len = phone_ctl_format_resp_header(resp_buf, sizeof(s_resp_buf), "ok", cmd, id_item);
         snprintf(resp_buf + len, sizeof(s_resp_buf) - len,
-                 ",\"connected\":true,\"headset\":\"HeadSet4\",\"fw_version\":\"1.0.0\",\"api_version\":1,"
+                 ",\"connected\":true,\"headset\":\"Headphone\",\"fw_version\":\"1.0.0\",\"api_version\":1,"
                  "\"features\":[\"eq5\",\"media_upload\",\"dual_slot\",\"haptics\",\"proximity\"]}");
     }
 
@@ -1253,7 +1253,7 @@ static void phone_ctl_on_msg(hs_actor_t *self, const hs_msg_t *msg)
         /* Desperta o display e zera timer de inatividade imediatamente ao conectar */
         ui_bridge_display_wake();
 
-        const char *welcome = "{\"evt\":\"app.connected\",\"data\":{\"status\":\"ready\",\"name\":\"HeadSet4\",\"fw_version\":\"1.0.0\",\"api_version\":1,\"mtu\":512}}";
+        const char *welcome = "{\"evt\":\"app.connected\",\"data\":{\"status\":\"ready\",\"name\":\"Headphone BLE\",\"fw_version\":\"1.0.0\",\"api_version\":1,\"mtu\":512}}";
         bt_ctl_service_send_notify(conn, (const uint8_t *)welcome, strlen(welcome));
 
         /* Telemetria proativa de sincronização inicial do estado Bluetooth Classic e sensores */

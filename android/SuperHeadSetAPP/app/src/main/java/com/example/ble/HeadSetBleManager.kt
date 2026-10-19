@@ -180,7 +180,8 @@ class HeadSetBleManager(
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
                     val devName = device?.name ?: "Dispositivo"
-                    val isHs = devName.contains("HeadSet", ignoreCase = true) ||
+                    val isHs = devName.contains("Headphone", ignoreCase = true) ||
+                            devName.contains("HeadSet", ignoreCase = true) ||
                             devName.contains("ESP32", ignoreCase = true)
 
                     when (action) {
@@ -233,6 +234,7 @@ class HeadSetBleManager(
         try {
             val connectedDevices = a2dpProfile?.connectedDevices ?: emptyList()
             val hs = connectedDevices.firstOrNull {
+                it.name?.contains("Headphone", ignoreCase = true) == true ||
                 it.name?.contains("HeadSet", ignoreCase = true) == true ||
                 it.name?.contains("ESP32", ignoreCase = true) == true
             }
@@ -248,7 +250,7 @@ class HeadSetBleManager(
                 audioManager?.isBluetoothA2dpOn == true
             }
 
-            val devName = hs?.name ?: "HeadSet4"
+            val devName = hs?.name ?: "Headphone"
             _uiState.update {
                 it.copy(
                     isAudioConnected = isBtAudio,
@@ -304,7 +306,8 @@ class HeadSetBleManager(
         try {
             val bonded = bluetoothAdapter?.bondedDevices ?: emptySet()
             val list = bonded.map { dev ->
-                val isHs = dev.name?.contains("HeadSet", ignoreCase = true) == true
+                val isHs = dev.name?.contains("Headphone", ignoreCase = true) == true ||
+                        dev.name?.contains("HeadSet", ignoreCase = true) == true
                 DiscoveredBluetoothDevice(
                     name = dev.name ?: "Dispositivo Pareado",
                     address = dev.address,
@@ -350,7 +353,7 @@ class HeadSetBleManager(
     /**
      * Starts BLE scan using BluetoothLeScanner with filters for HeadSet4.
      */
-    fun startScanAndConnect(targetDeviceName: String = "HeadSet4") {
+    fun startScanAndConnect(targetDeviceName: String = "Headphone BLE") {
         isUserInitiatedDisconnect = false
         if (!isBluetoothEnabled()) {
             _uiState.update {
@@ -378,22 +381,25 @@ class HeadSetBleManager(
 
         populateBondedDevices()
 
-        // Verifica se há HeadSet4 nos dispositivos emparelhados
+        // Verifica se há Headphone nos dispositivos emparelhados
         val bondedHs = bluetoothAdapter?.bondedDevices?.firstOrNull {
-            it.name?.contains(targetDeviceName, ignoreCase = true) == true
+            it.name?.contains(targetDeviceName, ignoreCase = true) == true ||
+            it.name?.contains("Headphone", ignoreCase = true) == true ||
+            it.name?.contains("HeadSet", ignoreCase = true) == true
         }
 
         _uiState.update {
             it.copy(
                 connectionStatus = BleConnectionStatus.SCANNING,
                 isScanningDevices = true,
-                lastGattMessage = "Buscando HeadSet4 via BLE..."
+                lastGattMessage = "Buscando $targetDeviceName via BLE..."
             )
         }
 
         isScanningActive = true
 
         val filters = listOf(
+            ScanFilter.Builder().setDeviceName("Headphone BLE").build(),
             ScanFilter.Builder().setDeviceName(targetDeviceName).build(),
             ScanFilter.Builder().setServiceUuid(ParcelUuid(HeadSetGattAttributes.UUID_SERVICE_CONTROL)).build(),
             ScanFilter.Builder().setServiceUuid(ParcelUuid(HeadSetGattAttributes.UUID_SERVICE_FASTPAIR)).build()
@@ -414,7 +420,8 @@ class HeadSetBleManager(
 
                 _uiState.update { state ->
                     val existing = state.discoveredDevices.find { it.address == devAddress }
-                    val isHs = devName.contains("HeadSet", ignoreCase = true) ||
+                    val isHs = devName.contains("Headphone", ignoreCase = true) ||
+                            devName.contains("HeadSet", ignoreCase = true) ||
                             devName.contains("ESP32", ignoreCase = true) ||
                             result.scanRecord?.serviceUuids?.any {
                                 it.uuid == HeadSetGattAttributes.UUID_SERVICE_CONTROL ||
@@ -437,8 +444,15 @@ class HeadSetBleManager(
                     state.copy(discoveredDevices = updated)
                 }
 
-                if (devName.contains(targetDeviceName, ignoreCase = true)) {
-                    Log.i(tag, "HeadSet4 localizado no scan! Conectando com parâmetros frescos a $devAddress...")
+                val isTarget = devName.contains(targetDeviceName, ignoreCase = true) ||
+                        devName.contains("Headphone BLE", ignoreCase = true) ||
+                        devName.contains("HeadSet4", ignoreCase = true) ||
+                        result.scanRecord?.serviceUuids?.any {
+                            it.uuid == HeadSetGattAttributes.UUID_SERVICE_CONTROL
+                        } == true
+
+                if (isTarget) {
+                    Log.i(tag, "Dispositivo BLE ($devName) localizado no scan! Conectando com parâmetros frescos a $devAddress...")
                     stopScan()
                     connectToDevice(device)
                 }
@@ -483,7 +497,7 @@ class HeadSetBleManager(
                     _uiState.update {
                         it.copy(
                             connectionStatus = BleConnectionStatus.DISCONNECTED,
-                            lastGattMessage = "Nenhum HeadSet4 encontrado após 15s. Ligue o headset e tente novamente."
+                            lastGattMessage = "Nenhum $targetDeviceName encontrado após 15s. Ligue o headphone e tente novamente."
                         )
                     }
                 }
@@ -517,7 +531,7 @@ class HeadSetBleManager(
         bluetoothGatt?.close()
         bluetoothGatt = null
 
-        val name = device.name?.ifEmpty { "HeadSet4" } ?: "HeadSet4"
+        val name = device.name?.ifEmpty { "Headphone BLE" } ?: "Headphone BLE"
         val address = device.address
 
         _uiState.update {

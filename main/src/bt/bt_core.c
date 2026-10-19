@@ -29,6 +29,14 @@ static void log_step(const char *name, esp_err_t err)
     }
 }
 
+#ifndef CONFIG_HEADSET_DEVICE_NAME
+#define CONFIG_HEADSET_DEVICE_NAME "Headphone"
+#endif
+
+#ifndef CONFIG_HEADSET_BLE_DEVICE_NAME
+#define CONFIG_HEADSET_BLE_DEVICE_NAME "Headphone BLE"
+#endif
+
 /* Roda na BtAppTask quando a pilha esta pronta. Ordem importa:
  * perfis -> GAP -> servicos GATT -> BLE -> link manager (que ja pode conectar). */
 static void stack_up_hdl(uint16_t event, void *p)
@@ -43,7 +51,7 @@ static void stack_up_hdl(uint16_t event, void *p)
     log_step("HFP", bt_hfp_start());
     log_step("GAP", bt_gap_start(CONFIG_HEADSET_DEVICE_NAME));
 
-    log_step("BLE", bt_ble_init(CONFIG_HEADSET_DEVICE_NAME));
+    log_step("BLE", bt_ble_init(CONFIG_HEADSET_BLE_DEVICE_NAME));
     log_step("Fast Pair", bt_fastpair_init());   /* registra o servico 0xFE2C e o provider no bt_ble */
 
     log_step("EQ GATT", bt_eq_service_init());
