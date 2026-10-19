@@ -135,5 +135,14 @@ void display_update_cover_art(const void *dsc);
  */
 void display_update_track_metadata(const char *title, const char *artist, const char *album);
 
+/**
+ * @brief Atualiza imediatamente o wallpaper ativo no display LCD na tela screen_main
+ * ou atualiza a indicação na tela de galeria de imagens caso esteja aberta.
+ */
+void display_update_wallpaper(void);
 
-
+/**
+ * @brief Atualiza imediatamente a animação GIF ativa no display LCD na tela screen_main_gif
+ * ou atualiza a indicação na tela de galeria de GIFs caso esteja aberta.
+ */
+void display_update_gif(void);

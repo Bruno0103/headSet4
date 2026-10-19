@@ -374,7 +374,7 @@ esp_err_t media_storage_set_active_image(uint8_t slot) {
   if (!s_nvs_h || !s_active_img_pixels)
     return ESP_ERR_INVALID_STATE;
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1500)) != pdTRUE) {
     return ESP_ERR_TIMEOUT;
   }
 
@@ -386,14 +386,16 @@ esp_err_t media_storage_set_active_image(uint8_t slot) {
 
   if (err == ESP_OK && req_len == MEDIA_IMAGE_RGB565_SIZE) {
     ESP_LOGI(TAG,
-             "Imagem do slot %u carregada com sucesso para PSRAM (%u bytes)",
-             slot, req_len);
+             "Imagem do slot %u carregada com sucesso da Flash NVS para PSRAM (%u bytes)",
+             slot, (unsigned int)req_len);
+    s_catalog.images[slot].has_data = true;
+    s_catalog.images[slot].size = (uint32_t)req_len;
   } else {
-    /* Se o slot não possui imagem na Flash, gera padrão elegante */
+    /* Se o slot não possui imagem na Flash, gera padrão geométrico elegante de fallback */
     ESP_LOGW(
         TAG,
-        "Slot %u sem dados gravados na Flash. Gerando padrão gráfico default.",
-        slot);
+        "Slot %u sem dados gravados na Flash (err=%s, req_len=%u). Gerando padrão gráfico default.",
+        slot, esp_err_to_name(err), (unsigned int)req_len);
     generate_default_wallpaper_pattern(s_active_img_pixels);
   }
 
@@ -412,7 +414,7 @@ esp_err_t media_storage_set_active_gif(uint8_t slot) {
   if (!s_nvs_h || !s_active_gif_buffer)
     return ESP_ERR_INVALID_STATE;
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1500)) != pdTRUE) {
     return ESP_ERR_TIMEOUT;
   }
 
@@ -491,7 +493,7 @@ esp_err_t media_storage_save_image(uint8_t slot, const char *name,
     return ESP_ERR_INVALID_CRC;
   }
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
     return ESP_ERR_TIMEOUT;
   }
 
@@ -566,7 +568,7 @@ esp_err_t media_storage_save_gif(uint8_t slot, const char *name,
     return ESP_ERR_INVALID_CRC;
   }
 
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
     return ESP_ERR_TIMEOUT;
   }
 

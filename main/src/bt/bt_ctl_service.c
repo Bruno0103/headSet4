@@ -219,13 +219,14 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             break;
         }
 
-        /* Responde com sucesso se o cliente solicitou confirmacao */
-        if (p->write.need_rsp) {
-            esp_ble_gatts_send_response(gatts_if, p->write.conn_id, p->write.trans_id, ESP_GATT_OK, NULL);
-        }
+        /* Encaminha dados para processamento no actor phone_ctl antes de confirmar ao rádio BLE */
+        esp_err_t post_err = phone_ctl_post_incoming_data(p->write.conn_id, p->write.value, p->write.len);
 
-        /* Encaminha dados para processamento no actor phone_ctl */
-        phone_ctl_post_incoming_data(p->write.conn_id, p->write.value, p->write.len);
+        /* Responde com sucesso ou busy se o cliente solicitou confirmacao */
+        if (p->write.need_rsp) {
+            esp_gatt_status_t gatt_status = (post_err == ESP_OK) ? ESP_GATT_OK : ESP_GATT_BUSY;
+            esp_ble_gatts_send_response(gatts_if, p->write.conn_id, p->write.trans_id, gatt_status, NULL);
+        }
         break;
     }
 
@@ -233,11 +234,13 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
         if (gatts_if != s_gatts_if) {
             break;
         }
-        esp_ble_gatts_send_response(gatts_if, p->exec_write.conn_id, p->exec_write.trans_id, ESP_GATT_OK, NULL);
+        esp_err_t post_exec_err = ESP_OK;
         if (p->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC && s_prep_len > 0) {
-            phone_ctl_post_incoming_data(p->exec_write.conn_id, s_prep_buf, s_prep_len);
+            post_exec_err = phone_ctl_post_incoming_data(p->exec_write.conn_id, s_prep_buf, s_prep_len);
             s_prep_len = 0;
         }
+        esp_gatt_status_t exec_status = (post_exec_err == ESP_OK) ? ESP_GATT_OK : ESP_GATT_BUSY;
+        esp_ble_gatts_send_response(gatts_if, p->exec_write.conn_id, p->exec_write.trans_id, exec_status, NULL);
         break;
 
     default:

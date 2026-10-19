@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -38,6 +39,7 @@ import com.example.model.GattPacketLog
 import com.example.model.HeadSetUiState
 import com.example.model.MediaSlot
 import com.example.model.MediaUploadProgress
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,8 +49,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
 class HeadSetBleManager(
@@ -93,6 +99,118 @@ class HeadSetBleManager(
 
     private val pendingCommands = java.util.concurrent.ConcurrentHashMap<Int, PendingCommand>()
 
+    // Mapas de sincronização assíncrona de comandos e ACKs de chunks (Controle de Fluxo BLE Confiável)
+    private val commandDeferreds = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
+    private val chunkAckDeferreds = ConcurrentHashMap<Int, CompletableDeferred<Int>>()
+
+    /**
+     * Retorna a referência do arquivo privado para cache do thumbnail do slot de imagem.
+     */
+    private fun getSlotImageFile(slot: Int): File {
+        return File(context.filesDir, "media_image_slot_${slot}.png")
+    }
+
+    /**
+     * Salva o thumbnail do slot de imagem localmente no armazenamento privado do aplicativo.
+     */
+    private fun saveLocalSlotThumbnail(slot: Int, bitmap: Bitmap) {
+        try {
+            val file = getSlotImageFile(slot)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            Log.i(tag, "Thumbnail do slot #$slot salvo com sucesso em: ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.w(tag, "Falha ao salvar thumbnail local do slot #$slot: ${e.message}")
+        }
+    }
+
+    /**
+     * Carrega o thumbnail do slot de imagem salvo localmente.
+     */
+    private fun loadLocalSlotThumbnail(slot: Int): Bitmap? {
+        return try {
+            val file = getSlotImageFile(slot)
+            if (file.exists() && file.length() > 0) {
+                BitmapFactory.decodeFile(file.absolutePath)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Falha ao carregar thumbnail local do slot #$slot: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Remove o thumbnail local do slot de imagem caso a imagem tenha sido apagada.
+     */
+    private fun deleteLocalSlotThumbnail(slot: Int) {
+        try {
+            val file = getSlotImageFile(slot)
+            if (file.exists()) {
+                file.delete()
+                Log.i(tag, "Thumbnail local do slot #$slot removido do disco.")
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Erro ao remover thumbnail local do slot #$slot: ${e.message}")
+        }
+    }
+
+    /**
+     * Carrega a lista inicial de slots de imagem conferindo arquivos salvos localmente.
+     * Mantém as imagens exibidas no app se a Flash NVS não tiver sido reescrita.
+     */
+    private fun loadInitialImageSlots(): List<MediaSlot> {
+        return (0..5).map { idx ->
+            val localThumb = loadLocalSlotThumbnail(idx)
+            MediaSlot(
+                id = idx,
+                title = if (localThumb != null) "Foto $idx" else "Slot $idx",
+                subtitle = if (localThumb != null) "Armazenada no HeadSet" else "Vazio / Disponível",
+                type = "image",
+                isEmpty = localThumb == null,
+                sizeBytes = if (localThumb != null) 142080 else 0,
+                hasData = localThumb != null,
+                previewBitmap = localThumb
+            )
+        }
+    }
+
+    /**
+     * Aguarda resposta formal com status 'ok' ou 'error' para um comando específico.
+     */
+    private suspend fun awaitCommandResponse(cmd: String, timeoutMs: Long): JSONObject {
+        val deferred = CompletableDeferred<JSONObject>()
+        commandDeferreds[cmd] = deferred
+        return try {
+            withTimeout(timeoutMs) {
+                deferred.await()
+            }
+        } finally {
+            commandDeferreds.remove(cmd)
+        }
+    }
+
+    /**
+     * Aguarda ACK específico de chunk (seq) enviado pelo ESP32.
+     */
+    private suspend fun awaitChunkAck(seq: Int, timeoutMs: Long): Boolean {
+        val deferred = CompletableDeferred<Int>()
+        chunkAckDeferreds[seq] = deferred
+        return try {
+            withTimeout(timeoutMs) {
+                deferred.await()
+                true
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Timeout aguardando ACK do chunk $seq (${timeoutMs}ms)")
+            false
+        } finally {
+            chunkAckDeferreds.remove(seq)
+        }
+    }
+
     private var scanCallback: ScanCallback? = null
     private var isScanningActive = false
     private var isUserInitiatedDisconnect = false
@@ -124,7 +242,7 @@ class HeadSetBleManager(
 
     private val _uiState = MutableStateFlow(
         HeadSetUiState(
-            imageSlots = emptyImages,
+            imageSlots = loadInitialImageSlots(),
             gifSlots = emptyGifs
         )
     )
@@ -643,7 +761,8 @@ class HeadSetBleManager(
                 activeSlot = -1,
                 activeWallpaperIdx = -1,
                 activeGifIdx = -1,
-                imageSlots = emptyImages,
+                // Preserva os slots com thumbnails salvos em disco (não sobrescreve se a NVS não foi reescrita)
+                imageSlots = if (state.imageSlots.any { it.hasData }) state.imageSlots else loadInitialImageSlots(),
                 gifSlots = emptyGifs
             )
         }
@@ -712,7 +831,8 @@ class HeadSetBleManager(
                             activeSlot = -1,
                             activeWallpaperIdx = -1,
                             activeGifIdx = -1,
-                            imageSlots = emptyImages,
+                            // Preserva os slots com thumbnails salvos em disco
+                            imageSlots = if (it.imageSlots.any { s -> s.hasData }) it.imageSlots else loadInitialImageSlots(),
                             gifSlots = emptyGifs,
                             lastGattMessage = if (shouldAutoReconnect)
                                 "Desconexão transitória de transporte ($status). Reconectando canal de controle BLE..."
@@ -937,6 +1057,11 @@ class HeadSetBleManager(
             val status = json.optString("status", "")
             val cmd = json.optString("cmd", pendingCmd?.cmd ?: "")
 
+            // Notifica coroutines que aguardavam a resposta deste comando
+            if (cmd.isNotEmpty()) {
+                commandDeferreds.remove(cmd)?.complete(json)
+            }
+
             if (status == "ok" && cmd.isNotEmpty()) {
                 val idSuffix = if (correlationId != null) " (#$correlationId)" else ""
                 val msg = "HeadSet4 confirmou: $cmd$idSuffix com sucesso"
@@ -1000,6 +1125,9 @@ class HeadSetBleManager(
 
             // 4. Command Error Response: {"status":"error", ...} or {"error":"...", "cmd":"..."}
             if (status == "error" || json.has("error")) {
+                if (cmd.isNotEmpty()) {
+                    commandDeferreds.remove(cmd)?.complete(json)
+                }
                 val reason = json.optString("reason", json.optString("error", "Comando rejeitado"))
                 val detail = json.optString("detail", "")
                 val fullReason = if (detail.isNotEmpty()) "$reason ($detail)" else reason
@@ -1014,6 +1142,7 @@ class HeadSetBleManager(
                 val seq = json.optInt("seq", -1)
                 val bytes = json.optInt("received", 0)
                 Log.d(tag, "Chunk ACK recebido para seq: $seq ($bytes bytes)")
+                chunkAckDeferreds.remove(seq)?.complete(bytes)
                 logPacket("RX", jsonStr, isSuccess = true)
                 return
             }
@@ -1063,14 +1192,34 @@ class HeadSetBleManager(
                                 val name = obj.optString("name", "Foto $idx")
                                 val size = obj.optInt("size", 142080)
                                 val existing = state.imageSlots.getOrNull(idx)
+
+                                // Se a NVS do ESP32 confirma que o slot tem dados (não foi reescrita/apagada),
+                                // preserva o previewBitmap em memória ou carrega o thumbnail salvo em disco!
+                                val existingThumb = if (hasData) {
+                                    existing?.previewBitmap ?: loadLocalSlotThumbnail(idx)
+                                } else {
+                                    // Se a memória NVS do ESP32 foi reescrita ou apagada, descarta o cache local
+                                    deleteLocalSlotThumbnail(idx)
+                                    null
+                                }
+
                                 existing?.copy(
                                     id = idx,
                                     title = if (hasData) name else "Foto $idx",
                                     subtitle = if (hasData) "${size / 1024} KB RGB565" else "Disponível",
                                     isEmpty = !hasData,
                                     sizeBytes = size,
-                                    hasData = hasData
-                                ) ?: MediaSlot(idx, if (hasData) name else "Foto $idx", if (hasData) "${size / 1024} KB RGB565" else "Disponível", isEmpty = !hasData, sizeBytes = size, hasData = hasData)
+                                    hasData = hasData,
+                                    previewBitmap = existingThumb
+                                ) ?: MediaSlot(
+                                    id = idx,
+                                    title = if (hasData) name else "Foto $idx",
+                                    subtitle = if (hasData) "${size / 1024} KB RGB565" else "Disponível",
+                                    isEmpty = !hasData,
+                                    sizeBytes = size,
+                                    hasData = hasData,
+                                    previewBitmap = existingThumb
+                                )
                             } else {
                                 state.imageSlots.getOrNull(idx) ?: MediaSlot(idx, "Foto $idx", "Disponível", isEmpty = true)
                             }
@@ -1501,6 +1650,9 @@ class HeadSetBleManager(
     fun cancelUpload() {
         activeUploadJob?.cancel()
         activeUploadJob = null
+        try {
+            sendJsonCommand("""{"cmd":"media_upload_cancel"}""")
+        } catch (_: Exception) {}
         _uiState.update { it.copy(uploadProgress = null) }
         logPacket("TX", "UPLOAD_CANCELADO")
     }
@@ -1550,12 +1702,28 @@ class HeadSetBleManager(
                     )
                 }
 
-                // 2. Handshake: media_upload_start
+                // 2. Handshake: media_upload_start com confirmação síncrona do ESP32
+                _uiState.update {
+                    it.copy(
+                        uploadProgress = it.uploadProgress?.copy(
+                            statusText = "Iniciando sessão com ESP32 (aguardando alocação de buffer)..."
+                        )
+                    )
+                }
                 val startCmd = """{"cmd":"media_upload_start","type":"image","slot":$slot,"size":$totalBytes,"crc32":"$crc32Hex","name":"$cleanName"}"""
                 sendJsonCommand(startCmd)
-                delay(150) // Wait for buffer allocation on ESP32 PSRAM
 
-                // 3. Chunk streaming: 240 bytes raw por chunk (Base64 gera 320 chars, JSON total = 358 bytes; cabe perfeitamente no MTU 517 sem fragmentacao)
+                if (!_uiState.value.isSimulationMode) {
+                    val startResp = awaitCommandResponse("media_upload_start", 6000L)
+                    if (startResp.optString("status") != "ok") {
+                        val errMsg = startResp.optString("reason", startResp.optString("error", "Sessão de upload rejeitada"))
+                        throw IllegalStateException("ESP32 rejeitou upload: $errMsg")
+                    }
+                } else {
+                    delay(150)
+                }
+
+                // 3. Chunk streaming: 240 bytes raw por chunk com espera de ACK a cada 10 pacotes
                 val rawChunkSize = 240
                 val totalChunks = (totalBytes + rawChunkSize - 1) / rawChunkSize
                 var bytesSent = 0
@@ -1573,16 +1741,17 @@ class HeadSetBleManager(
 
                     val chunkCmd = """{"cmd":"media_chunk","seq":$seq,"data":"$base64Data"}""" + "\n"
 
-                    // If connected to real hardware, use suspending writeCharacteristic to wait for ACK!
+                    // Envio síncrono da característica via fila GATT
                     if (rx != null && queue != null && !_uiState.value.isSimulationMode) {
                         val bytes = chunkCmd.toByteArray(StandardCharsets.UTF_8)
                         val ok = queue.writeCharacteristic(rx, bytes)
                         if (!ok) {
-                            Log.w(tag, "Chunk $seq write timeout ou falha!")
+                            Log.w(tag, "Chunk $seq write timeout ou falha na fila GATT!")
                         }
                     }
 
                     bytesSent = end
+                    val currentSeq = seq
                     seq++
                     val elapsedSec = (System.currentTimeMillis() - startTime) / 1000f
                     val speed = if (elapsedSec > 0.05f) (bytesSent / 1024f) / elapsedSec else 16.0f
@@ -1601,32 +1770,52 @@ class HeadSetBleManager(
                         )
                     }
 
-                    delay(65) // 65ms throttling per chunk: dá vazão ao FreeRTOS no ESP32 para decodificar Base64 sem saturar a fila de mensagens
+                    // Controle de fluxo com o ESP32: aguarda ACK a cada 10 chunks ou no chunk final
+                    // Isso impede que rajadas de rádio BLE esgotem a fila de atores (PHONE_CMD_PROCESS_MSG = 0x0801)
+                    if (!_uiState.value.isSimulationMode && ((currentSeq + 1) % 10 == 0 || bytesSent == totalBytes)) {
+                        awaitChunkAck(currentSeq, 3500L)
+                    } else {
+                        delay(35) // Throttling preventivo entre chunks intermediários
+                    }
                 }
 
                 delay(100)
 
-                // 4. Finish and Commit to Flash NVS: media_upload_finish
+                // 4. Finish and Commit to Flash NVS: media_upload_finish com espera síncrona real
+                // Gravar 142 KB de RGB565 na partição Flash NVS leva de 1.5 a 3 segundos no ESP32!
                 _uiState.update {
                     it.copy(
                         uploadProgress = it.uploadProgress?.copy(
-                            statusText = "Validando CRC32 ($crc32Hex) e gravando na Flash NVS..."
+                            statusText = "Gravando na memória Flash NVS do HeadSet (aguardando confirmação)..."
                         )
                     )
                 }
                 val finishCmd = """{"cmd":"media_upload_finish","slot":$slot}"""
                 sendJsonCommand(finishCmd)
-                delay(150)
 
-                // 5. If selected as active wallpaper, switch LCD display
+                if (!_uiState.value.isSimulationMode) {
+                    val finishResp = awaitCommandResponse("media_upload_finish", 15000L)
+                    if (finishResp.optString("status") != "ok") {
+                        val reason = finishResp.optString("reason", finishResp.optString("error", "Falha ao gravar na Flash NVS"))
+                        throw IllegalStateException("Gravação Flash NVS falhou: $reason")
+                    }
+                    Log.i(tag, "ESP32 confirmou gravação na Flash NVS com sucesso!")
+                } else {
+                    delay(500)
+                }
+
+                // 5. Salva o thumbnail localmente no smartphone para persistir após reinicializações/reconexões
+                saveLocalSlotThumbnail(slot, previewThumb)
+
+                // 6. Se selecionado como papel de parede ativo, comuta o display LCD
                 if (setAsActive) {
                     setWallpaperIdx(slot)
                 }
 
-                // 6. Haptic confirmation (60ms @ 70% intensity)
+                // 7. Confirmação háptica (60ms @ 70% intensidade)
                 sendJsonCommand("""{"cmd":"trigger_vibrate","duration_ms":60,"intensity":70}""")
 
-                // 7. Update UI local slot representation
+                // 8. Atualiza a UI do slot local
                 _uiState.update { state ->
                     val updatedImages = state.imageSlots.map { s ->
                         if (s.id == slot) {
@@ -1660,6 +1849,9 @@ class HeadSetBleManager(
 
             } catch (e: Exception) {
                 Log.e(tag, "Upload image failed: ${e.message}", e)
+                try {
+                    sendJsonCommand("""{"cmd":"media_upload_cancel"}""")
+                } catch (_: Exception) {}
                 _uiState.update {
                     it.copy(
                         uploadProgress = it.uploadProgress?.copy(
@@ -1676,6 +1868,7 @@ class HeadSetBleManager(
     }
 
     fun deleteImageSlot(slotId: Int) {
+        deleteLocalSlotThumbnail(slotId)
         _uiState.update { state ->
             val updated = state.imageSlots.map { slot ->
                 if (slot.id == slotId) {

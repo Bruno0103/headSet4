@@ -1148,7 +1148,12 @@ static void bind_main_image_controls(lv_obj_t *screen) {
           lv_obj_set_size(img, MEDIA_IMAGE_WIDTH, MEDIA_IMAGE_HEIGHT);
           const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
           if (dsc) {
+#if LV_USE_IMAGE_CACHE
+            lv_image_cache_drop(dsc);
+#endif
+            lv_image_set_src(img, NULL);
             lv_image_set_src(img, dsc);
+            lv_obj_invalidate(img);
             ESP_LOGI(TAG, "Wallpaper 240x296 aplicado com sucesso em screen_main");
           }
         }
@@ -1362,6 +1367,75 @@ void display_update_track_metadata(const char *title, const char *artist, const 
                  title ? title : "", artist ? artist : "");
       }
     }
+  }
+}
+
+void display_update_wallpaper(void) {
+  const lv_image_dsc_t *dsc = media_storage_get_active_image_dsc();
+  if (!dsc) return;
+
+#if LV_USE_IMAGE_CACHE
+  lv_image_cache_drop(dsc);
+#endif
+
+  lv_obj_t *screen = lv_screen_active();
+  if (!screen) return;
+
+  const char *name = lv_obj_get_name(screen);
+  /* Se a tela ativa for screen_main (não cover_art nem gif) */
+  if (name && strstr(name, "main") && !strstr(name, "cover_art") && !strstr(name, "gif")) {
+    lv_obj_t *content = get_screen_content_container(screen);
+    if (content && lv_obj_get_child_count(content) > 0) {
+      lv_obj_t *card = lv_obj_get_child(content, 0);
+      if (card && lv_obj_get_child_count(card) > 0) {
+        lv_obj_t *tile = lv_obj_get_child(card, 0);
+        if (tile && lv_obj_get_child_count(tile) > 0) {
+          lv_obj_t *img = lv_obj_get_child(tile, 0);
+          if (img) {
+            lv_image_set_src(img, NULL);
+            lv_image_set_src(img, dsc);
+            lv_obj_invalidate(img);
+            ESP_LOGI(TAG, "Wallpaper 240x296 atualizado dinamicamente em screen_main!");
+          }
+        }
+      }
+    }
+  } else if (name && strstr(name, "galeria_imagens")) {
+    /* Se a tela de galeria estiver aberta no fone, atualiza cabeçalho e seleção */
+    bind_gallery_controls(screen, false);
+  }
+}
+
+void display_update_gif(void) {
+  size_t gif_len = 0;
+  media_storage_get_active_gif_data(&gif_len);
+  const lv_image_dsc_t *gif_dsc = media_storage_get_active_gif_dsc();
+
+  lv_obj_t *screen = lv_screen_active();
+  if (!screen) return;
+
+  const char *name = lv_obj_get_name(screen);
+  if (name && strstr(name, "main_gif")) {
+    lv_obj_t *content = get_screen_content_container(screen);
+    if (content && lv_obj_get_child_count(content) > 0) {
+      lv_obj_t *card = lv_obj_get_child(content, 0);
+      if (card && lv_obj_get_child_count(card) > 0) {
+        lv_obj_t *inner = lv_obj_get_child(card, 0);
+        if (inner && lv_obj_get_child_count(inner) > 0) {
+          lv_obj_t *img = lv_obj_get_child(inner, 0);
+          if (img) {
+            if (gif_len > 0 && gif_dsc) {
+              lv_image_set_src(img, NULL);
+              lv_image_set_src(img, gif_dsc);
+              lv_obj_invalidate(img);
+              ESP_LOGI(TAG, "GIF animado atualizado dinamicamente em screen_main_gif!");
+            }
+          }
+        }
+      }
+    }
+  } else if (name && strstr(name, "galeria_gifs")) {
+    bind_gallery_controls(screen, true);
   }
 }
 
@@ -1604,6 +1678,50 @@ static void ui_placeholder(void) {
 }
 
 /**
+ * @brief Carrega uma fonte binaria a partir da memoria Flash e valida ativamente
+ * sua capacidade de resolucao de glifos no LVGL 9.
+ *
+ * Caso o buffer esteja ausente, a criacao falhe ou o glifo basico 'A' nao seja
+ * encontrado, a funcao descarta o objeto e retorna imediatamente o fallback seguro compilado.
+ * Isso garante que problemas em arquivos de fontes binarias jamais resultem no
+ * desaparecimento total dos textos no display.
+ */
+static lv_font_t *display_load_and_validate_font(const void *bin_start,
+                                                 uint32_t bin_size,
+                                                 const lv_font_t *fallback,
+                                                 const char *font_name) {
+  if (!bin_start || bin_size == 0) {
+    ESP_LOGW(TAG, "Buffer da fonte %s vazio (%u bytes). Usando fallback compilado.",
+             font_name, (unsigned)bin_size);
+    return (lv_font_t *)fallback;
+  }
+
+  lv_font_t *font = lv_binfont_create_from_buffer((void *)bin_start, bin_size);
+  if (!font) {
+    ESP_LOGE(TAG, "Falha ao criar binfont para %s (%u bytes). Usando fallback compilado.",
+             font_name, (unsigned)bin_size);
+    return (lv_font_t *)fallback;
+  }
+
+  /*
+   * Validacao de seguranca ativa: testa se o glifo 'A' pode ser resolvido e
+   * se o descritor basico e retornado com sucesso. Evita que fontes corrompidas
+   * ou com formato de compressao incompativel deixem o display sem nenhum texto.
+   */
+  lv_font_glyph_dsc_t g_dsc;
+  if (!lv_font_get_glyph_dsc(font, &g_dsc, 'A', '\0')) {
+    ESP_LOGE(TAG, "Fonte binaria %s carregada, mas falhou ao resolver glifo 'A'! "
+                  "Descartando e utilizando fallback compilado.", font_name);
+    lv_binfont_destroy(font);
+    return (lv_font_t *)fallback;
+  }
+
+  ESP_LOGI(TAG, "Fonte binaria %s validada e carregada com sucesso (%u bytes, h=%d)",
+           font_name, (unsigned)bin_size, (int)font->line_height);
+  return font;
+}
+
+/**
  * @brief Inicializa e carrega a interface de usuario gerada pelo LVGL Pro (ui).
  * Possui tratativa de erro robusta: se a criacao falhar ou o ponteiro de tela
  * for nulo, registra logs detalhados e carrega a tela de fallback para o
@@ -1646,84 +1764,61 @@ esp_err_t display_create_app_ui(void) {
       "_binary_font_montserrat_italic_20_bin_end");
 
   /*
-   * Carrega as fontes binárias completas da memória ANTES de ui_init("").
+   * Carrega e valida as fontes binárias completas da memória ANTES de ui_init("").
    * Como ui_init() verifica 'if (!font_montserrat_regular_X)', ao definir
    * previamente as fontes a partir dos buffers embutidos na flash (que possuem
    * todos os glifos com acento), o LVGL utiliza as fontes completas sem falhas
    * de arquivo em disco.
    * As fontes exportadas pelo LVGL Pro em ui_gen.h são 12, 14, 16 e 20.
    */
-  uint32_t sz12 = (uint32_t)(font_montserrat_regular_12_bin_end -
-                             font_montserrat_regular_12_bin_start);
-  if (!font_montserrat_regular_12 && sz12 > 0) {
-    font_montserrat_regular_12 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_regular_12_bin_start, sz12);
+  uint32_t sz12 = (uint32_t)(font_montserrat_regular_12_bin_end - font_montserrat_regular_12_bin_start);
+  uint32_t sz14 = (uint32_t)(font_montserrat_regular_14_bin_end - font_montserrat_regular_14_bin_start);
+  uint32_t sz16 = (uint32_t)(font_montserrat_regular_16_bin_end - font_montserrat_regular_16_bin_start);
+  uint32_t sz20 = (uint32_t)(font_montserrat_regular_20_bin_end - font_montserrat_regular_20_bin_start);
+
+  uint32_t sz_it12 = (uint32_t)(font_montserrat_italic_12_bin_end - font_montserrat_italic_12_bin_start);
+  uint32_t sz_it14 = (uint32_t)(font_montserrat_italic_14_bin_end - font_montserrat_italic_14_bin_start);
+  uint32_t sz_it20 = (uint32_t)(font_montserrat_italic_20_bin_end - font_montserrat_italic_20_bin_start);
+
+  if (!font_montserrat_regular_12) {
+    font_montserrat_regular_12 = display_load_and_validate_font(
+        font_montserrat_regular_12_bin_start, sz12, &lv_font_montserrat_12, "regular_12");
   }
-  uint32_t sz14 = (uint32_t)(font_montserrat_regular_14_bin_end -
-                             font_montserrat_regular_14_bin_start);
-  if (!font_montserrat_regular_14 && sz14 > 0) {
-    font_montserrat_regular_14 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_regular_14_bin_start, sz14);
+  if (!font_montserrat_regular_14) {
+    font_montserrat_regular_14 = display_load_and_validate_font(
+        font_montserrat_regular_14_bin_start, sz14, &lv_font_montserrat_14, "regular_14");
   }
-  uint32_t sz16 = (uint32_t)(font_montserrat_regular_16_bin_end -
-                             font_montserrat_regular_16_bin_start);
-  if (!font_montserrat_regular_16 && sz16 > 0) {
-    font_montserrat_regular_16 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_regular_16_bin_start, sz16);
+  if (!font_montserrat_regular_16) {
+    font_montserrat_regular_16 = display_load_and_validate_font(
+        font_montserrat_regular_16_bin_start, sz16, &lv_font_montserrat_16, "regular_16");
   }
-  uint32_t sz20 = (uint32_t)(font_montserrat_regular_20_bin_end -
-                             font_montserrat_regular_20_bin_start);
-  if (!font_montserrat_regular_20 && sz20 > 0) {
-    font_montserrat_regular_20 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_regular_20_bin_start, sz20);
+  if (!font_montserrat_regular_20) {
+    font_montserrat_regular_20 = display_load_and_validate_font(
+        font_montserrat_regular_20_bin_start, sz20, &lv_font_montserrat_20, "regular_20");
   }
 
-  /* Carrega fontes itálicas dos buffers de Flash */
-  uint32_t sz_it12 = (uint32_t)(font_montserrat_italic_12_bin_end -
-                               font_montserrat_italic_12_bin_start);
-  if (!font_montserrat_italic_12 && sz_it12 > 0) {
-    font_montserrat_italic_12 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_italic_12_bin_start, sz_it12);
+  /* Fontes itálicas (fallback apontando para a regular correspondente) */
+  if (!font_montserrat_italic_12) {
+    font_montserrat_italic_12 = display_load_and_validate_font(
+        font_montserrat_italic_12_bin_start, sz_it12, font_montserrat_regular_12, "italic_12");
   }
-  uint32_t sz_it14 = (uint32_t)(font_montserrat_italic_14_bin_end -
-                               font_montserrat_italic_14_bin_start);
-  if (!font_montserrat_italic_14 && sz_it14 > 0) {
-    font_montserrat_italic_14 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_italic_14_bin_start, sz_it14);
+  if (!font_montserrat_italic_14) {
+    font_montserrat_italic_14 = display_load_and_validate_font(
+        font_montserrat_italic_14_bin_start, sz_it14, font_montserrat_regular_14, "italic_14");
   }
-  uint32_t sz_it20 = (uint32_t)(font_montserrat_italic_20_bin_end -
-                               font_montserrat_italic_20_bin_start);
-  if (!font_montserrat_italic_20 && sz_it20 > 0) {
-    font_montserrat_italic_20 = lv_binfont_create_from_buffer(
-        (void *)font_montserrat_italic_20_bin_start, sz_it20);
+  if (!font_montserrat_italic_20) {
+    font_montserrat_italic_20 = display_load_and_validate_font(
+        font_montserrat_italic_20_bin_start, sz_it20, font_montserrat_regular_20, "italic_20");
   }
 
-  /* Fallback de seguranca caso o carregamento da memoria flash falhe */
-  bool bin_loaded = (font_montserrat_regular_12 && font_montserrat_regular_14 &&
-                     font_montserrat_regular_16 && font_montserrat_regular_20 &&
-                     font_montserrat_italic_12 && font_montserrat_italic_14 &&
-                     font_montserrat_italic_20);
-
-  if (!font_montserrat_regular_12)
-    font_montserrat_regular_12 = (lv_font_t *)&lv_font_montserrat_12;
-  if (!font_montserrat_regular_14)
-    font_montserrat_regular_14 = (lv_font_t *)&lv_font_montserrat_14;
-  if (!font_montserrat_regular_16)
-    font_montserrat_regular_16 = (lv_font_t *)&lv_font_montserrat_16;
-  if (!font_montserrat_regular_20)
-    font_montserrat_regular_20 = (lv_font_t *)&lv_font_montserrat_20;
-
-  /* Fallback defensivo para as itálicas apontando para as regulares */
-  if (!font_montserrat_italic_12)
-    font_montserrat_italic_12 = font_montserrat_regular_12;
-  if (!font_montserrat_italic_14)
-    font_montserrat_italic_14 = font_montserrat_regular_14;
-  if (!font_montserrat_italic_20)
-    font_montserrat_italic_20 = font_montserrat_regular_20;
+  bool bin_loaded = (font_montserrat_regular_12 != (lv_font_t *)&lv_font_montserrat_12 &&
+                     font_montserrat_regular_14 != (lv_font_t *)&lv_font_montserrat_14 &&
+                     font_montserrat_regular_16 != (lv_font_t *)&lv_font_montserrat_16 &&
+                     font_montserrat_regular_20 != (lv_font_t *)&lv_font_montserrat_20);
 
   ESP_LOGI(TAG, "Status do carregamento das fontes: %s (suporte a acentos: %s)",
-           bin_loaded ? "Binarias da memoria Flash OK"
-                      : "Fallback compilado ASCII",
+           bin_loaded ? "Binarias da memoria Flash validadas OK"
+                      : "Fallback compilado ASCII ativo",
            bin_loaded ? "COMPLETO (Á, É, Í, Ó, Ú, Ã, Õ, Ç)" : "Limitado ASCII");
 
   /* Inicializacao das variaveis, estilos e temas da UI gerada */

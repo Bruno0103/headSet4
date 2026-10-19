@@ -58,11 +58,11 @@ typedef struct {
 static media_upload_ctx_t s_upload_ctx = {0};
 
 #define PHONE_CTL_STACK_SIZE    8192   /* 8 KB: acomoda com folga cJSON, NVS Flash commit e Bluedroid */
-#define PHONE_CTL_QUEUE_LEN     128    /* 128 itens: amortecimento ampliado contra rajadas BLE intensas */
+#define PHONE_CTL_QUEUE_LEN     256    /* 256 itens: amortecimento ampliado contra rajadas BLE intensas e transferências de mídia */
 #define PHONE_CTL_IDLE_MS       30000  /* 30 segundos sem atividade -> encerra a task */
 
-/* Buffer de montagem de frames de entrada (suporta pacotes Base64 com folga) */
-#define INCOMING_BUF_MAX        1024
+/* Buffer de montagem de frames de entrada (suporta múltiplos pacotes Base64 com folga) */
+#define INCOMING_BUF_MAX        4096
 static char                     s_incoming_buf[INCOMING_BUF_MAX];
 static size_t                   s_incoming_len = 0;
 static char                     s_temp_dispatch_buf[INCOMING_BUF_MAX];
@@ -770,10 +770,14 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             } else if (is_gif && (size == 0 || size > MEDIA_MAX_GIF_SIZE)) {
                 phone_ctl_format_err(resp_buf, sizeof(s_resp_buf), cmd, id_item, "gif_too_large", "maximum GIF size is 400 KB");
             } else {
+                /* Reseta qualquer resíduo anterior e limpa buffer de entrada para sessão limpa */
                 if (s_upload_ctx.buffer) {
                     heap_caps_free(s_upload_ctx.buffer);
                     s_upload_ctx.buffer = NULL;
                 }
+                s_upload_ctx.active = false;
+                s_upload_ctx.received_bytes = 0;
+
                 s_upload_ctx.buffer = (uint8_t *)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (!s_upload_ctx.buffer) {
                     phone_ctl_format_err(resp_buf, sizeof(s_resp_buf), cmd, id_item, "no_mem", "psram_allocation_failed");
@@ -829,8 +833,8 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                         ESP_LOGI(TAG, "📱 [MIDIA] Recebendo chunks BLE: seq=%d, recebido=%" PRIu32 "/%" PRIu32 " bytes (%u%%)",
                                  seq, s_upload_ctx.received_bytes, s_upload_ctx.expected_size, (unsigned int)pct);
                     }
-                    /* Envia ACK de progresso a cada 10 chunks ou no chunk final para evitar saturacao do canal de radio BLE (PROTOCOLO_TRANSFERENCIA_MIDIA_BLE.md §3.2) */
-                    if (seq % 10 == 0 || s_upload_ctx.received_bytes == s_upload_ctx.expected_size) {
+                    /* Envia ACK de progresso a cada 10 chunks ou no chunk final para evitar saturação do canal BLE (suporta tanto (seq+1)%10 quanto seq%10) */
+                    if ((seq + 1) % 10 == 0 || seq % 10 == 0 || s_upload_ctx.received_bytes == s_upload_ctx.expected_size) {
                         int len = phone_ctl_format_resp_header(resp_buf, sizeof(s_resp_buf), "ack", cmd, id_item);
                         snprintf(resp_buf + len, sizeof(s_resp_buf) - len,
                                  ",\"seq\":%d,\"received\":%" PRIu32 ",\"total\":%" PRIu32 "}",
@@ -848,6 +852,12 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
             phone_ctl_format_err(resp_buf, sizeof(s_resp_buf), cmd, id_item, "no_session", "no active media upload session");
         } else if (s_upload_ctx.received_bytes != s_upload_ctx.expected_size) {
             phone_ctl_format_err(resp_buf, sizeof(s_resp_buf), cmd, id_item, "incomplete_data", "received bytes do not match expected size");
+            /* Libera o buffer e encerra a sessão corrompida defensivamente */
+            if (s_upload_ctx.buffer) {
+                heap_caps_free(s_upload_ctx.buffer);
+                s_upload_ctx.buffer = NULL;
+            }
+            s_upload_ctx.active = false;
         } else {
             ESP_LOGI(TAG, "📱 [MIDIA] App finalizou envio (%s, slot %u, total %" PRIu32 " bytes). Gravando na Flash NVS...",
                      s_upload_ctx.is_gif ? "GIF" : "Imagem RGB565", s_upload_ctx.slot, s_upload_ctx.received_bytes);
@@ -876,10 +886,23 @@ static void handle_json_command(uint16_t conn_id, const char *json_str)
                 phone_ctl_format_err(resp_buf, sizeof(s_resp_buf), cmd, id_item, "save_nvs_failed", "flash commit operation failed");
             }
 
-            heap_caps_free(s_upload_ctx.buffer);
-            s_upload_ctx.buffer = NULL;
+            if (s_upload_ctx.buffer) {
+                heap_caps_free(s_upload_ctx.buffer);
+                s_upload_ctx.buffer = NULL;
+            }
             s_upload_ctx.active = false;
         }
+    }
+    else if (strcmp(cmd, "media_upload_cancel") == 0) {
+        ESP_LOGI(TAG, "📱 [MIDIA] Sessao de upload cancelada pelo aplicativo");
+        if (s_upload_ctx.buffer) {
+            heap_caps_free(s_upload_ctx.buffer);
+            s_upload_ctx.buffer = NULL;
+        }
+        s_upload_ctx.active = false;
+        s_upload_ctx.received_bytes = 0;
+        int len = phone_ctl_format_resp_header(resp_buf, sizeof(s_resp_buf), "ok", cmd, id_item);
+        snprintf(resp_buf + len, sizeof(s_resp_buf) - len, ",\"canceled\":true}");
     }
     else if (strcmp(cmd, "delete_media_slot") == 0) {
         cJSON *type_item = cJSON_GetObjectItem(root, "type");
@@ -1220,26 +1243,15 @@ static void phone_ctl_on_msg(hs_actor_t *self, const hs_msg_t *msg)
     switch (msg->cmd) {
     case PHONE_CMD_PROCESS_MSG: {
         const phone_cmd_msg_t *p = (const phone_cmd_msg_t *)msg->data;
-        if (p->len == 0) break;
+        uint16_t conn_id = p ? p->conn_id : bt_ctl_service_get_conn_id();
 
-        /* Monta buffer local protegido por mutex */
+        /* Extrai e despacha todos os frames JSON completos atualmente disponíveis no buffer */
         xSemaphoreTake(s_ctl_mtx, portMAX_DELAY);
-        if (s_incoming_len + p->len < INCOMING_BUF_MAX - 1) {
-            memcpy(s_incoming_buf + s_incoming_len, p->raw, p->len);
-            s_incoming_len += p->len;
-            s_incoming_buf[s_incoming_len] = '\0';
-
-            /* Extrai e despacha todos os frames completos disponíveis no buffer */
-            while (phone_ctl_extract_next_frame(s_temp_dispatch_buf, sizeof(s_temp_dispatch_buf))) {
-                /* Libera o mutex enquanto processa o comando para evitar contenção de tarefas */
-                xSemaphoreGive(s_ctl_mtx);
-                handle_json_command(p->conn_id, s_temp_dispatch_buf);
-                xSemaphoreTake(s_ctl_mtx, portMAX_DELAY);
-            }
-        } else {
-            /* Overflow no buffer: reseta para evitar estado preso */
-            ESP_LOGW(TAG, "Overflow no buffer de entrada BLE (len=%u), resetando buffer", (unsigned int)s_incoming_len);
-            s_incoming_len = 0;
+        while (phone_ctl_extract_next_frame(s_temp_dispatch_buf, sizeof(s_temp_dispatch_buf))) {
+            /* Libera o mutex enquanto processa o comando para permitir que novos dados cheguem no buffer */
+            xSemaphoreGive(s_ctl_mtx);
+            handle_json_command(conn_id, s_temp_dispatch_buf);
+            xSemaphoreTake(s_ctl_mtx, portMAX_DELAY);
         }
         xSemaphoreGive(s_ctl_mtx);
         break;
@@ -1372,34 +1384,43 @@ esp_err_t phone_ctl_post_incoming_data(uint16_t conn_id, const uint8_t *data, si
         return ESP_ERR_INVALID_ARG;
     }
 
-    /* Fragmenta chunks em pedacos compativeis com o payload inline de comando */
-    size_t offset = 0;
-    while (offset < len) {
-        size_t chunk_len = len - offset;
-        if (chunk_len > sizeof(((phone_cmd_msg_t *)0)->raw)) {
-            chunk_len = sizeof(((phone_cmd_msg_t *)0)->raw);
-        }
+    if (xSemaphoreTake(s_ctl_mtx, pdMS_TO_TICKS(50)) != pdTRUE) {
+        ESP_LOGW(TAG, "Timeout ao obter mutex do buffer de entrada BLE");
+        return ESP_ERR_TIMEOUT;
+    }
 
-        phone_cmd_msg_t cmd_msg;
-        cmd_msg.conn_id = conn_id;
-        cmd_msg.len = (uint16_t)chunk_len;
-        memcpy(cmd_msg.raw, data + offset, chunk_len);
+    /* Se o buffer acumulado não tiver espaço para o novo bloco, reseta defensivamente para não corromper */
+    if (s_incoming_len + len >= INCOMING_BUF_MAX - 1) {
+        ESP_LOGW(TAG, "Buffer de entrada BLE cheio (atual=%u, novo=%u), resetando buffer",
+                 (unsigned int)s_incoming_len, (unsigned int)len);
+        s_incoming_len = 0;
+    }
 
-        /* Tentativa com retentativa defensiva para evitar perda de chunks sob rajadas BLE */
-        esp_err_t err = ESP_FAIL;
-        for (int retry = 0; retry < 3; retry++) {
-            err = hs_actor_send(s_phone_actor, PHONE_CMD_PROCESS_MSG, &cmd_msg, sizeof(cmd_msg), pdMS_TO_TICKS(150));
-            if (err == ESP_OK) {
-                break;
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
+    memcpy(s_incoming_buf + s_incoming_len, data, len);
+    s_incoming_len += len;
+    s_incoming_buf[s_incoming_len] = '\0';
 
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Falha ao enfileirar chunk no actor phone_ctl apos retentativas: %s", esp_err_to_name(err));
-            return err;
+    xSemaphoreGive(s_ctl_mtx);
+
+    /* Envia um único sinal de despertar ao ator para processar os frames acumulados (sem fatiamento inline) */
+    phone_cmd_msg_t cmd_msg = {
+        .conn_id = conn_id,
+        .len = (uint16_t)len
+    };
+
+    /* Envio para a fila com retentativa defensiva para evitar perdas sob rajadas BLE */
+    esp_err_t err = ESP_FAIL;
+    for (int retry = 0; retry < 3; retry++) {
+        err = hs_actor_send(s_phone_actor, PHONE_CMD_PROCESS_MSG, &cmd_msg, sizeof(cmd_msg), pdMS_TO_TICKS(150));
+        if (err == ESP_OK) {
+            break;
         }
-        offset += chunk_len;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Falha ao enfileirar sinal de processamento no actor phone_ctl: %s", esp_err_to_name(err));
+        return err;
     }
 
     return ESP_OK;

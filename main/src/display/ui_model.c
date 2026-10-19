@@ -472,6 +472,11 @@ void ui_model_drain_updates(void)
                     lv_subject_set_int(&subject_g_subj_display_brilho, s_model.display_brightness);
                     lv_subject_set_int(&subject_g_subj_display_timeout_segundos, s_model.display_timeout_sec);
                 }
+
+                /* Atualiza imediatamente o wallpaper e o GIF na interface gráfica do display (thread-safe com LVGL) */
+                display_update_wallpaper();
+                display_update_gif();
+
                 /* Se o temporizador acabou de ser desativado (modo 'Manter ligado'), restaura o display imediatamente */
                 if (timer_changed && !s_model.display_timer_enabled) {
                     display_backlight_wake();

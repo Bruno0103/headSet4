@@ -1175,8 +1175,8 @@
  */
 #define LV_FONT_FMT_TXT_LARGE 0
 
-/** Compressed fonts */
-#define LV_USE_FONT_COMPRESSED 0
+/** Compressed fonts (habilitado para suportar fontes comprimidas e evitar desaparecimento de texto caso ocorra compressão RLE) */
+#define LV_USE_FONT_COMPRESSED 1
 
 /** Draw a placeholder rectangle instead of nothing when a glyph is missing
  *  from the font.

@@ -66,7 +66,7 @@ typedef struct {
     uint32_t       stack;       /**< Tamanho da stack em bytes (ex: 4096). */
     UBaseType_t    prio;        /**< Prioridade FreeRTOS da task do ator. */
     BaseType_t     core;        /**< Core de afinidade (0, 1 ou tskNO_AFFINITY). */
-    uint8_t        queue_len;   /**< Quantidade máxima de itens suportados na fila. */
+    uint16_t       queue_len;   /**< Quantidade máxima de itens suportados na fila. */
     uint32_t       idle_ms;     /**< Timeout em ms para encerramento automático por inatividade (0 = nunca encerra). */
     hs_actor_fn    on_msg;      /**< Função obrigatória de processamento de comandos. */
     void         (*on_start)(void *ctx); /**< Callback executado dentro da task do ator logo após a criação (opcional). */
