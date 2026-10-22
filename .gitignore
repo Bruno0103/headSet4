@@ -94,6 +94,9 @@ AGENTS.md
 tools/*
 docs/*
 
+HeadSet/2.4inch_SPI_Module_ILI9341*
+
+
 preview-build
 build
 .cache.json
